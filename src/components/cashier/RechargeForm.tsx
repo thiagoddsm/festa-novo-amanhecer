@@ -1,12 +1,12 @@
 'use client';
 
-import { useFormState, useFormStatus } from 'react-dom';
+import { useActionState, useEffect, useRef } from 'react';
+import { useFormStatus } from 'react-dom';
 import { rechargeCard } from '@/lib/actions';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useEffect, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/utils';
 import { Loader2 } from 'lucide-react';
@@ -26,7 +26,7 @@ function SubmitButton() {
 }
 
 export default function RechargeForm() {
-  const [state, formAction] = useFormState(rechargeCard, initialState);
+  const [state, formAction] = useActionState(rechargeCard, initialState);
   const { toast } = useToast();
   const formRef = useRef<HTMLFormElement>(null);
 

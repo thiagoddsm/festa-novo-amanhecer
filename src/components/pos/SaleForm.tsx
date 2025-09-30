@@ -1,13 +1,13 @@
 'use client';
 
-import { useFormState, useFormStatus } from 'react-dom';
+import { useActionState, useEffect, useRef, useState } from 'react';
+import { useFormStatus } from 'react-dom';
 import { processSale } from '@/lib/actions';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useEffect, useRef, useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/utils';
 import type { Pdv } from '@/lib/definitions';
@@ -29,7 +29,7 @@ function SubmitButton() {
 }
 
 export default function SaleForm({ pdvs }: { pdvs: Pdv[] }) {
-  const [state, formAction] = useFormState(processSale, initialState);
+  const [state, formAction] = useActionState(processSale, initialState);
   const [confirmation, setConfirmation] = useState<{ status: 'success' | 'error'; message: string; details?: string } | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const { toast } = useToast();

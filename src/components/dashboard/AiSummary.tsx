@@ -1,6 +1,7 @@
 'use client';
 
-import { useFormState, useFormStatus } from 'react-dom';
+import { useActionState } from 'react';
+import { useFormStatus } from 'react-dom';
 import { generateSummary } from '@/lib/actions';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -29,7 +30,7 @@ function SubmitButton() {
 }
 
 export default function AiSummary() {
-  const [state, formAction] = useFormState(generateSummary, initialState);
+  const [state, formAction] = useActionState(generateSummary, initialState);
 
   return (
     <Card>
