@@ -7,14 +7,89 @@ import {
   updateCardBalance,
   createTransaction,
   getSalesReport,
+  getPdvs,
 } from './data';
 import { summarizeSalesReport } from '@/ai/flows/sales-report-summarization';
+import { redirect } from 'next/navigation';
+import { getIronSession } from 'iron-session';
+import { cookies } from 'next/headers';
+import { SESSION_OPTIONS, type SessionData } from './auth';
 
 export type ActionState = {
   status: 'success' | 'error';
   message: string;
   data?: any;
 };
+
+// --- Auth ---
+const LoginSchema = z.object({
+    role: z.enum(['CAIXA', 'PDV']),
+    pdvId: z.coerce.number().optional(),
+    password: z.string().min(1, 'Senha é obrigatória.'),
+});
+
+export async function login(prevState: ActionState | undefined, formData: FormData): Promise<ActionState> {
+    try {
+        const validatedFields = LoginSchema.safeParse({
+            role: formData.get('role'),
+            pdvId: formData.get('pdvId'),
+            password: formData.get('password'),
+        });
+
+        if (!validatedFields.success) {
+            return { status: 'error', message: 'Dados de login inválidos.' };
+        }
+
+        const { role, pdvId, password } = validatedFields.data;
+
+        // Mock authentication logic
+        if (password !== '1234') {
+             return { status: 'error', message: 'Senha incorreta.' };
+        }
+
+        const session = await getIronSession<SessionData>(cookies(), SESSION_OPTIONS);
+        
+        if (role === 'CAIXA') {
+            session.user = {
+                isAuthenticated: true,
+                role: 'CAIXA',
+                name: 'Caixa',
+            };
+        } else if (role === 'PDV' && pdvId) {
+            const pdv = getPdvs().find(p => p.id === pdvId);
+            if (!pdv) {
+                return { status: 'error', message: 'PDV não encontrado.' };
+            }
+             session.user = {
+                isAuthenticated: true,
+                role: 'PDV',
+                name: pdv.nome,
+                pdvId: pdv.id,
+            };
+        } else {
+            return { status: 'error', message: 'Função ou PDV inválido.' };
+        }
+
+        await session.save();
+
+    } catch (error) {
+        console.error(error);
+        return { status: 'error', message: 'Ocorreu um erro ao fazer login.' };
+    }
+    
+    // Redirect must be outside try/catch
+    if (formData.get('role') === 'PDV') {
+        redirect('/pos');
+    }
+    redirect('/dashboard');
+}
+
+export async function logout() {
+  const session = await getIronSession<SessionData>(cookies(), SESSION_OPTIONS);
+  session.destroy();
+  redirect('/login');
+}
+
 
 // --- Card Creation ---
 const CreateCardSchema = z.object({

@@ -6,16 +6,23 @@ import { Badge } from '@/components/ui/badge';
 import AiSummary from '@/components/dashboard/AiSummary';
 import { DollarSign, CreditCard, ShoppingBag, TrendingUp } from 'lucide-react';
 import StatCard from '@/components/dashboard/StatCard';
+import { checkAuth } from '@/lib/auth';
+import { redirect } from 'next/navigation';
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  const { user } = await checkAuth();
+  if (user?.role !== 'CAIXA') {
+    redirect('/login');
+  }
+
   const report = getSalesReport();
   const recentTransactions = getTransactions(10);
 
   const stats = [
-    { title: 'Total Recarregado', value: formatCurrency(report.total_recarregado_centavos), icon: CreditCard, change: '+20.1% from last month' },
-    { title: 'Total Vendido', value: formatCurrency(report.total_vendido_centavos), icon: DollarSign, change: '+180.1% from last month' },
-    { title: 'Total de Vendas (Un)', value: report.vendas_por_pdv.length, icon: ShoppingBag, change: '+19% from last month' },
-    { title: 'Ticket Médio', value: formatCurrency(report.total_vendido_centavos / (report.vendas_por_pdv.length || 1)), icon: TrendingUp, change: '+4.1% from last month' }
+    { title: 'Total Recarregado', value: formatCurrency(report.total_recarregado_centavos), icon: CreditCard },
+    { title: 'Total Vendido', value: formatCurrency(report.total_vendido_centavos), icon: DollarSign },
+    { title: 'Total de Vendas (Un)', value: report.vendas_por_pdv.length, icon: ShoppingBag },
+    { title: 'Ticket Médio', value: formatCurrency(report.total_vendido_centavos / (report.vendas_por_pdv.length || 1)), icon: TrendingUp }
   ];
 
   return (

@@ -5,15 +5,24 @@ import { usePathname } from "next/navigation";
 import { LayoutDashboard, ShoppingCart, WalletCards } from "lucide-react";
 import { SidebarHeader, SidebarMenu, SidebarMenuItem, SidebarMenuButton } from "@/components/ui/sidebar";
 import Image from "next/image";
+import type { AuthenticatedUser } from "@/lib/auth";
 
-const navItems = [
-    { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-    { href: '/cashier', icon: WalletCards, label: 'Caixa' },
-    { href: '/pos', icon: ShoppingCart, label: 'PDV' },
+const allNavItems = [
+    { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', role: 'CAIXA' },
+    { href: '/cashier', icon: WalletCards, label: 'Caixa', role: 'CAIXA' },
+    { href: '/pos', icon: ShoppingCart, label: 'PDV', role: 'CAIXA' },
+    { href: '/pos', icon: ShoppingCart, label: 'PDV', role: 'PDV' },
 ]
 
-export function SidebarNav() {
+export function SidebarNav({ user }: { user: AuthenticatedUser | null }) {
     const pathname = usePathname();
+
+    const navItems = allNavItems.filter(item => item.role === user?.role);
+
+    // If PDV user, don't show sidebar if it only has one item
+    if (user?.role === 'PDV' && navItems.length <= 1) {
+        return null;
+    }
 
     return (
         <>
@@ -25,7 +34,7 @@ export function SidebarNav() {
             </SidebarHeader>
             <SidebarMenu>
                 {navItems.map(item => (
-                    <SidebarMenuItem key={item.href}>
+                    <SidebarMenuItem key={`${item.href}-${item.role}`}>
                         <SidebarMenuButton
                             asChild
                             isActive={pathname === item.href}

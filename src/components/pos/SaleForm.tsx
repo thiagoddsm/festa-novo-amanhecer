@@ -28,11 +28,10 @@ function SubmitButton() {
   );
 }
 
-export default function SaleForm({ pdvs }: { pdvs: Pdv[] }) {
+export default function SaleForm({ pdvs, selectedPdvId }: { pdvs: Pdv[], selectedPdvId?: number }) {
   const [state, formAction] = useActionState(processSale, initialState);
   const [confirmation, setConfirmation] = useState<{ status: 'success' | 'error'; message: string; details?: string } | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
-  const { toast } = useToast();
 
   useEffect(() => {
     if (!state.message) return;
@@ -46,11 +45,16 @@ export default function SaleForm({ pdvs }: { pdvs: Pdv[] }) {
         details: `Novo saldo: ${formatCurrency(state.data.novo_saldo_centavos)}`,
       });
       formRef.current?.reset();
+      // Reset select if it exists
+      const selectInput = formRef.current?.querySelector('input[name="pdv_id"]') as HTMLInputElement | null;
+      if (selectInput && !selectedPdvId) {
+        selectInput.value = '';
+      }
     }
 
     const timer = setTimeout(() => setConfirmation(null), 3000);
     return () => clearTimeout(timer);
-  }, [state]);
+  }, [state, selectedPdvId]);
 
   const onPdvChange = (value: string) => {
     const hiddenInput = formRef.current?.querySelector('input[name="pdv_id"]') as HTMLInputElement | null;
@@ -59,13 +63,15 @@ export default function SaleForm({ pdvs }: { pdvs: Pdv[] }) {
     }
   }
 
+  const isPdvPreselected = pdvs.length === 1 && selectedPdvId;
+
   return (
     <>
       <Card>
         <CardHeader>
           <CardTitle>Ponto de Venda</CardTitle>
           <CardDescription>
-            Realize uma nova cobrança escaneando o QR Code do cliente.
+            { isPdvPreselected ? `Vendas para ${pdvs[0].nome}` : 'Realize uma nova cobrança escaneando o QR Code do cliente.' }
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -91,20 +97,26 @@ export default function SaleForm({ pdvs }: { pdvs: Pdv[] }) {
                 required
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="pdv_select">Ponto de Venda</Label>
-               <Select name="pdv_select" onValueChange={onPdvChange} required>
-                    <SelectTrigger>
-                        <SelectValue placeholder="Selecione o PDV" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {pdvs.map((pdv) => (
-                            <SelectItem key={pdv.id} value={String(pdv.id)}>{pdv.nome}</SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
-                <input type="hidden" name="pdv_id" />
-            </div>
+            
+            {isPdvPreselected ? (
+                <input type="hidden" name="pdv_id" value={selectedPdvId} />
+            ) : (
+                <div className="space-y-2">
+                    <Label htmlFor="pdv_select">Ponto de Venda</Label>
+                    <Select name="pdv_select" onValueChange={onPdvChange} required>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Selecione o PDV" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {pdvs.map((pdv) => (
+                                    <SelectItem key={pdv.id} value={String(pdv.id)}>{pdv.nome}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    <input type="hidden" name="pdv_id" />
+                </div>
+            )}
+
             <SubmitButton />
           </form>
         </CardContent>
