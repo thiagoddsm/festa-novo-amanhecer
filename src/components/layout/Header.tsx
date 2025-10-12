@@ -31,7 +31,7 @@ export function Header({ user }: { user: AuthenticatedUser | null }) {
         if (!app) return;
         const auth = getAuth(app);
         await signOut(auth);
-        router.push('/login');
+        // O hook useAuth cuidará da limpeza do cookie e redirecionamento
     }
 
     return (

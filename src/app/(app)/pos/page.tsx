@@ -2,12 +2,12 @@
 
 import SaleForm from "@/components/pos/SaleForm";
 import { getPdvById, getPdvs } from "@/lib/data";
-import { useUser } from "@/firebase"; // Using client-side user
+import { useAuth } from "@/hooks/use-auth";
 import type { Pdv } from "@/lib/definitions";
 import { useState, useEffect } from "react";
 
 export default function PosPage() {
-  const { user, loading } = useUser();
+  const { user, loading } = useAuth();
   const [pdvs, setPdvs] = useState<Pdv[]>([]);
   
   // This would come from the user's profile in a real app

@@ -3,13 +3,13 @@
 import { SidebarProvider, Sidebar, SidebarInset } from "@/components/ui/sidebar";
 import { SidebarNav } from "@/components/layout/SidebarNav";
 import { Header } from "@/components/layout/Header";
-import { useUser } from "@/firebase";
+import { useAuth } from "@/hooks/use-auth";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import type { AuthenticatedUser } from "@/lib/auth";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useUser();
+  const { user, loading } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
