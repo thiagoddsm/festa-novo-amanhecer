@@ -15,7 +15,18 @@ export default function LoginPage() {
     const auth = getAuth(app);
     const provider = new GoogleAuthProvider();
     try {
-      await signInWithPopup(auth, provider);
+      const result = await signInWithPopup(auth, provider);
+      const idToken = await result.user.getIdToken();
+
+      // Ensure session cookie is set before redirecting
+      await fetch('/api/login', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ idToken }),
+      });
+
       router.push('/dashboard'); // Redirect to dashboard after successful login
     } catch (error) {
       console.error("Error signing in with Google: ", error);
