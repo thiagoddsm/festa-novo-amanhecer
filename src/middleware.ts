@@ -1,5 +1,6 @@
 'use server';
 import { NextResponse, type NextRequest } from 'next/server';
+import { checkAuth } from './lib/auth';
 
 // Define which paths are public (don't require authentication)
 const publicPaths = ['/login'];
@@ -8,7 +9,7 @@ export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
   const isPublicPath = publicPaths.some(p => path.startsWith(p));
   
-  const sessionCookie = request.cookies.get('firebase-session');
+  const sessionCookie = request.cookies.get('firebase-session')?.value;
 
   // If there's a session cookie and the user is on a public path, redirect to dashboard
   if (sessionCookie && isPublicPath) {
@@ -17,9 +18,7 @@ export async function middleware(request: NextRequest) {
 
   // If there's no session cookie and the user is on a protected path, redirect to login
   if (!sessionCookie && !isPublicPath) {
-     const loginUrl = new URL('/login', request.url);
-     loginUrl.searchParams.set('next', path);
-     return NextResponse.redirect(loginUrl);
+     return NextResponse.redirect(new URL('/login', request.url));
   }
 
   return NextResponse.next();
