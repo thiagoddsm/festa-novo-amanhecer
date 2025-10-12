@@ -1,10 +1,16 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { onIdTokenChanged, signInWithPopup, GoogleAuthProvider, User, signOut as firebaseSignOut, AuthError } from 'firebase/auth';
+import { onIdTokenChanged, signInWithPopup, GoogleAuthProvider, User, signOut as firebaseSignOut, AuthError, getAuth, Auth } from 'firebase/auth';
+import { initializeApp, getApps, getApp } from 'firebase/app';
 import { useRouter } from 'next/navigation';
 import { useToast } from './use-toast';
-import { initializeFirebase } from '@/firebase';
+import { firebaseConfig } from '@/firebase/config';
+
+// Initialize Firebase
+const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+const auth = getAuth(app);
+
 
 interface AuthContextType {
   user: User | null;
@@ -20,39 +26,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const { toast } = useToast();
-  const { auth } = initializeFirebase();
 
   useEffect(() => {
     const unsubscribe = onIdTokenChanged(auth, async (user) => {
         setUser(user);
+        
+        const idToken = user ? await user.getIdToken() : null;
+
+        await fetch(idToken ? '/api/login' : '/api/logout', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ idToken }),
+        });
+
         setLoading(false);
     });
 
     return () => unsubscribe();
-  }, [auth]);
+  }, []);
 
   const signInWithGoogle = async () => {
     const provider = new GoogleAuthProvider();
     setLoading(true);
     try {
-      const result = await signInWithPopup(auth, provider);
-      
-      const idToken = await result.user.getIdToken();
-
-      const response = await fetch('/api/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ idToken }),
-      });
-
-      if (response.ok) {
-        router.push('/dashboard');
-      } else {
-        throw new Error('Falha ao criar sessão no servidor.');
-      }
-
+      await signInWithPopup(auth, provider);
+      // The onIdTokenChanged listener will handle the rest
+      router.push('/dashboard');
     } catch (error) {
         const authError = error as AuthError;
         if (authError.code === 'auth/popup-blocked') {
@@ -73,7 +74,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     try {
       await firebaseSignOut(auth);
-      await fetch('/api/logout', { method: 'POST' });
+      // The onIdTokenChanged listener will handle clearing the cookie
       router.push('/login');
     } catch (error) {
       console.error("Error signing out: ", error);

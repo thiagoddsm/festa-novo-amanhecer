@@ -40,6 +40,10 @@ let pdvs: Pdv[] = [
 let nextCardId = cards.length + 1;
 let nextTransactionId = transactions.length + 1;
 
+function generateRandomId() {
+  return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+}
+
 // --- CARD FUNCTIONS ---
 export const findCardByQrCodeId = (qrCodeId: string): Card | undefined =>
   cards.find((c) => c.qr_code_id === qrCodeId);
@@ -47,7 +51,7 @@ export const findCardByQrCodeId = (qrCodeId: string): Card | undefined =>
 export const createNewCard = (saldo_inicial_centavos: number, nome_cliente?: string, telefone_cliente?: string): Card => {
   const newCard: Card = {
     id: nextCardId++,
-    qr_code_id: `festa-2025-${crypto.randomUUID().slice(0, 18)}`,
+    qr_code_id: `festa-2025-${generateRandomId().slice(0, 18)}`,
     saldo_centavos: saldo_inicial_centavos,
     status: 'ATIVO',
     created_at: new Date(),
