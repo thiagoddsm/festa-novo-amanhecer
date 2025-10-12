@@ -18,7 +18,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { formatCurrency } from '@/lib/utils';
-import { QrCode, Loader2 } from 'lucide-react';
+import { QrCode, Loader2, User } from 'lucide-react';
 import type { Card as CardType } from '@/lib/definitions';
 
 const initialState = {
@@ -69,6 +69,22 @@ export default function CreateCardForm() {
         <CardContent>
           <form ref={formRef} action={formAction} className="space-y-4">
             <div className="space-y-2">
+              <Label htmlFor="nome_cliente">Nome do Cliente (Opcional)</Label>
+              <Input
+                id="nome_cliente"
+                name="nome_cliente"
+                placeholder="Ex: João da Silva"
+              />
+            </div>
+             <div className="space-y-2">
+              <Label htmlFor="telefone_cliente">Telefone (Opcional)</Label>
+              <Input
+                id="telefone_cliente"
+                name="telefone_cliente"
+                placeholder="Ex: (11) 99999-8888"
+              />
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="saldo_inicial">Saldo Inicial (R$)</Label>
               <Input
                 id="saldo_inicial"
@@ -94,6 +110,14 @@ export default function CreateCardForm() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="my-4 rounded-lg border bg-muted p-4 text-center">
+            {newCard?.nome_cliente && (
+                <div className='mb-4'>
+                    <p className="text-sm font-medium text-muted-foreground">Cliente</p>
+                    <p className="flex items-center justify-center gap-2 text-lg font-semibold">
+                      <User className='h-4 w-4' /> {newCard.nome_cliente}
+                    </p>
+                </div>
+            )}
             <p className="text-sm font-medium text-muted-foreground">QR Code ID</p>
             <p className="break-all font-mono text-lg font-semibold">
               {newCard?.qr_code_id}

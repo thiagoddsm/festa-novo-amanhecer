@@ -94,6 +94,8 @@ export async function logout() {
 // --- Card Creation ---
 const CreateCardSchema = z.object({
   saldo_inicial: z.coerce.number().min(0, 'Valor deve ser positivo.'),
+  nome_cliente: z.string().optional(),
+  telefone_cliente: z.string().optional(),
 });
 
 export async function createCard(
@@ -103,6 +105,8 @@ export async function createCard(
   try {
     const validatedFields = CreateCardSchema.safeParse({
       saldo_inicial: formData.get('saldo_inicial'),
+      nome_cliente: formData.get('nome_cliente'),
+      telefone_cliente: formData.get('telefone_cliente'),
     });
 
     if (!validatedFields.success) {
@@ -113,8 +117,8 @@ export async function createCard(
       };
     }
 
-    const { saldo_inicial } = validatedFields.data;
-    const newCard = createNewCard(saldo_inicial * 100);
+    const { saldo_inicial, nome_cliente, telefone_cliente } = validatedFields.data;
+    const newCard = createNewCard(saldo_inicial * 100, nome_cliente, telefone_cliente);
 
     return {
       status: 'success',

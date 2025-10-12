@@ -8,6 +8,8 @@ let cards: Card[] = [
     status: 'ATIVO',
     created_at: new Date('2024-07-19T10:00:00Z'),
     updated_at: new Date('2024-07-19T14:30:00Z'),
+    nome_cliente: 'João Silva',
+    telefone_cliente: '11999998888',
   },
   {
     id: 2,
@@ -16,6 +18,8 @@ let cards: Card[] = [
     status: 'ATIVO',
     created_at: new Date('2024-07-19T11:00:00Z'),
     updated_at: new Date('2024-07-19T16:00:00Z'),
+    nome_cliente: 'Maria Oliveira',
+    telefone_cliente: '21988887777',
   },
 ];
 
@@ -40,7 +44,7 @@ let nextTransactionId = transactions.length + 1;
 export const findCardByQrCodeId = (qrCodeId: string): Card | undefined =>
   cards.find((c) => c.qr_code_id === qrCodeId);
 
-export const createNewCard = (saldo_inicial_centavos: number): Card => {
+export const createNewCard = (saldo_inicial_centavos: number, nome_cliente?: string, telefone_cliente?: string): Card => {
   const newCard: Card = {
     id: nextCardId++,
     qr_code_id: `festa-2025-${crypto.randomUUID().slice(0, 18)}`,
@@ -48,6 +52,8 @@ export const createNewCard = (saldo_inicial_centavos: number): Card => {
     status: 'ATIVO',
     created_at: new Date(),
     updated_at: new Date(),
+    nome_cliente: nome_cliente,
+    telefone_cliente: telefone_cliente,
   };
   cards.push(newCard);
 

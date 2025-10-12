@@ -5,6 +5,8 @@ export type Card = {
   status: 'ATIVO' | 'INATIVO' | 'BLOQUEADO';
   created_at: Date;
   updated_at: Date;
+  nome_cliente?: string;
+  telefone_cliente?: string;
 };
 
 export type Transaction = {
