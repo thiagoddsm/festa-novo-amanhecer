@@ -1,3 +1,4 @@
+'use server';
 import admin from 'firebase-admin';
 
 const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT
@@ -7,7 +8,6 @@ const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT
 if (!admin.apps.length) {
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
-    storageBucket: 'fiscalflow-zetbu.appspot.com',
   });
 }
 
