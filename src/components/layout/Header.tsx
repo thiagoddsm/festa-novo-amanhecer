@@ -3,8 +3,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { usePathname, useRouter } from "next/navigation";
 import { Button } from "../ui/button";
 import { LogOut } from "lucide-react";
-import { getAuth, signOut } from "firebase/auth";
-import { useFirebase } from "@/firebase";
+import { useAuth } from "@/hooks/use-auth";
 import type { AuthenticatedUser } from "@/lib/auth";
 
 
@@ -23,15 +22,11 @@ const getTitleFromPathname = (pathname: string): string => {
 
 export function Header({ user }: { user: AuthenticatedUser | null }) {
     const pathname = usePathname();
-    const router = useRouter();
-    const { app } = useFirebase();
+    const { signOut } = useAuth();
     const title = getTitleFromPathname(pathname);
     
     const handleLogout = async () => {
-        if (!app) return;
-        const auth = getAuth(app);
-        await signOut(auth);
-        // O hook useAuth cuidará da limpeza do cookie e redirecionamento
+        await signOut();
     }
 
     return (

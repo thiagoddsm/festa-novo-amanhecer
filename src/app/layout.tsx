@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import { Toaster } from '@/components/ui/toaster';
-import { FirebaseClientProvider } from '@/firebase';
+import { AuthProvider } from '@/hooks/use-auth';
 
 export const metadata: Metadata = {
   title: 'FestaPay',
@@ -28,9 +28,9 @@ export default function RootLayout({
         />
       </head>
       <body className="font-body antialiased">
-        <FirebaseClientProvider>
+        <AuthProvider>
           {children}
-        </FirebaseClientProvider>
+        </AuthProvider>
         <Toaster />
       </body>
     </html>

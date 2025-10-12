@@ -1,32 +1,15 @@
-'use client';
+"use client";
 
-import React, { useEffect, useCallback } from 'react';
-import Image from "next/image";
+import React, { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { useAuth, useUser } from '@/firebase';
-import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
+import { useAuth } from '@/hooks/use-auth';
 
 export default function LoginPage() {
-  const auth = useAuth();
-  const { user, loading } = useUser();
+  const { signInWithGoogle, user, loading } = useAuth();
   const router = useRouter();
-
-  const signInWithGoogle = useCallback(async () => {
-    if (!auth) {
-      console.error("Firebase Auth não está inicializado.");
-      throw new Error("Firebase Auth não está inicializado.");
-    }
-    const provider = new GoogleAuthProvider();
-    try {
-      await signInWithPopup(auth, provider);
-      // O hook useUser cuidará de redirecionar e setar o cookie
-    } catch (error) {
-      console.error("Erro ao fazer login com Google:", error);
-      // O erro 'auth/unauthorized-domain' aparecerá aqui no console se a configuração estiver errada.
-    }
-  }, [auth]);
 
   useEffect(() => {
     if (!loading && user) {
