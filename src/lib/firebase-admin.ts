@@ -1,9 +1,11 @@
 'use server';
 import admin from 'firebase-admin';
 
-const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT
-  ? JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)
-  : undefined;
+if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
+  throw new Error('A variável de ambiente FIREBASE_SERVICE_ACCOUNT não está definida.');
+}
+
+const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 
 if (!admin.apps.length) {
   admin.initializeApp({
