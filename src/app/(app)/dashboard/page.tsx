@@ -6,14 +6,8 @@ import { Badge } from '@/components/ui/badge';
 import AiSummary from '@/components/dashboard/AiSummary';
 import { DollarSign, CreditCard, ShoppingBag, TrendingUp } from 'lucide-react';
 import StatCard from '@/components/dashboard/StatCard';
-import { checkAuth } from '@/lib/auth';
-import { redirect } from 'next/navigation';
 
 export default async function DashboardPage() {
-  const { user } = await checkAuth();
-  if (user?.role !== 'CAIXA') {
-    redirect('/login');
-  }
 
   const report = getSalesReport();
   const recentTransactions = getTransactions(10);
