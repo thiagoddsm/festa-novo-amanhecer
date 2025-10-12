@@ -20,10 +20,7 @@ export async function checkAuth(): Promise<{ user: AuthenticatedUser | null }> {
     }
 
     try {
-        if (!firebaseAdmin.apps.length) {
-            firebaseAdmin.initializeApp();
-        }
-        const decodedIdToken = await getAuth(firebaseAdmin.app()).verifySessionCookie(sessionCookie, true);
+        const decodedIdToken = await getAuth(firebaseAdmin).verifySessionCookie(sessionCookie, true);
 
         // This is where you would fetch user role from your database.
         // For now, we'll hardcode it to 'CAIXA'.

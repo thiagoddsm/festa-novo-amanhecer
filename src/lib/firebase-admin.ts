@@ -11,11 +11,6 @@ if (!admin.apps.length) {
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
   });
-} else {
-  // If the app is already initialized, get the default app
-  // This can happen in development environments with hot-reloading
-  admin.app();
 }
 
-
-export const firebaseAdmin = admin;
+export const firebaseAdmin = admin.app();
