@@ -8,7 +8,6 @@ export async function POST(request: Request) {
   const expiresIn = 60 * 60 * 24 * 5 * 1000; // 5 days
 
   try {
-    // A inicialização já é tratada em firebase-admin.ts
     const sessionCookie = await getAuth(firebaseAdmin).createSessionCookie(idToken, { expiresIn });
 
     const options = {
@@ -25,6 +24,6 @@ export async function POST(request: Request) {
 
   } catch (error) {
     console.error('Error creating session cookie', error);
-    return NextResponse.json({ status: 'error' }, { status: 401 });
+    return NextResponse.json({ status: 'error', message: (error as Error).message }, { status: 401 });
   }
 }
