@@ -81,7 +81,7 @@ export async function login(prevState: ActionState | undefined, formData: FormDa
     if (formData.get('role') === 'PDV') {
         redirect('/pos');
     }
-    redirect('/dashboard');
+    redirect('/cashier');
 }
 
 export async function logout() {
