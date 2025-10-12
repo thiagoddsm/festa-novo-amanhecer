@@ -1,16 +1,19 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { onIdTokenChanged, type User } from 'firebase/auth';
-import { useAuth } from '../';
+import { useAuth } from '../provider';
 
 async function setSessionCookie(idToken: string) {
-    await fetch('/api/login', {
+    const res = await fetch('/api/login', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
         },
         body: JSON.stringify({ idToken }),
     });
+    if (!res.ok) {
+      throw new Error('Failed to set session cookie');
+    }
 }
 
 async function clearSessionCookie() {
@@ -30,10 +33,17 @@ export const useUser = () => {
       return;
     }
     const unsubscribe = onIdTokenChanged(auth, async (user) => {
+      setLoading(true);
       if (user) {
         setUser(user);
-        const idToken = await user.getIdToken();
-        await setSessionCookie(idToken);
+        try {
+            const idToken = await user.getIdToken(true); // Force refresh
+            await setSessionCookie(idToken);
+        } catch(error) {
+            console.error("Error setting session cookie", error);
+            setUser(null);
+            await clearSessionCookie();
+        }
       } else {
         setUser(null);
         await clearSessionCookie();
