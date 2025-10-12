@@ -41,7 +41,12 @@ let nextCardId = cards.length + 1;
 let nextTransactionId = transactions.length + 1;
 
 function generateRandomId() {
-  return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  let result = '';
+  for (let i = 0; i < 18; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
 }
 
 // --- CARD FUNCTIONS ---

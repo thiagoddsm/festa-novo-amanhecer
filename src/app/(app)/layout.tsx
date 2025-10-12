@@ -3,35 +3,14 @@
 import { SidebarProvider, Sidebar, SidebarInset } from "@/components/ui/sidebar";
 import { SidebarNav } from "@/components/layout/SidebarNav";
 import { Header } from "@/components/layout/Header";
-import { useAuth } from "@/hooks/use-auth";
-import { useRouter } from "next/navigation";
-import { useEffect } from "react";
 import type { AuthenticatedUser } from "@/lib/auth";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
-  const router = useRouter();
-
-  useEffect(() => {
-    if (!loading && !user) {
-      router.push('/login');
-    }
-  }, [user, loading, router]);
-  
-  if (loading || !user) {
-      return (
-        <div className="flex h-screen w-full items-center justify-center">
-          Carregando...
-        </div>
-      );
-  }
-
-  // TODO: Add role-based logic here later
-  // For now, we'll give everyone CAIXA role for demonstration
+  // Mock user com acesso total para navegação
   const mockUser: AuthenticatedUser = {
-      isAuthenticated: !!user,
+      isAuthenticated: true,
       role: 'CAIXA',
-      name: user.displayName || 'Usuário',
+      name: 'Usuário',
   }
 
   return (

@@ -2,22 +2,17 @@
 
 import SaleForm from "@/components/pos/SaleForm";
 import { getPdvById, getPdvs } from "@/lib/data";
-import { useAuth } from "@/hooks/use-auth";
 import type { Pdv } from "@/lib/definitions";
 import { useState, useEffect } from "react";
 
 export default function PosPage() {
-  const { user, loading } = useAuth();
   const [pdvs, setPdvs] = useState<Pdv[]>([]);
   
-  // This would come from the user's profile in a real app
+  // O papel do usuário é agora fixo, pois não há login
   const userRole = 'CAIXA'; // or 'PDV'
   const userPdvId = 4; // Example PDV ID for a PDV user
 
   useEffect(() => {
-    // In a real app, you would fetch the user's role from your database
-    // based on the authenticated user.
-    // For now, we'll simulate it.
     let availablePdvs: Pdv[] = [];
     if (userRole === 'CAIXA') {
       availablePdvs = getPdvs();
@@ -28,14 +23,9 @@ export default function PosPage() {
       }
     }
     setPdvs(availablePdvs);
-  }, [user]);
-  
+  }, []);
 
-  if (loading) {
-    return <div>Carregando...</div>
-  }
-
-  if (pdvs.length === 0 && !loading) {
+  if (pdvs.length === 0) {
     return <div>Ponto de Venda não configurado corretamente ou sem permissão.</div>
   }
 
