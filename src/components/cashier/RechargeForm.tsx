@@ -31,7 +31,7 @@ export default function RechargeForm() {
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
-    if (!state.message) return;
+    if (!state || !state.message) return;
 
     if (state.status === 'error') {
       toast({

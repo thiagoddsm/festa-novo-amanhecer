@@ -43,6 +43,9 @@ export default function CreateCardForm() {
   const [newCard, setNewCard] = useState<CardType | null>(null);
 
   useEffect(() => {
+    if (!state) {
+      return;
+    }
     if (state.status === 'error') {
       toast({
         variant: 'destructive',
