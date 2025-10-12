@@ -1,26 +1,40 @@
-import { getIronSession, SessionOptions } from 'iron-session';
+import 'server-only';
 import { cookies } from 'next/headers';
+import { getAuth } from 'firebase-admin/auth';
+import { firebaseAdmin } from './firebase-admin';
+
 
 export type AuthenticatedUser = {
-  isAuthenticated: true;
-  role: 'CAIXA' | 'PDV';
-  name: string;
-  pdvId?: number;
-};
+    isAuthenticated: boolean;
+    role: 'CAIXA' | 'PDV';
+    name: string;
+    pdvId?: number;
+}
 
-export type SessionData = {
-  user?: AuthenticatedUser;
-};
 
-export const SESSION_OPTIONS: SessionOptions = {
-  password: process.env.SECRET_COOKIE_PASSWORD || 'complex_password_at_least_32_characters_long',
-  cookieName: 'festapay-session',
-  cookieOptions: {
-    secure: process.env.NODE_ENV === 'production',
-  },
-};
+export async function checkAuth(): Promise<{ user: AuthenticatedUser | null }> {
+    const sessionCookie = cookies().get('firebase-session')?.value;
 
-export async function checkAuth() {
-  const session = await getIronSession<SessionData>(cookies(), SESSION_OPTIONS);
-  return session;
+    if (!sessionCookie) {
+        return { user: null };
+    }
+
+    try {
+        if (!firebaseAdmin.apps.length) {
+            firebaseAdmin.initializeApp();
+        }
+        const decodedIdToken = await getAuth(firebaseAdmin.app()).verifySessionCookie(sessionCookie, true);
+
+        // This is where you would fetch user role from your database.
+        // For now, we'll hardcode it to 'CAIXA'.
+        const user: AuthenticatedUser = {
+            isAuthenticated: true,
+            role: 'CAIXA',
+            name: decodedIdToken.name || 'Usuário',
+        };
+        return { user };
+    } catch (error) {
+        console.error("Error verifying session cookie in checkAuth:", error);
+        return { user: null };
+    }
 }

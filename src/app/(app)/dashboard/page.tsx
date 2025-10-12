@@ -1,3 +1,4 @@
+'use client'
 import { getSalesReport, getTransactions, getPdvById } from '@/lib/data';
 import { formatCurrency, formatDateTime } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -6,11 +7,32 @@ import { Badge } from '@/components/ui/badge';
 import AiSummary from '@/components/dashboard/AiSummary';
 import { DollarSign, CreditCard, ShoppingBag, TrendingUp } from 'lucide-react';
 import StatCard from '@/components/dashboard/StatCard';
+import { useState, useEffect } from 'react';
+import type { Pdv, Transaction } from '@/lib/definitions';
 
-export default async function DashboardPage() {
+type Report = {
+  total_vendido_centavos: number;
+  total_recarregado_centavos: number;
+  vendas_por_pdv: {
+    pdv_id: number;
+    nome: string;
+    total_centavos: number;
+  }[];
+}
 
-  const report = getSalesReport();
-  const recentTransactions = getTransactions(10);
+export default function DashboardPage() {
+  const [report, setReport] = useState<Report | null>(null);
+  const [recentTransactions, setRecentTransactions] = useState<Transaction[]>([]);
+
+  useEffect(() => {
+    // Data fetching is now client-side
+    setReport(getSalesReport());
+    setRecentTransactions(getTransactions(10));
+  }, []);
+
+  if (!report) {
+    return <div>Carregando relatório...</div>;
+  }
 
   const stats = [
     { title: 'Total Recarregado', value: formatCurrency(report.total_recarregado_centavos), icon: CreditCard },
