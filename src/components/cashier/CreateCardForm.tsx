@@ -79,6 +79,12 @@ export default function CreateCardForm() {
 
   const handlePrint = useReactToPrint({
       content: () => printableRef.current,
+      trigger: () => (
+          <Button variant="outline">
+              <Printer className="mr-2" />
+              Imprimir / Salvar PDF
+          </Button>
+      )
   });
 
   useEffect(() => {
@@ -155,13 +161,10 @@ export default function CreateCardForm() {
           <PrintableCard card={newCard} ref={printableRef} />
           
           <AlertDialogFooter className='sm:justify-between gap-2'>
-              <Button variant="outline" onClick={handlePrint}>
-                  <Printer className="mr-2" />
-                  Imprimir / Salvar PDF
-              </Button>
-            <AlertDialogAction onClick={() => setDialogOpen(false)}>
-              Fechar
-            </AlertDialogAction>
+              {handlePrint()}
+              <AlertDialogAction onClick={() => setDialogOpen(false)}>
+                Fechar
+              </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
