@@ -49,6 +49,9 @@ export default function AiSummary() {
             <p className="whitespace-pre-wrap font-sans">{state.data.summary}</p>
           </div>
         )}
+        {state.status === 'error' && state.message && (
+            <p className="text-sm font-medium text-destructive">{state.message}</p>
+        )}
       </CardContent>
     </Card>
   );

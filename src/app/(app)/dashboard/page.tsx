@@ -5,10 +5,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import AiSummary from '@/components/dashboard/AiSummary';
-import { DollarSign, CreditCard, ShoppingBag, TrendingUp } from 'lucide-react';
+import { DollarSign, CreditCard, ShoppingBag, TrendingUp, TestTube } from 'lucide-react';
 import StatCard from '@/components/dashboard/StatCard';
 import { useState, useEffect } from 'react';
 import type { Pdv, Transaction } from '@/lib/definitions';
+import { Button } from '@/components/ui/button';
+import { useFirestore } from '@/firebase';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { useToast } from '@/hooks/use-toast';
 
 type Report = {
   total_vendido_centavos: number;
@@ -23,12 +27,44 @@ type Report = {
 export default function DashboardPage() {
   const [report, setReport] = useState<Report | null>(null);
   const [recentTransactions, setRecentTransactions] = useState<Transaction[]>([]);
+  const firestore = useFirestore();
+  const { toast } = useToast();
 
   useEffect(() => {
     // Data fetching is now client-side
     setReport(getSalesReport());
     setRecentTransactions(getTransactions(10));
   }, []);
+
+  const handleTestWrite = async () => {
+    if (!firestore) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro',
+        description: 'Firestore não está inicializado. Verifique a configuração do Firebase.',
+      });
+      return;
+    }
+    try {
+      const testCollection = collection(firestore, 'test_writes');
+      await addDoc(testCollection, {
+        message: 'Hello Firestore!',
+        timestamp: serverTimestamp(),
+      });
+      toast({
+        title: 'Sucesso!',
+        description: 'Um documento de teste foi escrito no Firestore com sucesso.',
+      });
+    } catch (error) {
+      console.error('Erro ao escrever no Firestore:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Ocorreu um erro desconhecido.';
+      toast({
+        variant: 'destructive',
+        title: 'Falha na Escrita no Firestore',
+        description: `Não foi possível escrever no banco de dados. Verifique o console e suas regras de segurança do Firestore. Erro: ${errorMessage}`,
+      });
+    }
+  };
 
   if (!report) {
     return <div>Carregando relatório...</div>;
@@ -84,7 +120,23 @@ export default function DashboardPage() {
             </Table>
           </CardContent>
         </Card>
-        <AiSummary />
+        <div className="flex flex-col gap-6">
+          <AiSummary />
+           <Card>
+            <CardHeader>
+              <CardTitle>Teste do Firestore</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground mb-4">
+                Clique no botão abaixo para tentar escrever um documento na coleção 'test_writes' do Firestore.
+              </p>
+              <Button onClick={handleTestWrite} className="w-full">
+                <TestTube className="mr-2" />
+                Testar Escrita no Firestore
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );
