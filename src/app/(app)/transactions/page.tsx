@@ -1,16 +1,16 @@
 'use client';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { useFirestore } from '@/firebase';
 import { collection, onSnapshot, doc, getDoc, Timestamp } from 'firebase/firestore';
 import type { Transaction, Card as CardType } from '@/lib/definitions';
 import { formatCurrency, formatDateTime } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Input } from '@/components/ui/input';
-import { List, Search } from 'lucide-react';
-import { getPdvById } from '@/lib/data';
+import { List } from 'lucide-react';
+import { getPdvById, getPdvs } from '@/lib/data';
+import { DataTable } from '@/components/ui/data-table';
+import { type ColumnDef, SortingState, getSortedRowModel } from '@tanstack/react-table';
 
 type TransactionDetails = Transaction & {
   card_qr_code_id?: string;
@@ -36,10 +36,8 @@ function useTransactionDetails() {
         allTransDocs.map(async (trans) => {
           const details: TransactionDetails = { ...trans };
           
-          // Get PDV name
           details.pdv_nome = getPdvById(trans.pdv_id)?.nome || `PDV ID: ${trans.pdv_id}`;
 
-          // Get Card QR Code ID
           if (trans.cartao_id) {
             let cardData = cardCache.get(trans.cartao_id);
             if (!cardData) {
@@ -72,28 +70,7 @@ function useTransactionDetails() {
   return transactions;
 }
 
-export default function TransactionsPage() {
-  const allTransactions = useTransactionDetails();
-  const [searchTerm, setSearchTerm] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    if (allTransactions !== null) {
-      setIsLoading(false);
-    }
-  }, [allTransactions]);
-
-  const filteredTransactions = useMemo(() => {
-    if (!allTransactions) return [];
-    const lowercasedFilter = searchTerm.toLowerCase();
-    return allTransactions.filter(trans =>
-      trans.card_qr_code_id?.toLowerCase().includes(lowercasedFilter) ||
-      trans.pdv_nome?.toLowerCase().includes(lowercasedFilter) ||
-      trans.tipo.toLowerCase().includes(lowercasedFilter)
-    );
-  }, [allTransactions, searchTerm]);
-
-  const getTipoVariant = (tipo: string) => {
+const getTipoVariant = (tipo: string) => {
     switch (tipo) {
       case 'VENDA': return 'destructive';
       case 'RECARGA': return 'secondary';
@@ -107,6 +84,55 @@ export default function TransactionsPage() {
     return formatDateTime(date);
   }
 
+const columns: ColumnDef<TransactionDetails>[] = [
+    {
+        accessorKey: 'pdv_nome',
+        header: 'PDV',
+        filterFn: (row, id, value) => {
+            return value.includes(row.getValue(id))
+        }
+    },
+    {
+        accessorKey: 'card_qr_code_id',
+        header: 'Cartão (QR Code)',
+        cell: ({ row }) => <div className="font-mono text-xs">{row.getValue('card_qr_code_id')}</div>
+    },
+    {
+        accessorKey: 'tipo',
+        header: 'Tipo',
+        cell: ({ row }) => {
+            const tipo: string = row.getValue('tipo');
+            return <Badge variant={getTipoVariant(tipo)}>{tipo}</Badge>
+        },
+        filterFn: (row, id, value) => {
+            return value.includes(row.getValue(id))
+        }
+    },
+    {
+        accessorKey: 'valor_centavos',
+        header: 'Valor',
+        cell: ({ row }) => <div className="text-right">{formatCurrency(row.getValue('valor_centavos'))}</div>
+    },
+    {
+        accessorKey: 'created_at',
+        header: 'Data e Hora',
+        cell: ({ row }) => formatTimestamp(row.getValue('created_at')),
+    }
+]
+
+
+export default function TransactionsPage() {
+  const allTransactions = useTransactionDetails();
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    if (allTransactions !== null) {
+      setIsLoading(false);
+    }
+  }, [allTransactions]);
+
+  const pdvOptions = getPdvs().map(pdv => ({ value: pdv.nome, label: pdv.nome }));
+
   return (
     <Card>
       <CardHeader>
@@ -115,61 +141,41 @@ export default function TransactionsPage() {
             Histórico de Transações
         </CardTitle>
         <CardDescription>
-            Visualize e pesquise todas as transações do evento.
+            Visualize, filtre e ordene todas as transações do evento.
         </CardDescription>
-        <div className="relative pt-4">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-                type="search"
-                placeholder="Buscar por PDV, Tipo ou QR Code do Cartão..."
-                className="pl-8 w-full"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-            />
-        </div>
       </CardHeader>
       <CardContent>
         {isLoading ? (
           <div className="space-y-2">
             <Skeleton className="h-12 w-full" />
             <Skeleton className="h-12 w-full" />
-            <Skeleton className="h-12 w-full" />
-            <Skeleton className="h-12 w-full" />
-            <Skeleton className="h-12 w-full" />
+            <Skeleton className="h-96 w-full" />
           </div>
         ) : (
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>PDV</TableHead>
-                  <TableHead>Cartão (QR Code)</TableHead>
-                  <TableHead>Tipo</TableHead>
-                  <TableHead className="text-right">Valor</TableHead>
-                  <TableHead>Data e Hora</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredTransactions.length > 0 ? filteredTransactions.map((trans) => (
-                  <TableRow key={trans.id}>
-                    <TableCell>{trans.pdv_nome}</TableCell>
-                    <TableCell className="font-mono text-xs">{trans.card_qr_code_id}</TableCell>
-                    <TableCell>
-                      <Badge variant={getTipoVariant(trans.tipo)}>{trans.tipo}</Badge>
-                    </TableCell>
-                    <TableCell className="text-right">{formatCurrency(trans.valor_centavos)}</TableCell>
-                    <TableCell>{formatTimestamp(trans.created_at)}</TableCell>
-                  </TableRow>
-                )) : (
-                  <TableRow>
-                    <TableCell colSpan={5} className="h-24 text-center">
-                      Nenhuma transação encontrada.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
+          <DataTable
+            columns={columns}
+            data={allTransactions || []}
+            filterColumns={[
+                {
+                    columnId: 'card_qr_code_id',
+                    placeholder: 'Buscar por QR Code...'
+                },
+                {
+                    columnId: 'pdv_nome',
+                    placeholder: 'Filtrar PDV...',
+                    options: pdvOptions
+                },
+                {
+                    columnId: 'tipo',
+                    placeholder: 'Filtrar tipo...',
+                    options: [
+                        {value: 'VENDA', label: 'Venda'},
+                        {value: 'RECARGA', label: 'Recarga'},
+                        {value: 'REEMBOLSO', label: 'Reembolso'},
+                    ]
+                }
+            ]}
+          />
         )}
       </CardContent>
     </Card>
