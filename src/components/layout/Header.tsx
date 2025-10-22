@@ -12,6 +12,8 @@ const getTitleFromPathname = (pathname: string): string => {
             return 'Caixa';
         case '/pos':
             return 'Ponto de Venda (PDV)';
+        case '/cards':
+            return 'Gerenciar Cartões';
         default:
             return 'FestaPay';
     }

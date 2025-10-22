@@ -14,6 +14,7 @@ import { useFirestore } from '@/firebase';
 import { collection, onSnapshot, query, orderBy, limit, Timestamp } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
+import Link from 'next/link';
 
 function useCollection<T>(path: string) {
   const [data, setData] = useState<T[] | null>(null);
@@ -92,11 +93,11 @@ export default function DashboardPage() {
     }
   }, [allCards, allTransactions])
 
+  const activeCardsStat = { title: 'Cartões Ativos', value: allCards?.length ?? 0, icon: Users };
 
   const stats = [
     { title: 'Total Recarregado', value: report ? formatCurrency(report.total_recarregado_centavos) : 'R$ 0,00', icon: CreditCard },
     { title: 'Total Vendido', value: report ? formatCurrency(report.total_vendido_centavos) : 'R$ 0,00', icon: DollarSign },
-    { title: 'Cartões Ativos', value: allCards?.length ?? 0, icon: Users },
     { title: 'Ticket Médio', value: report ? formatCurrency(report.ticketMedio) : 'R$ 0,00', icon: TrendingUp }
   ];
 
@@ -111,7 +112,12 @@ export default function DashboardPage() {
             <Skeleton className="h-28" />
           </>
         ) : (
-          stats.map(stat => <StatCard key={stat.title} {...stat} />)
+          <>
+            {stats.map(stat => <StatCard key={stat.title} {...stat} />)}
+            <Link href="/cards">
+                <StatCard {...activeCardsStat} />
+            </Link>
+          </>
         )}
       </div>
 
