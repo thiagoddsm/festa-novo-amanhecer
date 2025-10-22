@@ -10,19 +10,19 @@ import {
 } from './data';
 import { summarizeSalesReport } from '@/ai/flows/sales-report-summarization';
 
-// HACK: FIPEabase services are not available in server components yet
-// We will replace this with a proper admin SDK implementation later
-import { initializeApp, getApps } from 'firebase/app';
+import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
 import { getFirestore, collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { firebaseConfig } from '@/firebase/config';
 
-let app;
-if (!getApps().length) {
-  app = initializeApp(firebaseConfig);
-} else {
-  app = getApps()[0];
+// Helper function to initialize Firebase on the server
+function getFirebaseServer() {
+  if (getApps().length > 0) {
+    return { app: getApp(), db: getFirestore(getApp()) };
+  }
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  return { app, db };
 }
-const db = getFirestore(app);
 
 
 export type ActionState = {
@@ -43,6 +43,8 @@ export async function createCard(
   formData: FormData
 ): Promise<ActionState> {
   try {
+    const { db } = getFirebaseServer();
+
     const validatedFields = CreateCardSchema.safeParse({
       saldo_inicial: formData.get('saldo_inicial'),
       nome_cliente: formData.get('nome_cliente'),
@@ -83,13 +85,20 @@ export async function createCard(
         // });
     }
 
+    // A data retornada precisa ser serializável (não pode conter Timestamps do servidor)
+    const returnData = {
+      id: docRef.id,
+      qr_code_id: cardData.qr_code_id,
+      saldo_centavos: cardData.saldo_centavos,
+      nome_cliente: cardData.nome_cliente,
+      telefone_cliente: cardData.telefone_cliente,
+      status: cardData.status,
+    };
+
     return {
       status: 'success',
       message: 'Cartão criado com sucesso!',
-      data: {
-        id: docRef.id,
-        ...cardData,
-      },
+      data: returnData,
     };
   } catch (error) {
     console.error(error);
@@ -109,6 +118,7 @@ export async function rechargeCard(
   formData: FormData
 ): Promise<ActionState> {
   try {
+    const { db } = getFirebaseServer();
     const validatedFields = RechargeSchema.safeParse({
       qr_code_id: formData.get('qr_code_id'),
       valor_recarga: formData.get('valor_recarga'),
@@ -166,6 +176,7 @@ export async function processSale(
     formData: FormData
 ): Promise<ActionState> {
     try {
+        const { db } = getFirebaseServer();
         const validatedFields = SaleSchema.safeParse({
             qr_code_id: formData.get('qr_code_id'),
             valor_venda: formData.get('valor_venda'),
