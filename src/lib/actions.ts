@@ -10,9 +10,10 @@ import {
 } from './data';
 import { summarizeSalesReport } from '@/ai/flows/sales-report-summarization';
 
-import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
-import { getFirestore, collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import { getFirestore, collection, addDoc, serverTimestamp, where, query, getDocs, Timestamp } from 'firebase/firestore';
 import { firebaseConfig } from '@/firebase/config';
+import type { Card } from './definitions';
 
 // Helper function to initialize Firebase on the server
 function getFirebaseServer() {
@@ -257,5 +258,61 @@ export async function generateSummary(
     } catch(error) {
         console.error(error);
         return { status: 'error', message: 'Erro ao gerar relatório com IA.' };
+    }
+}
+
+// --- Check Balance ---
+const CheckBalanceSchema = z.object({
+  qr_code_id: z.string().min(1, 'QR Code ID é obrigatório.'),
+});
+
+export async function getCardBalance(
+  prevState: ActionState | undefined,
+  formData: FormData
+): Promise<ActionState> {
+    try {
+        const { db } = getFirebaseServer();
+        const validatedFields = CheckBalanceSchema.safeParse({
+            qr_code_id: formData.get('qr_code_id'),
+        });
+
+        if (!validatedFields.success) {
+            return {
+                status: 'error',
+                message: validatedFields.error.flatten().fieldErrors.qr_code_id?.[0] || 'QR Code ID inválido.',
+            };
+        }
+        
+        const { qr_code_id } = validatedFields.data;
+        
+        const cardsRef = collection(db, 'cards');
+        const q = query(cardsRef, where('qr_code_id', '==', qr_code_id));
+        
+        const querySnapshot = await getDocs(q);
+        
+        if (querySnapshot.empty) {
+            return { status: 'error', message: 'Cartão não encontrado.' };
+        }
+        
+        const cardDoc = querySnapshot.docs[0];
+        const cardData = cardDoc.data() as Card;
+
+        const returnData = {
+          ...cardData,
+          id: cardDoc.id,
+          // Firestore Timestamps não são serializáveis para o cliente, então os convertemos.
+          created_at: (cardData.created_at as Timestamp).toDate().toISOString(),
+          updated_at: (cardData.updated_at as Timestamp).toDate().toISOString(),
+        }
+
+        return {
+            status: 'success',
+            message: 'Cartão encontrado.',
+            data: returnData
+        };
+
+    } catch (error) {
+        console.error(error);
+        return { status: 'error', message: 'Erro ao consultar saldo.' };
     }
 }

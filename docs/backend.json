@@ -48,6 +48,45 @@
         "created_at",
         "updated_at"
       ]
+    },
+    "CardDetails": {
+      "title": "CardDetails",
+      "description": "Represents the details of a card returned from a query.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "The Firestore document ID."
+        },
+        "qr_code_id": {
+          "type": "string"
+        },
+        "saldo_centavos": {
+          "type": "number"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "ATIVO",
+            "INATIVO",
+            "BLOQUEADO"
+          ]
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "nome_cliente": {
+          "type": "string"
+        },
+        "telefone_cliente": {
+          "type": "string"
+        }
+      }
     }
   },
   "auth": {
