@@ -1,27 +1,7 @@
 import type { Card, Pdv, Transaction } from './definitions';
 
-let cards: Card[] = [
-  {
-    id: 1,
-    qr_code_id: 'festa-2025-a4b8-c1d6-e9f0',
-    saldo_centavos: 3550,
-    status: 'ATIVO',
-    created_at: new Date('2024-07-19T10:00:00Z'),
-    updated_at: new Date('2024-07-19T14:30:00Z'),
-    nome_cliente: 'João Silva',
-    telefone_cliente: '11999998888',
-  },
-  {
-    id: 2,
-    qr_code_id: 'festa-2025-b5c9-d2e7-f0a1',
-    saldo_centavos: 1500,
-    status: 'ATIVO',
-    created_at: new Date('2024-07-19T11:00:00Z'),
-    updated_at: new Date('2024-07-19T16:00:00Z'),
-    nome_cliente: 'Maria Oliveira',
-    telefone_cliente: '21988887777',
-  },
-];
+// This file now only contains mock data for transactions and PDVs.
+// Card data is now managed by Firestore.
 
 let transactions: Transaction[] = [
   { id: 1, cartao_id: 1, pdv_id: 1, tipo: 'RECARGA', valor_centavos: 5000, created_at: new Date('2024-07-19T10:00:00Z') },
@@ -37,10 +17,9 @@ let pdvs: Pdv[] = [
   { id: 4, nome: 'Food Truck de Burger', chave_api: 'api-key-burger' },
 ];
 
-let nextCardId = cards.length + 1;
 let nextTransactionId = transactions.length + 1;
 
-function generateRandomId() {
+export function generateRandomId() {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
   let result = '';
   for (let i = 0; i < 18; i++) {
@@ -49,43 +28,19 @@ function generateRandomId() {
   return result;
 }
 
-// --- CARD FUNCTIONS ---
-export const findCardByQrCodeId = (qrCodeId: string): Card | undefined =>
-  cards.find((c) => c.qr_code_id === qrCodeId);
-
-export const createNewCard = (saldo_inicial_centavos: number, nome_cliente?: string, telefone_cliente?: string): Card => {
-  const newCard: Card = {
-    id: nextCardId++,
-    qr_code_id: `festa-2025-${generateRandomId().slice(0, 18)}`,
-    saldo_centavos: saldo_inicial_centavos,
-    status: 'ATIVO',
-    created_at: new Date(),
-    updated_at: new Date(),
-    nome_cliente: nome_cliente,
-    telefone_cliente: telefone_cliente,
-  };
-  cards.push(newCard);
-
-  if (saldo_inicial_centavos > 0) {
-    createTransaction({
-      cartao_id: newCard.id,
-      pdv_id: 1, // Caixa Central
-      tipo: 'RECARGA',
-      valor_centavos: saldo_inicial_centavos,
-    });
-  }
-
-  return newCard;
-};
-
-export const updateCardBalance = (cardId: number, newBalance: number): Card | undefined => {
-  const cardIndex = cards.findIndex(c => c.id === cardId);
-  if (cardIndex === -1) return undefined;
-
-  cards[cardIndex].saldo_centavos = newBalance;
-  cards[cardIndex].updated_at = new Date();
-  return cards[cardIndex];
+// These functions still operate on in-memory data and will need to be migrated to Firestore.
+export const findCardByQrCodeId = (qrCodeId: string): Card | undefined => {
+    // This needs to be reimplemented to query Firestore
+    console.warn("findCardByQrCodeId is using mock data and needs to be migrated to Firestore.");
+    return undefined; 
 }
+
+export const updateCardBalance = (cardId: number | string, newBalance: number): Card | undefined => {
+    // This needs to be reimplemented to update a document in Firestore
+    console.warn("updateCardBalance is using mock data and needs to be migrated to Firestore.");
+    return undefined;
+}
+
 
 // --- TRANSACTION FUNCTIONS ---
 export const getTransactions = (limit: number = 20): Transaction[] => {

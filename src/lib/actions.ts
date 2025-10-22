@@ -2,13 +2,27 @@
 
 import { z } from 'zod';
 import {
-  createNewCard,
   findCardByQrCodeId,
   updateCardBalance,
   createTransaction,
   getSalesReport,
+  generateRandomId,
 } from './data';
 import { summarizeSalesReport } from '@/ai/flows/sales-report-summarization';
+
+// HACK: FIPEabase services are not available in server components yet
+// We will replace this with a proper admin SDK implementation later
+import { initializeApp, getApps } from 'firebase/app';
+import { getFirestore, collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { firebaseConfig } from '@/firebase/config';
+
+let app;
+if (!getApps().length) {
+  app = initializeApp(firebaseConfig);
+} else {
+  app = getApps()[0];
+}
+const db = getFirestore(app);
 
 
 export type ActionState = {
@@ -44,16 +58,43 @@ export async function createCard(
     }
 
     const { saldo_inicial, nome_cliente, telefone_cliente } = validatedFields.data;
-    const newCard = createNewCard(saldo_inicial * 100, nome_cliente, telefone_cliente);
+    const saldo_centavos = saldo_inicial * 100;
+    const qr_code_id = `festa-2025-${generateRandomId().slice(0, 18)}`;
+
+    const cardData = {
+        qr_code_id: qr_code_id,
+        saldo_centavos: saldo_centavos,
+        nome_cliente: nome_cliente ?? '',
+        telefone_cliente: telefone_cliente ?? '',
+        status: 'ATIVO',
+        created_at: serverTimestamp(),
+        updated_at: serverTimestamp(),
+    };
+
+    const docRef = await addDoc(collection(db, "cards"), cardData);
+
+    //TODO: create transaction should also write to firestore
+    if (saldo_centavos > 0) {
+        // createTransaction({
+        //     cartao_id: docRef.id,
+        //     pdv_id: 1, // Caixa Central
+        //     tipo: 'RECARGA',
+        //     valor_centavos: saldo_centavos,
+        // });
+    }
 
     return {
       status: 'success',
       message: 'Cartão criado com sucesso!',
-      data: newCard,
+      data: {
+        id: docRef.id,
+        ...cardData,
+      },
     };
   } catch (error) {
     console.error(error);
-    return { status: 'error', message: 'Erro ao criar cartão.' };
+    const errorMessage = error instanceof Error ? error.message : 'Ocorreu um erro desconhecido.';
+    return { status: 'error', message: `Erro ao criar cartão: ${errorMessage}` };
   }
 }
 

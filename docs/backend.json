@@ -1,0 +1,64 @@
+{
+  "entities": {
+    "Card": {
+      "title": "Card",
+      "description": "Represents a cashless card in the system.",
+      "type": "object",
+      "properties": {
+        "qr_code_id": {
+          "type": "string",
+          "description": "The unique identifier for the QR code."
+        },
+        "saldo_centavos": {
+          "type": "number",
+          "description": "The balance of the card in cents."
+        },
+        "status": {
+          "type": "string",
+          "description": "The status of the card.",
+          "enum": [
+            "ATIVO",
+            "INATIVO",
+            "BLOQUEADO"
+          ]
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The timestamp when the card was created."
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The timestamp when the card was last updated."
+        },
+        "nome_cliente": {
+          "type": "string",
+          "description": "The name of the customer."
+        },
+        "telefone_cliente": {
+          "type": "string",
+          "description": "The phone number of the customer."
+        }
+      },
+      "required": [
+        "qr_code_id",
+        "saldo_centavos",
+        "status",
+        "created_at",
+        "updated_at"
+      ]
+    }
+  },
+  "auth": {
+    "providers": []
+  },
+  "firestore": {
+    "/cards/{cardId}": {
+      "schema": {
+        "$ref": "#/entities/Card"
+      },
+      "description": "Stores information about each cashless card."
+    }
+  }
+}
