@@ -2,8 +2,6 @@
 
 import { z } from 'zod';
 import {
-  createTransaction,
-  getSalesReport,
   generateRandomId,
 } from './data';
 import { summarizeSalesReport } from '@/ai/flows/sales-report-summarization';
@@ -43,6 +41,7 @@ export async function createCard(
 ): Promise<ActionState> {
   try {
     const { db } = getFirebaseServer();
+    const batch = writeBatch(db);
 
     const validatedFields = CreateCardSchema.safeParse({
       saldo_inicial: formData.get('saldo_inicial'),
@@ -72,21 +71,24 @@ export async function createCard(
         updated_at: serverTimestamp(),
     };
 
-    const docRef = await addDoc(collection(db, "cards"), cardData);
+    const cardDocRef = doc(collection(db, "cards"));
+    batch.set(cardDocRef, cardData);
 
-    //TODO: create transaction should also write to firestore
     if (saldo_centavos > 0) {
-        // createTransaction({
-        //     cartao_id: docRef.id,
-        //     pdv_id: 1, // Caixa Central
-        //     tipo: 'RECARGA',
-        //     valor_centavos: saldo_centavos,
-        // });
+        const transactionRef = doc(collection(db, "transactions"));
+        batch.set(transactionRef, {
+            cartao_id: cardDocRef.id,
+            pdv_id: 1, // Caixa Central
+            tipo: 'RECARGA',
+            valor_centavos: saldo_centavos,
+            created_at: serverTimestamp()
+        });
     }
+    
+    await batch.commit();
 
-    // A data retornada precisa ser serializável (não pode conter Timestamps do servidor)
     const returnData = {
-      id: docRef.id,
+      id: cardDocRef.id,
       qr_code_id: cardData.qr_code_id,
       saldo_centavos: cardData.saldo_centavos,
       nome_cliente: cardData.nome_cliente,
@@ -118,6 +120,8 @@ export async function rechargeCard(
 ): Promise<ActionState> {
   try {
     const { db } = getFirebaseServer();
+    const batch = writeBatch(db);
+
     const validatedFields = RechargeSchema.safeParse({
       qr_code_id: formData.get('qr_code_id'),
       valor_recarga: formData.get('valor_recarga'),
@@ -133,7 +137,6 @@ export async function rechargeCard(
 
     const { qr_code_id, valor_recarga } = validatedFields.data;
     
-    // Find card in Firestore
     const cardsRef = collection(db, 'cards');
     const q = query(cardsRef, where('qr_code_id', '==', qr_code_id));
     const querySnapshot = await getDocs(q);
@@ -152,20 +155,22 @@ export async function rechargeCard(
     const valor_recarga_centavos = valor_recarga * 100;
     const novo_saldo_centavos = card.saldo_centavos + valor_recarga_centavos;
 
-    // Update balance in Firestore
     const cardDocRef = doc(db, 'cards', cardDoc.id);
-    await updateDoc(cardDocRef, {
+    batch.update(cardDocRef, {
         saldo_centavos: novo_saldo_centavos,
         updated_at: serverTimestamp()
     });
 
-    // TODO: Create transaction in Firestore
-    createTransaction({
+    const transactionRef = doc(collection(db, "transactions"));
+    batch.set(transactionRef, {
       cartao_id: cardDoc.id,
       pdv_id: 1, // Caixa Central
       tipo: 'RECARGA',
       valor_centavos: valor_recarga_centavos,
+      created_at: serverTimestamp()
     });
+    
+    await batch.commit();
 
     return {
       status: 'success',
@@ -192,6 +197,8 @@ export async function processSale(
 ): Promise<ActionState> {
     try {
         const { db } = getFirebaseServer();
+        const batch = writeBatch(db);
+
         const validatedFields = SaleSchema.safeParse({
             qr_code_id: formData.get('qr_code_id'),
             valor_venda: formData.get('valor_venda'),
@@ -208,7 +215,6 @@ export async function processSale(
 
         const { qr_code_id, valor_venda, pdv_id } = validatedFields.data;
 
-        // Find card in Firestore
         const cardsRef = collection(db, 'cards');
         const q = query(cardsRef, where('qr_code_id', '==', qr_code_id));
         const querySnapshot = await getDocs(q);
@@ -232,20 +238,22 @@ export async function processSale(
 
         const novo_saldo_centavos = card.saldo_centavos - valor_venda_centavos;
 
-        // Update balance in Firestore
         const cardDocRef = doc(db, 'cards', cardDoc.id);
-        await updateDoc(cardDocRef, {
+        batch.update(cardDocRef, {
             saldo_centavos: novo_saldo_centavos,
             updated_at: serverTimestamp()
         });
         
-        // TODO: Create transaction in Firestore
-        createTransaction({
-            cartao_id: cardDoc.id,
-            pdv_id: pdv_id,
-            tipo: 'VENDA',
-            valor_centavos: valor_venda_centavos,
+        const transactionRef = doc(collection(db, "transactions"));
+        batch.set(transactionRef, {
+          cartao_id: cardDoc.id,
+          pdv_id: pdv_id,
+          tipo: 'VENDA',
+          valor_centavos: valor_venda_centavos,
+          created_at: serverTimestamp()
         });
+
+        await batch.commit();
 
         return {
             status: 'success',
@@ -267,7 +275,9 @@ export async function generateSummary(
     formData: FormData
 ): Promise<ActionState> {
     try {
-        const salesData = getSalesReport();
+        const { db } = getFirebaseServer();
+        // TODO: This should be a proper 'use client' component that reads from a hook
+        const salesData = await getSalesReportFromFirestore();
         
         if (salesData.total_vendido_centavos === 0 && salesData.total_recarregado_centavos === 0) {
             return {
@@ -327,8 +337,6 @@ export async function getCardBalance(
         const cardDoc = querySnapshot.docs[0];
         const cardData = cardDoc.data() as Card;
 
-        // Firestore Timestamps não são serializáveis para o cliente, então os convertemos.
-        // Se created_at ou updated_at não existirem, usamos a data atual como fallback.
         const returnData = {
           ...cardData,
           id: cardDoc.id,
@@ -347,4 +355,40 @@ export async function getCardBalance(
         const errorMessage = error instanceof Error ? error.message : 'Ocorreu um erro desconhecido.';
         return { status: 'error', message: `Erro ao consultar saldo: ${errorMessage}` };
     }
+}
+
+// --- REPORTING (SERVER-SIDE) ---
+async function getSalesReportFromFirestore() {
+    const { db } = getFirebaseServer();
+    const transactionsSnapshot = await getDocs(collection(db, 'transactions'));
+    const allTransactions = transactionsSnapshot.docs.map(doc => doc.data());
+
+    const total_vendido_centavos = allTransactions
+        .filter(t => t.tipo === 'VENDA')
+        .reduce((sum, t) => sum + t.valor_centavos, 0);
+
+    const total_recarregado_centavos = allTransactions
+        .filter(t => t.tipo === 'RECARGA')
+        .reduce((sum, t) => sum + t.valor_centavos, 0);
+
+    // This is simplified. A real implementation would fetch PDVs from Firestore as well.
+    const pdvs = [
+      { id: 2, nome: 'Barraca de Salgados' },
+      { id: 3, nome: 'Barraca de Bebidas' },
+      { id: 4, nome: 'Food Truck de Burger' },
+    ];
+
+    const vendas_por_pdv = pdvs
+        .map(pdv => {
+            const total_centavos = allTransactions
+                .filter(t => t.pdv_id === pdv.id && t.tipo === 'VENDA')
+                .reduce((sum, t) => sum + t.valor_centavos, 0);
+            return {
+                pdv_id: pdv.id,
+                nome: pdv.nome,
+                total_centavos,
+            }
+        });
+
+    return { total_vendido_centavos, total_recarregado_centavos, vendas_por_pdv: vendas_por_pdv };
 }

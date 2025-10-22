@@ -1,86 +1,118 @@
 'use client'
-import { getSalesReport, getTransactions, getPdvById } from '@/lib/data';
+import { getPdvById } from '@/lib/data';
 import { formatCurrency, formatDateTime } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import AiSummary from '@/components/dashboard/AiSummary';
-import { DollarSign, CreditCard, ShoppingBag, TrendingUp, TestTube } from 'lucide-react';
+import { DollarSign, CreditCard, ShoppingBag, TrendingUp, TestTube, Users } from 'lucide-react';
 import StatCard from '@/components/dashboard/StatCard';
-import { useState, useEffect } from 'react';
-import type { Pdv, Transaction } from '@/lib/definitions';
+import { useState, useEffect, useMemo } from 'react';
+import type { Card as CardType, Pdv, Transaction } from '@/lib/definitions';
 import { Button } from '@/components/ui/button';
 import { useFirestore } from '@/firebase';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, limit, Timestamp } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
+import { Skeleton } from '@/components/ui/skeleton';
 
-type Report = {
-  total_vendido_centavos: number;
-  total_recarregado_centavos: number;
-  vendas_por_pdv: {
-    pdv_id: number;
-    nome: string;
-    total_centavos: number;
-  }[];
+function useCollection<T>(path: string) {
+  const [data, setData] = useState<T[] | null>(null);
+  const firestore = useFirestore();
+
+  useEffect(() => {
+    if (!firestore) return;
+
+    const collRef = collection(firestore, path);
+    // Note: This basic implementation doesn't include query parameters.
+    // For more complex scenarios, you might need to pass queries to the hook.
+    const unsubscribe = onSnapshot(collRef, (snapshot) => {
+      const allDocs = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as T));
+      setData(allDocs);
+    });
+
+    return () => unsubscribe();
+  }, [firestore, path]);
+
+  return data;
+}
+
+const formatTimestamp = (ts: Timestamp | Date) => {
+  if (ts instanceof Timestamp) {
+    return ts.toDate();
+  }
+  return ts;
 }
 
 export default function DashboardPage() {
-  const [report, setReport] = useState<Report | null>(null);
-  const [recentTransactions, setRecentTransactions] = useState<Transaction[]>([]);
   const firestore = useFirestore();
   const { toast } = useToast();
+  
+  // Fetch data in real-time from Firestore
+  const allCards = useCollection<CardType>('cards');
+  const allTransactions = useCollection<Transaction>('transactions');
+  
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Memoize calculations to prevent re-running on every render
+  const report = useMemo(() => {
+    if (!allTransactions) return null;
+
+    const total_recarregado_centavos = allTransactions
+      .filter(t => t.tipo === 'RECARGA')
+      .reduce((sum, t) => sum + t.valor_centavos, 0);
+
+    const total_vendido_centavos = allTransactions
+      .filter(t => t.tipo === 'VENDA')
+      .reduce((sum, t) => sum + t.valor_centavos, 0);
+
+    const totalVendasUn = allTransactions.filter(t => t.tipo === 'VENDA').length;
+    
+    return {
+      total_recarregado_centavos,
+      total_vendido_centavos,
+      totalVendasUn,
+      ticketMedio: total_vendido_centavos / (totalVendasUn || 1),
+    };
+  }, [allTransactions]);
+
+  const recentTransactions = useMemo(() => {
+    if (!allTransactions) return [];
+    
+    // Sort transactions by date and take the last 10
+    return [...allTransactions]
+      .sort((a, b) => formatTimestamp(b.created_at).getTime() - formatTimestamp(a.created_at).getTime())
+      .slice(0, 10);
+  }, [allTransactions]);
 
   useEffect(() => {
-    // Data fetching is now client-side
-    setReport(getSalesReport());
-    setRecentTransactions(getTransactions(10));
-  }, []);
-
-  const handleTestWrite = async () => {
-    if (!firestore) {
-      toast({
-        variant: 'destructive',
-        title: 'Erro',
-        description: 'Firestore não está inicializado. Verifique a configuração do Firebase.',
-      });
-      return;
+    if (allCards !== null && allTransactions !== null) {
+      setIsLoading(false);
+    } else {
+      setIsLoading(true);
     }
-    try {
-      const testCollection = collection(firestore, 'test_writes');
-      await addDoc(testCollection, {
-        message: 'Hello Firestore!',
-        timestamp: serverTimestamp(),
-      });
-      toast({
-        title: 'Sucesso!',
-        description: 'Um documento de teste foi escrito no Firestore com sucesso.',
-      });
-    } catch (error) {
-      console.error('Erro ao escrever no Firestore:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Ocorreu um erro desconhecido.';
-      toast({
-        variant: 'destructive',
-        title: 'Falha na Escrita no Firestore',
-        description: `Não foi possível escrever no banco de dados. Verifique o console e suas regras de segurança do Firestore. Erro: ${errorMessage}`,
-      });
-    }
-  };
+  }, [allCards, allTransactions])
 
-  if (!report) {
-    return <div>Carregando relatório...</div>;
-  }
 
   const stats = [
-    { title: 'Total Recarregado', value: formatCurrency(report.total_recarregado_centavos), icon: CreditCard },
-    { title: 'Total Vendido', value: formatCurrency(report.total_vendido_centavos), icon: DollarSign },
-    { title: 'Total de Vendas (Un)', value: report.vendas_por_pdv.length, icon: ShoppingBag },
-    { title: 'Ticket Médio', value: formatCurrency(report.total_vendido_centavos / (report.vendas_por_pdv.length || 1)), icon: TrendingUp }
+    { title: 'Total Recarregado', value: report ? formatCurrency(report.total_recarregado_centavos) : 'R$ 0,00', icon: CreditCard },
+    { title: 'Total Vendido', value: report ? formatCurrency(report.total_vendido_centavos) : 'R$ 0,00', icon: DollarSign },
+    { title: 'Cartões Ativos', value: allCards?.length ?? 0, icon: Users },
+    { title: 'Ticket Médio', value: report ? formatCurrency(report.ticketMedio) : 'R$ 0,00', icon: TrendingUp }
   ];
 
   return (
     <div className="flex flex-col gap-6">
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {stats.map(stat => <StatCard key={stat.title} {...stat} />)}
+        {isLoading ? (
+          <>
+            <Skeleton className="h-28" />
+            <Skeleton className="h-28" />
+            <Skeleton className="h-28" />
+            <Skeleton className="h-28" />
+          </>
+        ) : (
+          stats.map(stat => <StatCard key={stat.title} {...stat} />)
+        )}
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -89,53 +121,41 @@ export default function DashboardPage() {
             <CardTitle>Transações Recentes</CardTitle>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>PDV</TableHead>
-                  <TableHead>Tipo</TableHead>
-                  <TableHead>Valor</TableHead>
-                  <TableHead>Data</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {recentTransactions.length > 0 ? recentTransactions.map((tx) => {
-                  const pdv = getPdvById(tx.pdv_id);
-                  return (
-                    <TableRow key={tx.id}>
-                      <TableCell>{pdv?.nome || 'N/A'}</TableCell>
-                      <TableCell>
-                        <Badge variant={tx.tipo === 'VENDA' ? 'destructive' : 'secondary'}>{tx.tipo}</Badge>
-                      </TableCell>
-                      <TableCell>{formatCurrency(tx.valor_centavos)}</TableCell>
-                      <TableCell>{formatDateTime(tx.created_at)}</TableCell>
-                    </TableRow>
-                  )
-                }) : (
+            {isLoading ? <Skeleton className="h-96" /> : (
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center">Nenhuma transação recente.</TableCell>
+                    <TableHead>PDV</TableHead>
+                    <TableHead>Tipo</TableHead>
+                    <TableHead>Valor</TableHead>
+                    <TableHead>Data</TableHead>
                   </TableRow>
-                )}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {recentTransactions.length > 0 ? recentTransactions.map((tx) => {
+                    const pdv = getPdvById(tx.pdv_id);
+                    return (
+                      <TableRow key={tx.id}>
+                        <TableCell>{pdv?.nome || 'N/A'}</TableCell>
+                        <TableCell>
+                          <Badge variant={tx.tipo === 'VENDA' ? 'destructive' : 'secondary'}>{tx.tipo}</Badge>
+                        </TableCell>
+                        <TableCell>{formatCurrency(tx.valor_centavos)}</TableCell>
+                        <TableCell>{formatDateTime(formatTimestamp(tx.created_at))}</TableCell>
+                      </TableRow>
+                    )
+                  }) : (
+                    <TableRow>
+                      <TableCell colSpan={4} className="text-center">Nenhuma transação recente.</TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            )}
           </CardContent>
         </Card>
         <div className="flex flex-col gap-6">
           <AiSummary />
-           <Card>
-            <CardHeader>
-              <CardTitle>Teste do Firestore</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground mb-4">
-                Clique no botão abaixo para tentar escrever um documento na coleção 'test_writes' do Firestore.
-              </p>
-              <Button onClick={handleTestWrite} className="w-full">
-                <TestTube className="mr-2" />
-                Testar Escrita no Firestore
-              </Button>
-            </CardContent>
-          </Card>
         </div>
       </div>
     </div>

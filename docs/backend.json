@@ -44,9 +44,7 @@
       "required": [
         "qr_code_id",
         "saldo_centavos",
-        "status",
-        "created_at",
-        "updated_at"
+        "status"
       ]
     },
     "CardDetails": {
@@ -87,6 +85,45 @@
           "type": "string"
         }
       }
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Represents a single financial transaction.",
+      "type": "object",
+      "properties": {
+        "cartao_id": {
+          "type": "string",
+          "description": "The Firestore document ID of the card."
+        },
+        "pdv_id": {
+          "type": "number",
+          "description": "The ID of the point of sale."
+        },
+        "tipo": {
+          "type": "string",
+          "description": "The type of transaction.",
+          "enum": [
+            "RECARGA",
+            "VENDA",
+            "REEMBOLSO"
+          ]
+        },
+        "valor_centavos": {
+          "type": "number",
+          "description": "The value of the transaction in cents."
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The timestamp when the transaction occurred."
+        }
+      },
+      "required": [
+        "cartao_id",
+        "pdv_id",
+        "tipo",
+        "valor_centavos"
+      ]
     }
   },
   "auth": {
@@ -98,6 +135,12 @@
         "$ref": "#/entities/Card"
       },
       "description": "Stores information about each cashless card."
+    },
+    "/transactions/{transactionId}": {
+      "schema": {
+        "$ref": "#/entities/Transaction"
+      },
+      "description": "Stores all financial transactions."
     }
   }
 }

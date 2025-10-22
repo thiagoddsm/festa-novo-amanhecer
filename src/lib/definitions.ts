@@ -5,19 +5,19 @@ export type Card = {
   qr_code_id: string;
   saldo_centavos: number;
   status: 'ATIVO' | 'INATIVO' | 'BLOQUEADO';
-  created_at: Date | Timestamp;
-  updated_at: Date | Timestamp;
+  created_at: Timestamp;
+  updated_at: Timestamp;
   nome_cliente?: string;
   telefone_cliente?: string;
 };
 
 export type Transaction = {
-  id: number; // Will become firestore doc id
+  id: string; // Firestore doc id
   cartao_id: string; // Firestore document ID of the card
   pdv_id: number;
   tipo: 'RECARGA' | 'VENDA' | 'REEMBOLSO';
   valor_centavos: number;
-  created_at: Date;
+  created_at: Timestamp;
 };
 
 export type Pdv = {
