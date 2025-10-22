@@ -2,8 +2,6 @@
 
 import { z } from 'zod';
 import {
-  findCardByQrCodeId,
-  updateCardBalance,
   createTransaction,
   getSalesReport,
   generateRandomId,
@@ -11,7 +9,7 @@ import {
 import { summarizeSalesReport } from '@/ai/flows/sales-report-summarization';
 
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore, collection, addDoc, serverTimestamp, where, query, getDocs, Timestamp } from 'firebase/firestore';
+import { getFirestore, collection, addDoc, serverTimestamp, where, query, getDocs, doc, updateDoc, Timestamp, writeBatch } from 'firebase/firestore';
 import { firebaseConfig } from '@/firebase/config';
 import type { Card } from './definitions';
 
@@ -134,11 +132,19 @@ export async function rechargeCard(
     }
 
     const { qr_code_id, valor_recarga } = validatedFields.data;
-    const card = findCardByQrCodeId(qr_code_id);
+    
+    // Find card in Firestore
+    const cardsRef = collection(db, 'cards');
+    const q = query(cardsRef, where('qr_code_id', '==', qr_code_id));
+    const querySnapshot = await getDocs(q);
 
-    if (!card) {
+    if (querySnapshot.empty) {
       return { status: 'error', message: 'Cartão não encontrado.' };
     }
+        
+    const cardDoc = querySnapshot.docs[0];
+    const card = cardDoc.data() as Card;
+
     if (card.status !== 'ATIVO') {
       return { status: 'error', message: `Cartão com status ${card.status}` };
     }
@@ -146,9 +152,16 @@ export async function rechargeCard(
     const valor_recarga_centavos = valor_recarga * 100;
     const novo_saldo_centavos = card.saldo_centavos + valor_recarga_centavos;
 
-    updateCardBalance(card.id, novo_saldo_centavos);
+    // Update balance in Firestore
+    const cardDocRef = doc(db, 'cards', cardDoc.id);
+    await updateDoc(cardDocRef, {
+        saldo_centavos: novo_saldo_centavos,
+        updated_at: serverTimestamp()
+    });
+
+    // TODO: Create transaction in Firestore
     createTransaction({
-      cartao_id: card.id,
+      cartao_id: cardDoc.id,
       pdv_id: 1, // Caixa Central
       tipo: 'RECARGA',
       valor_centavos: valor_recarga_centavos,
@@ -161,7 +174,8 @@ export async function rechargeCard(
     };
   } catch (error) {
     console.error(error);
-    return { status: 'error', message: 'Erro ao recarregar.' };
+    const errorMessage = error instanceof Error ? error.message : 'Ocorreu um erro desconhecido.';
+    return { status: 'error', message: `Erro ao recarregar: ${errorMessage}` };
   }
 }
 
@@ -193,11 +207,19 @@ export async function processSale(
         }
 
         const { qr_code_id, valor_venda, pdv_id } = validatedFields.data;
-        const card = findCardByQrCodeId(qr_code_id);
 
-        if (!card) {
+        // Find card in Firestore
+        const cardsRef = collection(db, 'cards');
+        const q = query(cardsRef, where('qr_code_id', '==', qr_code_id));
+        const querySnapshot = await getDocs(q);
+
+        if (querySnapshot.empty) {
             return { status: 'error', message: 'Cartão não encontrado.' };
         }
+        
+        const cardDoc = querySnapshot.docs[0];
+        const card = cardDoc.data() as Card;
+
         if (card.status !== 'ATIVO') {
             return { status: 'error', message: `Cartão com status ${card.status}` };
         }
@@ -210,9 +232,16 @@ export async function processSale(
 
         const novo_saldo_centavos = card.saldo_centavos - valor_venda_centavos;
 
-        updateCardBalance(card.id, novo_saldo_centavos);
+        // Update balance in Firestore
+        const cardDocRef = doc(db, 'cards', cardDoc.id);
+        await updateDoc(cardDocRef, {
+            saldo_centavos: novo_saldo_centavos,
+            updated_at: serverTimestamp()
+        });
+        
+        // TODO: Create transaction in Firestore
         createTransaction({
-            cartao_id: card.id,
+            cartao_id: cardDoc.id,
             pdv_id: pdv_id,
             tipo: 'VENDA',
             valor_centavos: valor_venda_centavos,
@@ -226,7 +255,8 @@ export async function processSale(
 
     } catch (error) {
         console.error(error);
-        return { status: 'error', message: 'Erro ao processar venda.' };
+        const errorMessage = error instanceof Error ? error.message : 'Ocorreu um erro desconhecido.';
+        return { status: 'error', message: `Erro ao processar venda: ${errorMessage}` };
     }
 }
 
@@ -297,12 +327,13 @@ export async function getCardBalance(
         const cardDoc = querySnapshot.docs[0];
         const cardData = cardDoc.data() as Card;
 
+        // Firestore Timestamps não são serializáveis para o cliente, então os convertemos.
+        // Se created_at ou updated_at não existirem, usamos a data atual como fallback.
         const returnData = {
           ...cardData,
           id: cardDoc.id,
-          // Firestore Timestamps não são serializáveis para o cliente, então os convertemos.
-          created_at: (cardData.created_at as Timestamp).toDate().toISOString(),
-          updated_at: (cardData.updated_at as Timestamp).toDate().toISOString(),
+          created_at: cardData.created_at ? (cardData.created_at as Timestamp).toDate().toISOString() : new Date().toISOString(),
+          updated_at: cardData.updated_at ? (cardData.updated_at as Timestamp).toDate().toISOString() : new Date().toISOString(),
         }
 
         return {
@@ -313,6 +344,7 @@ export async function getCardBalance(
 
     } catch (error) {
         console.error(error);
-        return { status: 'error', message: 'Erro ao consultar saldo.' };
+        const errorMessage = error instanceof Error ? error.message : 'Ocorreu um erro desconhecido.';
+        return { status: 'error', message: `Erro ao consultar saldo: ${errorMessage}` };
     }
 }

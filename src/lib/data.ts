@@ -1,13 +1,13 @@
-import type { Card, Pdv, Transaction } from './definitions';
+import type { Pdv, Transaction } from './definitions';
 
 // This file now only contains mock data for transactions and PDVs.
 // Card data is now managed by Firestore.
 
 let transactions: Transaction[] = [
-  { id: 1, cartao_id: 1, pdv_id: 1, tipo: 'RECARGA', valor_centavos: 5000, created_at: new Date('2024-07-19T10:00:00Z') },
-  { id: 2, cartao_id: 1, pdv_id: 2, tipo: 'VENDA', valor_centavos: 1450, created_at: new Date('2024-07-19T14:30:00Z') },
-  { id: 3, cartao_id: 2, pdv_id: 1, tipo: 'RECARGA', valor_centavos: 2000, created_at: new Date('2024-07-19T11:00:00Z') },
-  { id: 4, cartao_id: 2, pdv_id: 3, tipo: 'VENDA', valor_centavos: 500, created_at: new Date('2024-07-19T16:00:00Z') },
+  { id: 1, cartao_id: 'mock-card-id-1', pdv_id: 1, tipo: 'RECARGA', valor_centavos: 5000, created_at: new Date('2024-07-19T10:00:00Z') },
+  { id: 2, cartao_id: 'mock-card-id-1', pdv_id: 2, tipo: 'VENDA', valor_centavos: 1450, created_at: new Date('2024-07-19T14:30:00Z') },
+  { id: 3, cartao_id: 'mock-card-id-2', pdv_id: 1, tipo: 'RECARGA', valor_centavos: 2000, created_at: new Date('2024-07-19T11:00:00Z') },
+  { id: 4, cartao_id: 'mock-card-id-2', pdv_id: 3, tipo: 'VENDA', valor_centavos: 500, created_at: new Date('2024-07-19T16:00:00Z') },
 ];
 
 let pdvs: Pdv[] = [
@@ -29,18 +29,6 @@ export function generateRandomId() {
 }
 
 // These functions still operate on in-memory data and will need to be migrated to Firestore.
-export const findCardByQrCodeId = (qrCodeId: string): Card | undefined => {
-    // This needs to be reimplemented to query Firestore
-    console.warn("findCardByQrCodeId is using mock data and needs to be migrated to Firestore.");
-    return undefined; 
-}
-
-export const updateCardBalance = (cardId: number | string, newBalance: number): Card | undefined => {
-    // This needs to be reimplemented to update a document in Firestore
-    console.warn("updateCardBalance is using mock data and needs to be migrated to Firestore.");
-    return undefined;
-}
-
 
 // --- TRANSACTION FUNCTIONS ---
 export const getTransactions = (limit: number = 20): Transaction[] => {
