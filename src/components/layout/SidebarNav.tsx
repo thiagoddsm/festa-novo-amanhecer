@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, ShoppingCart, WalletCards, Users } from "lucide-react";
+import { LayoutDashboard, ShoppingCart, WalletCards, Users, List } from "lucide-react";
 import { SidebarHeader, SidebarMenu, SidebarMenuItem, SidebarMenuButton } from "@/components/ui/sidebar";
 import Image from "next/image";
 import type { AuthenticatedUser } from "@/lib/auth";
@@ -10,6 +10,7 @@ import type { AuthenticatedUser } from "@/lib/auth";
 const allNavItems = [
     { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', role: 'CAIXA' },
     { href: '/cards', icon: Users, label: 'Cartões', role: 'CAIXA' },
+    { href: '/transactions', icon: List, label: 'Transações', role: 'CAIXA' },
     { href: '/cashier', icon: WalletCards, label: 'Caixa', role: 'CAIXA' },
     { href: '/pos', icon: ShoppingCart, label: 'PDV', role: 'CAIXA' },
     { href: '/pos', icon: ShoppingCart, label: 'PDV', role: 'PDV' },

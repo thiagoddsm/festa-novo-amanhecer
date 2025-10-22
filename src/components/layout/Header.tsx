@@ -14,6 +14,8 @@ const getTitleFromPathname = (pathname: string): string => {
             return 'Ponto de Venda (PDV)';
         case '/cards':
             return 'Gerenciar Cartões';
+        case '/transactions':
+            return 'Histórico de Transações';
         default:
             return 'FestaPay';
     }

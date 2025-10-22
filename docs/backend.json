@@ -124,6 +124,45 @@
         "tipo",
         "valor_centavos"
       ]
+    },
+    "TransactionDetails": {
+      "title": "TransactionDetails",
+      "description": "Represents the detailed view of a transaction for display.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "cartao_id": {
+          "type": "string"
+        },
+        "card_qr_code_id": {
+          "type": "string",
+          "description": "The QR Code ID of the associated card."
+        },
+        "pdv_id": {
+          "type": "number"
+        },
+        "pdv_nome": {
+          "type": "string",
+          "description": "The name of the Point of Sale."
+        },
+        "tipo": {
+          "type": "string",
+          "enum": [
+            "RECARGA",
+            "VENDA",
+            "REEMBOLSO"
+          ]
+        },
+        "valor_centavos": {
+          "type": "number"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
     }
   },
   "auth": {
