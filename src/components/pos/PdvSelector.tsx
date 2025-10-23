@@ -26,16 +26,16 @@ export default function PdvSelector({ pdvs, onPdvSelect }: PdvSelectorProps) {
         <CardContent className="grid grid-cols-2 md:grid-cols-3 gap-4">
           {pdvs === null && (
             <>
-              <Skeleton className="h-20 w-full" />
-              <Skeleton className="h-20 w-full" />
-              <Skeleton className="h-20 w-full" />
-              <Skeleton className="h-20 w-full" />
-              <Skeleton className="h-20 w-full" />
-              <Skeleton className="h-20 w-full" />
+              <Skeleton className="h-24 w-full" />
+              <Skeleton className="h-24 w-full" />
+              <Skeleton className="h-24 w-full" />
+              <Skeleton className="h-24 w-full" />
+              <Skeleton className="h-24 w-full" />
+              <Skeleton className="h-24 w-full" />
             </>
           )}
           {filteredPdvs && filteredPdvs.length === 0 && (
-              <p className='col-span-full text-center text-muted-foreground p-4'>Nenhum PDV encontrado. Vá ao Dashboard, clique em "Configurações" e depois em "Popular Dados Iniciais" para cadastrar as barracas e cardápios.</p>
+              <p className='col-span-full text-center text-muted-foreground p-4'>Nenhum PDV encontrado. Vá ao Dashboard, encontre o card "Configurações" e clique em "Popular Dados Iniciais" para cadastrar as barracas e cardápios.</p>
           )}
           {filteredPdvs &&
             filteredPdvs.map(pdv => (
