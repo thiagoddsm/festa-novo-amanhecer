@@ -2,13 +2,17 @@ import { collection, writeBatch, getDocs, query, doc } from 'firebase/firestore'
 import type { Firestore } from 'firebase/firestore';
 
 const pdvs = [
-  { id: 'caixa_central', nome: 'Caixa Central' },
-  { id: 'bebidas', nome: 'Barraca de Bebidas' },
-  { id: 'burger', nome: 'Food Truck de Burger' },
-  { id: 'salgados', nome: 'Barraca de Salgados' },
-  { id: 'churrasco', nome: 'Churrasco' },
-  { id: 'pizza_caldo', nome: 'Pizza e Caldo' },
-  { id: 'doces_quentes', nome: 'Doces e Bebidas Quentes' },
+    { id: 'caixa_central', nome: 'Caixa Central' },
+    { id: 'bebidas', nome: 'Bebidas' },
+    { id: 'hamburguer_tradicional', nome: 'Hambúrguer Tradicional' },
+    { id: 'hamburguer_artesanal', nome: 'Hambúrguer Artesanal' },
+    { id: 'pastel', nome: 'Pastel' },
+    { id: 'doces', nome: 'Doces' },
+    { id: 'churrasco', nome: 'Churrasco' },
+    { id: 'cachorro_quente', nome: 'Cachorro Quente' },
+    { id: 'batata_turbinada', nome: 'Batata Turbinada' },
+    { id: 'pizza', nome: 'Pizza' },
+    { id: 'caldo', nome: 'Caldo' },
 ];
 
 const menus: Record<string, { nome: string; preco_centavos: number }[]> = {
@@ -16,31 +20,40 @@ const menus: Record<string, { nome: string; preco_centavos: number }[]> = {
     { nome: 'Refrigerante', preco_centavos: 500 },
     { nome: 'Água', preco_centavos: 300 },
     { nome: 'Cerveja', preco_centavos: 800 },
+    { nome: 'Quentão', preco_centavos: 600 },
+    { nome: 'Vinho Quente', preco_centavos: 700 },
   ],
-  burger: [
-    { nome: 'Hambúrguer Artesanal', preco_centavos: 2500 },
+  hamburguer_tradicional: [
     { nome: 'Hambúrguer Tradicional', preco_centavos: 1800 },
-    { nome: 'Batata Turbinada', preco_centavos: 1500 },
   ],
-  salgados: [
+  hamburguer_artesanal: [
+    { nome: 'Hambúrguer Artesanal', preco_centavos: 2500 },
+  ],
+  pastel: [
       { nome: 'Pastel de Carne', preco_centavos: 700 },
       { nome: 'Pastel de Queijo', preco_centavos: 700 },
-      { nome: 'Cachorro Quente', preco_centavos: 1000 },
+  ],
+  doces: [
+      { nome: 'Doce de Pote', preco_centavos: 800 },
+      { nome: 'Canjica', preco_centavos: 900 },
   ],
   churrasco: [
       { nome: 'Espetinho de Carne', preco_centavos: 1200 },
       { nome: 'Espetinho de Frango', preco_centavos: 1000 },
   ],
-  pizza_caldo: [
+  cachorro_quente: [
+      { nome: 'Cachorro Quente', preco_centavos: 1000 },
+  ],
+  batata_turbinada: [
+      { nome: 'Batata Turbinada', preco_centavos: 1500 },
+  ],
+  pizza: [
       { nome: 'Fatia de Pizza', preco_centavos: 1000 },
+  ],
+  caldo: [
       { nome: 'Caldo de Feijão', preco_centavos: 1500 },
       { nome: 'Caldo Verde', preco_centavos: 1500 },
   ],
-  doces_quentes: [
-      { nome: 'Doce de Pote', preco_centavos: 800 },
-      { nome: 'Quentão', preco_centavos: 600 },
-      { nome: 'Vinho Quente', preco_centavos: 700 },
-  ]
 };
 
 export async function seedPdvsAndMenus(db: Firestore) {
@@ -53,7 +66,7 @@ export async function seedPdvsAndMenus(db: Firestore) {
 
   if (existingPdvs.size > 0) {
       console.log('PDVs já existem. O processo de "seed" será interrompido.');
-      throw new Error('O banco de dados já parece estar populado. A operação foi cancelada para evitar duplicatas.');
+      throw new Error('O banco de dados já parece estar populado. Para recomeçar, por favor, limpe a coleção "pdvs" no seu console do Firebase antes de continuar.');
   }
 
   // Add PDVs
@@ -64,6 +77,7 @@ export async function seedPdvsAndMenus(db: Firestore) {
 
   // Add Menu Items
   for (const pdvId in menus) {
+    if (pdvId === 'caixa_central') continue;
     const menuItems = menus[pdvId];
     menuItems.forEach(item => {
       const itemRef = doc(collection(db, `pdvs/${pdvId}/menuItems`));
