@@ -3,7 +3,7 @@
 import React, { useActionState, useEffect, useRef, useState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { createCard } from '@/lib/actions';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -36,11 +36,12 @@ function SubmitButton() {
   );
 }
 
-const PrintableCard = React.forwardRef<HTMLDivElement, { card: CardType | null }>(({ card }, ref) => {
+// This component is only visible when printing
+const PrintableCard = ({ card }: { card: CardType | null }) => {
     if (!card) return null;
 
     return (
-        <div ref={ref} id="printable-card" className="my-4 rounded-lg border bg-white p-6 text-center text-black">
+        <div id="printable-card" className="my-4 rounded-lg border bg-white p-6 text-center text-black">
              <div className="flex justify-center items-center mb-4">
                 <QrCode className="h-8 w-8 text-primary" />
                 <h3 className='text-xl font-bold ml-2'>FestaPay</h3>
@@ -63,8 +64,7 @@ const PrintableCard = React.forwardRef<HTMLDivElement, { card: CardType | null }
             </p>
         </div>
     );
-});
-PrintableCard.displayName = "PrintableCard";
+};
 
 
 export default function CreateCardForm() {
@@ -73,11 +73,15 @@ export default function CreateCardForm() {
   const formRef = useRef<HTMLFormElement>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [newCard, setNewCard] = useState<CardType | null>(null);
-  const printableRef = useRef<HTMLDivElement>(null);
 
   const handlePrint = () => {
     window.print();
   };
+  
+  const resetForm = () => {
+      setNewCard(null);
+      formRef.current?.reset();
+  }
 
   useEffect(() => {
     if (!state) {
@@ -89,6 +93,7 @@ export default function CreateCardForm() {
         title: 'Erro ao criar cartão',
         description: state.message,
       });
+      setNewCard(null);
     }
     if (state.status === 'success' && state.message) {
       setNewCard(state.data);
@@ -99,7 +104,12 @@ export default function CreateCardForm() {
 
   return (
     <>
-      <Card id="create-card-form">
+      {/* This component will be rendered but invisible on screen, only visible for printing */}
+      <div className="print-only">
+          <PrintableCard card={newCard} />
+      </div>
+
+      <Card id="create-card-form" className="screen-only">
         <CardHeader>
           <CardTitle>Novo Cartão</CardTitle>
           <CardDescription>
@@ -138,25 +148,31 @@ export default function CreateCardForm() {
             <SubmitButton />
           </form>
         </CardContent>
+        {newCard && (
+            <CardFooter className="flex-col items-stretch gap-2 border-t pt-4">
+                <p className="text-sm text-center text-muted-foreground">Cartão para <span className="font-bold text-primary">{newCard.nome_cliente || 'cliente'}</span> criado!</p>
+                <Button variant="outline" onClick={handlePrint}>
+                    <Printer className="mr-2" />
+                    Imprimir / Salvar PDF
+                </Button>
+                 <Button variant="secondary" onClick={resetForm}>
+                    Criar Novo Cartão
+                </Button>
+            </CardFooter>
+        )}
       </Card>
+      
       <AlertDialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <AlertDialogContent>
+        <AlertDialogContent className="screen-only">
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
               <QrCode /> Cartão Criado com Sucesso!
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Entregue o QR Code ao cliente ou imprima o comprovante.
+              O QR Code foi gerado. Você pode imprimir o comprovante ou fechar esta janela.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          
-          <PrintableCard card={newCard} ref={printableRef} />
-          
-          <AlertDialogFooter className='sm:justify-between gap-2'>
-              <Button variant="outline" onClick={handlePrint}>
-                <Printer className="mr-2" />
-                Imprimir / Salvar PDF
-              </Button>
+          <AlertDialogFooter>
               <AlertDialogAction onClick={() => setDialogOpen(false)}>
                 Fechar
               </AlertDialogAction>

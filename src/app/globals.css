@@ -87,14 +87,20 @@ body {
   }
 }
 
+/* Print styles */
 @media print {
+  /* Hide everything by default */
   body * {
     visibility: hidden;
   }
-  #printable-card, #printable-card * {
+
+  /* Make the printable area and its children visible */
+  .print-only, .print-only * {
     visibility: visible;
   }
-  #printable-card {
+
+  /* Position the printable area to take up the whole page */
+  .print-only {
     position: absolute;
     left: 0;
     top: 0;
@@ -103,5 +109,18 @@ body {
     display: flex;
     justify-content: center;
     align-items: center;
+  }
+
+  /* Ensure screen-only elements are hidden when printing */
+  .screen-only {
+    display: none;
+  }
+}
+
+/* Screen styles */
+@media screen {
+  /* Hide print-only elements on the screen */
+  .print-only {
+    display: none;
   }
 }
