@@ -1,4 +1,4 @@
-import { collection, writeBatch, getDocs, query } from 'firebase/firestore';
+import { collection, writeBatch, getDocs, query, doc } from 'firebase/firestore';
 import type { Firestore } from 'firebase/firestore';
 
 const pdvs = [
@@ -57,16 +57,16 @@ export async function seedPdvsAndMenus(db: Firestore) {
   }
 
   // Add PDVs
-  pdvs.forEach(pdv => {
-    const pdvRef = collection(db, 'pdvs').doc(pdv.id);
-    batch.set(pdvRef, { nome: pdv.nome });
+  pdvs.forEach(pdvData => {
+    const pdvRef = doc(db, 'pdvs', pdvData.id);
+    batch.set(pdvRef, { nome: pdvData.nome });
   });
 
   // Add Menu Items
   for (const pdvId in menus) {
     const menuItems = menus[pdvId];
     menuItems.forEach(item => {
-      const itemRef = collection(db, `pdvs/${pdvId}/menuItems`).doc();
+      const itemRef = doc(collection(db, `pdvs/${pdvId}/menuItems`));
       batch.set(itemRef, item);
     });
   }
