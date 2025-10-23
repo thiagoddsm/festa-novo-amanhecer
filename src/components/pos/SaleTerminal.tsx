@@ -8,14 +8,15 @@ import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/utils';
 import type { Pdv, MenuItem } from '@/lib/definitions';
-import { CheckCircle2, XCircle, Loader2, ShoppingCart, X, ArrowLeft, Trash2 } from 'lucide-react';
+import { CheckCircle2, XCircle, Loader2, ShoppingCart, X, ArrowLeft, Trash2, Pencil } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useFirestore } from '@/firebase';
-import { collection, onSnapshot } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { Skeleton } from '../ui/skeleton';
 import { ScrollArea } from '../ui/scroll-area';
 import { Badge } from '../ui/badge';
 import { Separator } from '../ui/separator';
+import EditMenuSheet from './EditMenuSheet';
 
 const initialState = {
   status: 'success' as 'success' | 'error',
@@ -48,6 +49,7 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv, onGoBack: ()
   const [menuItems, setMenuItems] = useState<MenuItem[] | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [qrCodeId, setQrCodeId] = useState('');
+  const [isMenuSheetOpen, setIsMenuSheetOpen] = useState(false);
 
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -56,7 +58,8 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv, onGoBack: ()
   useEffect(() => {
     if (!firestore) return;
     const menuCollection = collection(firestore, 'pdvs', pdv.id, 'menuItems');
-    const unsubscribe = onSnapshot(menuCollection, snapshot => {
+    const q = query(menuCollection, orderBy('nome', 'asc'));
+    const unsubscribe = onSnapshot(q, snapshot => {
       const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as MenuItem));
       setMenuItems(items);
     });
@@ -118,7 +121,12 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv, onGoBack: ()
         <Card className="lg:col-span-3">
           <CardHeader>
             <div className="flex justify-between items-center">
-                <CardTitle>Cardápio</CardTitle>
+                <div className='flex items-center gap-2'>
+                    <CardTitle>Cardápio</CardTitle>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setIsMenuSheetOpen(true)}>
+                        <Pencil className="h-4 w-4" />
+                    </Button>
+                </div>
                 <Button variant="ghost" size="sm" onClick={onGoBack}><ArrowLeft className="mr-2 h-4 w-4" /> Trocar PDV</Button>
             </div>
             <CardDescription>Vendendo em: <span className='font-semibold text-primary'>{pdv.nome}</span></CardDescription>
@@ -192,6 +200,13 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv, onGoBack: ()
             </CardFooter>
         </Card>
       </div>
+
+      <EditMenuSheet 
+        pdv={pdv}
+        menuItems={menuItems || []}
+        isOpen={isMenuSheetOpen}
+        onOpenChange={setIsMenuSheetOpen}
+      />
 
       {confirmation && (
         <div

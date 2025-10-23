@@ -6,9 +6,10 @@ import { summarizeSalesReport } from '@/ai/flows/sales-report-summarization';
 import { seedPdvsAndMenus } from './seed';
 
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore, collection, addDoc, serverTimestamp, where, query, getDocs, doc, updateDoc, Timestamp, writeBatch, documentId, getDoc } from 'firebase/firestore';
+import { getFirestore, collection, addDoc, serverTimestamp, where, query, getDocs, doc, updateDoc, Timestamp, writeBatch, documentId, getDoc, deleteDoc } from 'firebase/firestore';
 import { firebaseConfig } from '@/firebase/config';
 import type { Card, MenuItem, Pdv } from './definitions';
+import { revalidatePath } from 'next/cache';
 
 // Helper to ensure Firebase is initialized only once on the server
 let app, db;
@@ -369,6 +370,80 @@ export async function getPdvNameById(pdvId: string): Promise<string> {
         return (pdvSnap.data() as Pdv).nome;
     }
     return `PDV ID: ${pdvId}`;
+}
+
+const MenuItemSchema = z.object({
+  nome: z.string().min(1, 'Nome do item é obrigatório.'),
+  preco_reais: z.coerce.number().positive('Preço deve ser positivo.'),
+  pdvId: z.string(),
+  itemId: z.string().optional(),
+});
+
+export async function addMenuItem( prevState: ActionState | undefined, formData: FormData): Promise<ActionState> {
+  const validatedFields = MenuItemSchema.safeParse({
+    nome: formData.get('nome'),
+    preco_reais: formData.get('preco_reais'),
+    pdvId: formData.get('pdvId'),
+  });
+
+  if (!validatedFields.success) {
+    return { status: 'error', message: 'Dados inválidos.' };
+  }
+
+  try {
+    const { nome, preco_reais, pdvId } = validatedFields.data;
+    const preco_centavos = Math.round(preco_reais * 100);
+    
+    const menuItemsCollection = collection(db, 'pdvs', pdvId, 'menuItems');
+    await addDoc(menuItemsCollection, { nome, preco_centavos });
+
+    revalidatePath('/pos');
+    return { status: 'success', message: 'Item adicionado com sucesso!' };
+  } catch (error) {
+    return { status: 'error', message: 'Erro ao adicionar item.' };
+  }
+}
+
+export async function updateMenuItem(prevState: ActionState | undefined, formData: FormData): Promise<ActionState> {
+  const validatedFields = MenuItemSchema.safeParse({
+    nome: formData.get('nome'),
+    preco_reais: formData.get('preco_reais'),
+    pdvId: formData.get('pdvId'),
+    itemId: formData.get('itemId'),
+  });
+
+  if (!validatedFields.success || !validatedFields.data.itemId) {
+    return { status: 'error', message: 'Dados inválidos para atualização.' };
+  }
+  
+  try {
+    const { nome, preco_reais, pdvId, itemId } = validatedFields.data;
+    const preco_centavos = Math.round(preco_reais * 100);
+
+    const itemRef = doc(db, 'pdvs', pdvId, 'menuItems', itemId);
+    await updateDoc(itemRef, { nome, preco_centavos });
+
+    revalidatePath('/pos');
+    return { status: 'success', message: 'Item atualizado com sucesso!' };
+  } catch (error) {
+    return { status: 'error', message: 'Erro ao atualizar item.' };
+  }
+}
+
+export async function deleteMenuItem(pdvId: string, itemId: string): Promise<ActionState> {
+  if (!pdvId || !itemId) {
+    return { status: 'error', message: 'IDs inválidos.' };
+  }
+
+  try {
+    const itemRef = doc(db, 'pdvs', pdvId, 'menuItems', itemId);
+    await deleteDoc(itemRef);
+
+    revalidatePath('/pos');
+    return { status: 'success', message: 'Item excluído com sucesso!' };
+  } catch (error) {
+    return { status: 'error', message: 'Erro ao excluir item.' };
+  }
 }
 
 
