@@ -83,25 +83,25 @@ export default function DashboardPage() {
     if (!allTransactions) return [];
     
     // Sort transactions by date and take the last 10
-    const sorted = [...allTransactions]
+    return [...allTransactions]
       .sort((a, b) => formatTimestamp(b.created_at).getTime() - formatTimestamp(a.created_at).getTime())
       .slice(0, 10);
       
-      // Fetch PDV names for recent transactions
-      sorted.forEach(async (tx) => {
-          if (tx.pdv_id && !pdvNames[tx.pdv_id]) {
-            try {
-                const name = await getPdvNameById(tx.pdv_id.toString());
-                setPdvNames(prev => ({...prev, [tx.pdv_id]: name}));
-            } catch(e){
-                // console.error("Could not fetch pdv name for id: ", tx.pdv_id);
-            }
-          }
-      })
-      
-      return sorted;
+  }, [allTransactions]);
 
-  }, [allTransactions, pdvNames]);
+  useEffect(() => {
+    // Fetch PDV names for recent transactions
+    recentTransactions.forEach(async (tx) => {
+        if (tx.pdv_id && !pdvNames[tx.pdv_id]) {
+          try {
+              const name = await getPdvNameById(tx.pdv_id.toString());
+              setPdvNames(prev => ({...prev, [tx.pdv_id]: name}));
+          } catch(e){
+              // console.error("Could not fetch pdv name for id: ", tx.pdv_id);
+          }
+        }
+    })
+  }, [recentTransactions, pdvNames]);
 
 
   // Memoize calculations to prevent re-running on every render
