@@ -2,13 +2,13 @@
 import { useState, useEffect } from 'react';
 import { useFirestore } from '@/firebase';
 import { collection, onSnapshot, doc, getDoc, Timestamp } from 'firebase/firestore';
-import type { Transaction, Card as CardType } from '@/lib/definitions';
+import type { Transaction, Card as CardType, Pdv } from '@/lib/definitions';
 import { formatCurrency, formatDateTime } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { List } from 'lucide-react';
-import { getPdvById, getPdvs } from '@/lib/data';
+import { getPdvNameById } from '@/lib/actions';
 import { DataTable } from '@/components/ui/data-table';
 import { type ColumnDef, SortingState, getSortedRowModel } from '@tanstack/react-table';
 
@@ -19,16 +19,30 @@ type TransactionDetails = Transaction & {
 
 // A simple cache to avoid re-fetching card details
 const cardCache = new Map<string, CardType>();
+const pdvCache = new Map<string, string>();
+const pdvListCache: Pdv[] = [];
+
 
 function useTransactionDetails() {
   const [transactions, setTransactions] = useState<TransactionDetails[] | null>(null);
+  const [pdvs, setPdvs] = useState<Pdv[]>([]);
   const firestore = useFirestore();
 
   useEffect(() => {
     if (!firestore) return;
 
+     const pdvCollRef = collection(firestore, 'pdvs');
+     const unsubPdvs = onSnapshot(pdvCollRef, (snapshot) => {
+         const allPdvs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Pdv));
+         pdvListCache.length = 0;
+         Array.prototype.push.apply(pdvListCache, allPdvs);
+         allPdvs.forEach(pdv => pdvCache.set(pdv.id, pdv.nome));
+         setPdvs(allPdvs);
+     });
+
+
     const transCollRef = collection(firestore, 'transactions');
-    const unsubscribe = onSnapshot(transCollRef, async (snapshot) => {
+    const unsubTrans = onSnapshot(transCollRef, async (snapshot) => {
       const allTransDocs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Transaction));
 
       // Enrich transactions with details
@@ -36,7 +50,7 @@ function useTransactionDetails() {
         allTransDocs.map(async (trans) => {
           const details: TransactionDetails = { ...trans };
           
-          details.pdv_nome = getPdvById(trans.pdv_id)?.nome || `PDV ID: ${trans.pdv_id}`;
+          details.pdv_nome = pdvCache.get(trans.pdv_id.toString()) || `PDV ID: ${trans.pdv_id}`;
 
           if (trans.cartao_id) {
             let cardData = cardCache.get(trans.cartao_id);
@@ -64,10 +78,13 @@ function useTransactionDetails() {
       setTransactions(sortedTransactions);
     });
 
-    return () => unsubscribe();
+    return () => {
+        unsubPdvs();
+        unsubTrans();
+    }
   }, [firestore]);
 
-  return transactions;
+  return {transactions, pdvs};
 }
 
 const getTipoVariant = (tipo: string) => {
@@ -122,7 +139,7 @@ const columns: ColumnDef<TransactionDetails>[] = [
 
 
 export default function TransactionsPage() {
-  const allTransactions = useTransactionDetails();
+  const { transactions: allTransactions, pdvs } = useTransactionDetails();
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -131,7 +148,7 @@ export default function TransactionsPage() {
     }
   }, [allTransactions]);
 
-  const pdvOptions = getPdvs().map(pdv => ({ value: pdv.nome, label: pdv.nome }));
+  const pdvOptions = pdvs.map(pdv => ({ value: pdv.nome, label: pdv.nome }));
 
   return (
     <Card>

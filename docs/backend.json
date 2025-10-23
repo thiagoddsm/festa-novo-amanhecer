@@ -96,8 +96,8 @@
           "description": "The Firestore document ID of the card."
         },
         "pdv_id": {
-          "type": "number",
-          "description": "The ID of the point of sale."
+          "type": "string",
+          "description": "The Firestore document ID of the point of sale."
         },
         "tipo": {
           "type": "string",
@@ -116,6 +116,24 @@
           "type": "string",
           "format": "date-time",
           "description": "The timestamp when the transaction occurred."
+        },
+        "items": {
+          "type": "array",
+          "description": "A list of items sold in the transaction.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "price": {
+                "type": "number"
+              },
+              "quantity": {
+                "type": "number"
+              }
+            }
+          }
         }
       },
       "required": [
@@ -141,7 +159,7 @@
           "description": "The QR Code ID of the associated card."
         },
         "pdv_id": {
-          "type": "number"
+          "type": "string"
         },
         "pdv_nome": {
           "type": "string",
@@ -163,6 +181,36 @@
           "format": "date-time"
         }
       }
+    },
+    "Pdv": {
+      "title": "Pdv",
+      "description": "Represents a Point of Sale (PDV).",
+      "type": "object",
+      "properties": {
+        "nome": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "nome"
+      ]
+    },
+    "MenuItem": {
+      "title": "MenuItem",
+      "description": "Represents an item in a PDV's menu.",
+      "type": "object",
+      "properties": {
+        "nome": {
+          "type": "string"
+        },
+        "preco_centavos": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "nome",
+        "preco_centavos"
+      ]
     }
   },
   "auth": {
@@ -180,6 +228,18 @@
         "$ref": "#/entities/Transaction"
       },
       "description": "Stores all financial transactions."
+    },
+    "/pdvs/{pdvId}": {
+      "schema": {
+        "$ref": "#/entities/Pdv"
+      },
+      "description": "Stores all Points of Sale."
+    },
+    "/pdvs/{pdvId}/menuItems/{menuItemId}": {
+      "schema": {
+        "$ref": "#/entities/MenuItem"
+      },
+      "description": "Stores menu items for a specific PDV."
     }
   }
 }

@@ -14,14 +14,25 @@ export type Card = {
 export type Transaction = {
   id: string; // Firestore doc id
   cartao_id: string; // Firestore document ID of the card
-  pdv_id: number;
+  pdv_id: string;
   tipo: 'RECARGA' | 'VENDA' | 'REEMBOLSO';
   valor_centavos: number;
   created_at: Timestamp;
+  items?: { name: string; price: number; quantity: number }[];
 };
 
+export type TransactionDetails = Transaction & {
+  card_qr_code_id?: string;
+  pdv_nome?: string;
+}
+
 export type Pdv = {
-  id: number;
+  id: string; // Firestore document ID
   nome: string;
-  chave_api: string;
 };
+
+export type MenuItem = {
+    id: string; // Firestore document ID
+    nome: string;
+    preco_centavos: number;
+}

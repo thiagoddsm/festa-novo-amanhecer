@@ -1,37 +1,24 @@
 'use client';
 
-import SaleForm from "@/components/pos/SaleForm";
-import { getPdvById, getPdvs } from "@/lib/data";
-import type { Pdv } from "@/lib/definitions";
-import { useState, useEffect } from "react";
+import { useState } from 'react';
+import PdvSelector from '@/components/pos/PdvSelector';
+import SaleTerminal from '@/components/pos/SaleTerminal';
+import type { Pdv } from '@/lib/definitions';
 
 export default function PosPage() {
-  const [pdvs, setPdvs] = useState<Pdv[]>([]);
-  
-  // O papel do usuário é agora fixo, pois não há login
-  const userRole = 'CAIXA'; // or 'PDV'
-  const userPdvId = 4; // Example PDV ID for a PDV user
+  const [selectedPdv, setSelectedPdv] = useState<Pdv | null>(null);
 
-  useEffect(() => {
-    let availablePdvs: Pdv[] = [];
-    if (userRole === 'CAIXA') {
-      availablePdvs = getPdvs();
-    } else if (userRole === 'PDV' && userPdvId) {
-      const pdv = getPdvById(userPdvId);
-      if (pdv) {
-        availablePdvs = [pdv];
-      }
-    }
-    setPdvs(availablePdvs);
-  }, []);
+  const handlePdvSelect = (pdv: Pdv) => {
+    setSelectedPdv(pdv);
+  };
 
-  if (pdvs.length === 0) {
-    return <div>Ponto de Venda não configurado corretamente ou sem permissão.</div>
+  const handleGoBack = () => {
+    setSelectedPdv(null);
   }
 
-  return (
-    <div className="mx-auto max-w-md">
-      <SaleForm pdvs={pdvs} selectedPdvId={userRole === 'PDV' ? userPdvId : undefined} />
-    </div>
-  );
+  if (!selectedPdv) {
+    return <PdvSelector onPdvSelect={handlePdvSelect} />;
+  }
+
+  return <SaleTerminal pdv={selectedPdv} onGoBack={handleGoBack} />;
 }

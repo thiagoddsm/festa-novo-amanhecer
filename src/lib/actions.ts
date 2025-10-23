@@ -1,25 +1,23 @@
 'use server';
 
 import { z } from 'zod';
-import {
-  generateRandomId,
-} from './data';
+import { generateRandomId } from './data';
 import { summarizeSalesReport } from '@/ai/flows/sales-report-summarization';
+import { seedPdvsAndMenus } from './seed';
 
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore, collection, addDoc, serverTimestamp, where, query, getDocs, doc, updateDoc, Timestamp, writeBatch } from 'firebase/firestore';
+import { getFirestore, collection, addDoc, serverTimestamp, where, query, getDocs, doc, updateDoc, Timestamp, writeBatch, documentId, getDoc } from 'firebase/firestore';
 import { firebaseConfig } from '@/firebase/config';
-import type { Card } from './definitions';
+import type { Card, MenuItem, Pdv } from './definitions';
 
-// Helper function to initialize Firebase on the server
-function getFirebaseServer() {
-  if (getApps().length > 0) {
-    return { app: getApp(), db: getFirestore(getApp()) };
-  }
-  const app = initializeApp(firebaseConfig);
-  const db = getFirestore(app);
-  return { app, db };
+// Helper to ensure Firebase is initialized only once on the server
+let app, db;
+if (getApps().length === 0) {
+  app = initializeApp(firebaseConfig);
+} else {
+  app = getApp();
 }
+db = getFirestore(app);
 
 
 export type ActionState = {
@@ -40,7 +38,6 @@ export async function createCard(
   formData: FormData
 ): Promise<ActionState> {
   try {
-    const { db } = getFirebaseServer();
     const batch = writeBatch(db);
 
     const validatedFields = CreateCardSchema.safeParse({
@@ -78,7 +75,7 @@ export async function createCard(
         const transactionRef = doc(collection(db, "transactions"));
         batch.set(transactionRef, {
             cartao_id: cardDocRef.id,
-            pdv_id: 1, // Caixa Central
+            pdv_id: 'caixa_central', // Caixa Central
             tipo: 'RECARGA',
             valor_centavos: saldo_centavos,
             created_at: serverTimestamp()
@@ -119,7 +116,6 @@ export async function rechargeCard(
   formData: FormData
 ): Promise<ActionState> {
   try {
-    const { db } = getFirebaseServer();
     const batch = writeBatch(db);
 
     const validatedFields = RechargeSchema.safeParse({
@@ -164,7 +160,7 @@ export async function rechargeCard(
     const transactionRef = doc(collection(db, "transactions"));
     batch.set(transactionRef, {
       cartao_id: cardDoc.id,
-      pdv_id: 1, // Caixa Central
+      pdv_id: 'caixa_central', // Caixa Central
       tipo: 'RECARGA',
       valor_centavos: valor_recarga_centavos,
       created_at: serverTimestamp()
@@ -185,10 +181,18 @@ export async function rechargeCard(
 }
 
 // --- Sale ---
+const SaleItemSchema = z.object({
+    id: z.string(),
+    name: z.string(),
+    price: z.number(),
+    quantity: z.number(),
+});
+
 const SaleSchema = z.object({
     qr_code_id: z.string().min(1, 'QR Code ID é obrigatório.'),
-    valor_venda: z.coerce.number().positive('Valor da venda deve ser positivo.'),
-    pdv_id: z.coerce.number().min(1, 'Ponto de Venda é obrigatório.')
+    pdv_id: z.string().min(1, 'Ponto de Venda é obrigatório.'),
+    items: z.array(SaleItemSchema).min(1, "O carrinho está vazio."),
+    total_venda: z.coerce.number().positive('Valor da venda deve ser positivo.'),
 });
 
 export async function processSale(
@@ -196,24 +200,28 @@ export async function processSale(
     formData: FormData
 ): Promise<ActionState> {
     try {
-        const { db } = getFirebaseServer();
         const batch = writeBatch(db);
+
+        const items = JSON.parse(formData.get('items') as string);
+        const total_venda = parseFloat(formData.get('total_venda') as string);
 
         const validatedFields = SaleSchema.safeParse({
             qr_code_id: formData.get('qr_code_id'),
-            valor_venda: formData.get('valor_venda'),
             pdv_id: formData.get('pdv_id'),
+            items: items,
+            total_venda: total_venda
         });
 
         if (!validatedFields.success) {
+            console.log(validatedFields.error.flatten().fieldErrors);
             return {
               status: 'error',
-              message: 'Dados inválidos.',
+              message: 'Dados da venda inválidos.',
               data: validatedFields.error.flatten().fieldErrors,
             };
         }
 
-        const { qr_code_id, valor_venda, pdv_id } = validatedFields.data;
+        const { qr_code_id, pdv_id, total_venda: valor_venda_centavos } = validatedFields.data;
 
         const cardsRef = collection(db, 'cards');
         const q = query(cardsRef, where('qr_code_id', '==', qr_code_id));
@@ -229,8 +237,6 @@ export async function processSale(
         if (card.status !== 'ATIVO') {
             return { status: 'error', message: `Cartão com status ${card.status}` };
         }
-
-        const valor_venda_centavos = valor_venda * 100;
 
         if(card.saldo_centavos < valor_venda_centavos) {
             return { status: 'error', message: 'Saldo insuficiente.' };
@@ -250,7 +256,8 @@ export async function processSale(
           pdv_id: pdv_id,
           tipo: 'VENDA',
           valor_centavos: valor_venda_centavos,
-          created_at: serverTimestamp()
+          created_at: serverTimestamp(),
+          items: validatedFields.data.items.map(item => ({name: item.name, price: item.price, quantity: item.quantity}))
         });
 
         await batch.commit();
@@ -275,8 +282,6 @@ export async function generateSummary(
     formData: FormData
 ): Promise<ActionState> {
     try {
-        const { db } = getFirebaseServer();
-        // TODO: This should be a proper 'use client' component that reads from a hook
         const salesData = await getSalesReportFromFirestore();
         
         if (salesData.total_vendido_centavos === 0 && salesData.total_recarregado_centavos === 0) {
@@ -311,7 +316,6 @@ export async function getCardBalance(
   formData: FormData
 ): Promise<ActionState> {
     try {
-        const { db } = getFirebaseServer();
         const validatedFields = CheckBalanceSchema.safeParse({
             qr_code_id: formData.get('qr_code_id'),
         });
@@ -357,9 +361,19 @@ export async function getCardBalance(
     }
 }
 
+// --- PDV / Menu ---
+export async function getPdvNameById(pdvId: string): Promise<string> {
+    const pdvRef = doc(db, 'pdvs', pdvId);
+    const pdvSnap = await getDoc(pdvRef);
+    if (pdvSnap.exists()) {
+        return (pdvSnap.data() as Pdv).nome;
+    }
+    return `PDV ID: ${pdvId}`;
+}
+
+
 // --- REPORTING (SERVER-SIDE) ---
 async function getSalesReportFromFirestore() {
-    const { db } = getFirebaseServer();
     const transactionsSnapshot = await getDocs(collection(db, 'transactions'));
     const allTransactions = transactionsSnapshot.docs.map(doc => doc.data());
 
@@ -371,12 +385,9 @@ async function getSalesReportFromFirestore() {
         .filter(t => t.tipo === 'RECARGA')
         .reduce((sum, t) => sum + t.valor_centavos, 0);
 
-    // This is simplified. A real implementation would fetch PDVs from Firestore as well.
-    const pdvs = [
-      { id: 2, nome: 'Barraca de Salgados' },
-      { id: 3, nome: 'Barraca de Bebidas' },
-      { id: 4, nome: 'Food Truck de Burger' },
-    ];
+    const pdvsSnapshot = await getDocs(collection(db, 'pdvs'));
+    const pdvs = pdvsSnapshot.docs.map(doc => ({id: doc.id, ...doc.data() as Pdv}));
+
 
     const vendas_por_pdv = pdvs
         .map(pdv => {
@@ -391,4 +402,17 @@ async function getSalesReportFromFirestore() {
         });
 
     return { total_vendido_centavos, total_recarregado_centavos, vendas_por_pdv: vendas_por_pdv };
+}
+
+
+// --- Database Seeding ---
+export async function seedDatabase(): Promise<ActionState> {
+    try {
+        await seedPdvsAndMenus(db);
+        return { status: 'success', message: 'PDVs e cardápios iniciais foram cadastrados com sucesso!' };
+    } catch (error) {
+        console.error("Error seeding database:", error);
+        const errorMessage = error instanceof Error ? error.message : 'Ocorreu um erro desconhecido.';
+        return { status: 'error', message: `Erro ao popular banco de dados: ${errorMessage}` };
+    }
 }
