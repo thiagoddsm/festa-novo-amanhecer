@@ -81,13 +81,6 @@ export default function CreateCardForm() {
       content: () => printableRef.current,
   });
 
-  const triggerPrint = () => {
-    // Add a small delay to ensure the content is rendered before printing
-    setTimeout(() => {
-        handlePrint();
-    }, 100);
-  }
-
   useEffect(() => {
     if (!state) {
       return;
@@ -162,7 +155,7 @@ export default function CreateCardForm() {
           <PrintableCard card={newCard} ref={printableRef} />
           
           <AlertDialogFooter className='sm:justify-between gap-2'>
-              <Button variant="outline" onClick={triggerPrint}>
+              <Button variant="outline" onClick={handlePrint}>
                 <Printer className="mr-2" />
                 Imprimir / Salvar PDF
               </Button>
