@@ -21,8 +21,6 @@ import { formatCurrency } from '@/lib/utils';
 import { QrCode, Loader2, User, Printer } from 'lucide-react';
 import type { Card as CardType } from '@/lib/definitions';
 import QRCode from 'react-qr-code';
-import { useReactToPrint } from 'react-to-print';
-
 
 const initialState = {
   status: 'success' as 'success' | 'error',
@@ -42,7 +40,7 @@ const PrintableCard = React.forwardRef<HTMLDivElement, { card: CardType | null }
     if (!card) return null;
 
     return (
-        <div ref={ref} className="my-4 rounded-lg border bg-white p-6 text-center text-black">
+        <div ref={ref} id="printable-card" className="my-4 rounded-lg border bg-white p-6 text-center text-black">
              <div className="flex justify-center items-center mb-4">
                 <QrCode className="h-8 w-8 text-primary" />
                 <h3 className='text-xl font-bold ml-2'>FestaPay</h3>
@@ -77,9 +75,9 @@ export default function CreateCardForm() {
   const [newCard, setNewCard] = useState<CardType | null>(null);
   const printableRef = useRef<HTMLDivElement>(null);
 
-  const handlePrint = useReactToPrint({
-      content: () => printableRef.current,
-  });
+  const handlePrint = () => {
+    window.print();
+  };
 
   useEffect(() => {
     if (!state) {
@@ -101,7 +99,7 @@ export default function CreateCardForm() {
 
   return (
     <>
-      <Card>
+      <Card id="create-card-form">
         <CardHeader>
           <CardTitle>Novo Cartão</CardTitle>
           <CardDescription>
