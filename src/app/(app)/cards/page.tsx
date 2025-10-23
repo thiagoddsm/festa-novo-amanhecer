@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { useFirestore } from '@/firebase';
 import { collection, onSnapshot } from 'firebase/firestore';
 import type { Card as CardType } from '@/lib/definitions';
@@ -10,6 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Users } from 'lucide-react';
 import { DataTable } from '@/components/ui/data-table';
 import { type ColumnDef } from '@tanstack/react-table';
+import RechargeDialog from '@/components/cards/RechargeDialog';
 
 function useCollection<T>(path: string) {
   const [data, setData] = useState<T[] | null>(null);
@@ -68,6 +69,14 @@ const columns: ColumnDef<CardType>[] = [
         },
         filterFn: (row, id, value) => {
             return value.includes(row.getValue(id))
+        }
+    },
+    {
+        id: 'actions',
+        header: 'Ações',
+        cell: ({ row }) => {
+            const card = row.original;
+            return <RechargeDialog card={card} />
         }
     }
 ]
