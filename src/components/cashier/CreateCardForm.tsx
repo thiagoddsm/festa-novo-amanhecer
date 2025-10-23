@@ -162,12 +162,10 @@ export default function CreateCardForm() {
           <PrintableCard card={newCard} ref={printableRef} />
           
           <AlertDialogFooter className='sm:justify-between gap-2'>
-              <div onClick={triggerPrint} className="cursor-pointer">
-                <Button variant="outline" className="pointer-events-none">
-                  <Printer className="mr-2" />
-                  Imprimir / Salvar PDF
-                </Button>
-              </div>
+              <Button variant="outline" onClick={triggerPrint}>
+                <Printer className="mr-2" />
+                Imprimir / Salvar PDF
+              </Button>
               <AlertDialogAction onClick={() => setDialogOpen(false)}>
                 Fechar
               </AlertDialogAction>
