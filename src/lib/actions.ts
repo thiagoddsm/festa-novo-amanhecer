@@ -22,7 +22,7 @@ db = getFirestore(app);
 
 
 export type ActionState = {
-  status: 'success' | 'error';
+  status: 'idle' | 'success' | 'error';
   message: string;
   data?: any;
 };

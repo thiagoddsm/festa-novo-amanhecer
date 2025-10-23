@@ -29,7 +29,7 @@ const initialState = {
 function SubmitButton() {
   const { pending } = useFormStatus();
   return (
-    <Button type="submit" disabled={pending} className="w-full">
+    <Button type="submit" disabled={pending}>
       {pending ? <Loader2 className="animate-spin" /> : 'Confirmar Recarga'}
     </Button>
   );
@@ -42,7 +42,7 @@ export default function RechargeDialog({ card }: { card: Card }) {
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
-    if (!state || !state.message) return;
+    if (!state || !state.message || state.status === 'idle') return;
 
     if (state.status === 'error') {
       toast({
@@ -60,13 +60,12 @@ export default function RechargeDialog({ card }: { card: Card }) {
     }
   }, [state, toast, card.qr_code_id]);
 
-  // Reset form state when dialog opens/closes
+  // Reset form when dialog closes
   useEffect(() => {
-    formRef.current?.reset();
-    // A bit of a trick to reset the useActionState
-    const dummyFormData = new FormData();
-    formAction(dummyFormData);
-  }, [open, formAction]);
+    if (!open) {
+      formRef.current?.reset();
+    }
+  }, [open]);
 
 
   return (

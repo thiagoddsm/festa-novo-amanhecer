@@ -18,8 +18,12 @@ import { Badge } from '../ui/badge';
 import { Separator } from '../ui/separator';
 import EditMenuSheet from './EditMenuSheet';
 
-const initialState = {
-  status: 'success' as 'success' | 'error',
+const initialState: {
+    status: 'idle' | 'success' | 'error';
+    message: string;
+    data?: any;
+} = {
+  status: 'idle',
   message: '',
 };
 
@@ -71,7 +75,7 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv, onGoBack: ()
 
     if (state.status === 'error') {
       setConfirmation({ status: 'error', message: 'Venda Recusada', details: state.message });
-    } else {
+    } else if (state.status === 'success') {
       setConfirmation({
         status: 'success',
         message: 'Venda Aprovada',
