@@ -7,17 +7,18 @@ import { formatCurrency, formatDateTime } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { List } from 'lucide-react';
+import { List, Package, User } from 'lucide-react';
 import { getPdvNameById } from '@/lib/actions';
 import { DataTable } from '@/components/ui/data-table';
-import { type ColumnDef, SortingState, getSortedRowModel } from '@tanstack/react-table';
+import { type ColumnDef } from '@tanstack/react-table';
 
 type TransactionDetails = Transaction & {
   card_qr_code_id?: string;
   pdv_nome?: string;
+  nome_cliente?: string;
 };
 
-// A simple cache to avoid re-fetching card details
+// A simple cache to avoid re-fetching details
 const cardCache = new Map<string, CardType>();
 const pdvCache = new Map<string, string>();
 const pdvListCache: Pdv[] = [];
@@ -63,6 +64,7 @@ function useTransactionDetails() {
               }
             }
             details.card_qr_code_id = cardData?.qr_code_id || 'Desconhecido';
+            details.nome_cliente = cardData?.nome_cliente || 'N/A';
           }
           
           return details;
@@ -137,6 +139,34 @@ const columns: ColumnDef<TransactionDetails>[] = [
     }
 ]
 
+const SubRowComponent = ({ row }: { row: { original: TransactionDetails } }) => {
+    const { items, nome_cliente } = row.original;
+    return (
+        <div className="p-4 bg-muted/50">
+            <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <h4 className="font-semibold text-sm mb-2 flex items-center gap-2"><User className="h-4 w-4" /> Cliente</h4>
+                    <p className="text-sm text-muted-foreground">{nome_cliente || 'Não informado'}</p>
+                </div>
+                <div>
+                     <h4 className="font-semibold text-sm mb-2 flex items-center gap-2"><Package className="h-4 w-4" /> Itens do Pedido</h4>
+                     {items && items.length > 0 ? (
+                        <ul className="list-disc pl-5 text-sm text-muted-foreground">
+                            {items.map((item, index) => (
+                                <li key={index}>
+                                    {item.quantity}x {item.name} ({formatCurrency(item.price * item.quantity)})
+                                </li>
+                            ))}
+                        </ul>
+                     ) : (
+                        <p className="text-sm text-muted-foreground">Nenhum item registrado (Recarga ou Reembolso).</p>
+                     )}
+                </div>
+            </div>
+        </div>
+    );
+};
+
 
 export default function TransactionsPage() {
   const { transactions: allTransactions, pdvs } = useTransactionDetails();
@@ -158,7 +188,7 @@ export default function TransactionsPage() {
             Histórico de Transações
         </CardTitle>
         <CardDescription>
-            Visualize, filtre e ordene todas as transações do evento.
+            Visualize, filtre e expanda para ver detalhes de todas as transações do evento.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -172,6 +202,7 @@ export default function TransactionsPage() {
           <DataTable
             columns={columns}
             data={allTransactions || []}
+            renderSubComponent={SubRowComponent}
             filterColumns={[
                 {
                     columnId: 'card_qr_code_id',
