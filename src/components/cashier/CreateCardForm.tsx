@@ -41,27 +41,29 @@ const PrintableCard = ({ card }: { card: CardType | null }) => {
     if (!card) return null;
 
     return (
-        <div id="printable-card" className="my-4 rounded-lg border bg-white p-6 text-center text-black">
-             <div className="flex justify-center items-center mb-4">
-                <QrCode className="h-8 w-8 text-primary" />
-                <h3 className='text-xl font-bold ml-2'>FestaPay</h3>
-            </div>
-            {card.nome_cliente && (
-                <div className='mb-4'>
-                    <p className="text-sm font-medium text-gray-500">Cliente</p>
-                    <p className="flex items-center justify-center gap-2 text-lg font-semibold">
-                        <User className='h-4 w-4' /> {card.nome_cliente}
-                    </p>
+        <div className="print-only">
+            <div className="my-4 rounded-lg border bg-white p-6 text-center text-black">
+                <div className="flex justify-center items-center mb-4">
+                    <QrCode className="h-8 w-8 text-primary" />
+                    <h3 className='text-xl font-bold ml-2'>FestaPay</h3>
                 </div>
-            )}
-            <div className="flex justify-center my-4">
-                <QRCode value={card.qr_code_id} size={128} />
+                {card.nome_cliente && (
+                    <div className='mb-4'>
+                        <p className="text-sm font-medium text-gray-500">Cliente</p>
+                        <p className="flex items-center justify-center gap-2 text-lg font-semibold">
+                            <User className='h-4 w-4' /> {card.nome_cliente}
+                        </p>
+                    </div>
+                )}
+                <div className="flex justify-center my-4">
+                    <QRCode value={card.qr_code_id} size={128} />
+                </div>
+                <p className="text-xs font-medium text-gray-500">ID: {card.qr_code_id}</p>
+                <p className="mt-4 text-sm font-medium text-gray-500">Saldo Inicial</p>
+                <p className="text-2xl font-bold">
+                {formatCurrency(card.saldo_centavos ?? 0)}
+                </p>
             </div>
-            <p className="text-xs font-medium text-gray-500">ID: {card.qr_code_id}</p>
-            <p className="mt-4 text-sm font-medium text-gray-500">Saldo Inicial</p>
-            <p className="text-2xl font-bold">
-              {formatCurrency(card.saldo_centavos ?? 0)}
-            </p>
         </div>
     );
 };
@@ -104,12 +106,9 @@ export default function CreateCardForm() {
 
   return (
     <>
-      {/* This component will be rendered but invisible on screen, only visible for printing */}
-      <div className="print-only">
-          <PrintableCard card={newCard} />
-      </div>
-
-      <Card id="create-card-form" className="screen-only">
+      <PrintableCard card={newCard} />
+      
+      <Card className="screen-only">
         <CardHeader>
           <CardTitle>Novo Cartão</CardTitle>
           <CardDescription>
@@ -163,13 +162,13 @@ export default function CreateCardForm() {
       </Card>
       
       <AlertDialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <AlertDialogContent className="screen-only">
+        <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
               <QrCode /> Cartão Criado com Sucesso!
             </AlertDialogTitle>
             <AlertDialogDescription>
-              O QR Code foi gerado. Você pode imprimir o comprovante ou fechar esta janela.
+              O cartão foi ativado. Você pode imprimir o comprovante para o cliente ou fechar esta janela.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
