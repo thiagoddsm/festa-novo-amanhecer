@@ -45,7 +45,7 @@ export default function PdvSelector({ onPdvSelect }: PdvSelectorProps) {
               <Skeleton className="h-20 w-full" />
             </>
           )}
-          {pdvs && pdvs.length === 0 && <p className='col-span-full text-center text-muted-foreground'>Nenhum PDV encontrado. Popule o banco de dados no Dashboard.</p>}
+          {pdvs && pdvs.length === 0 && <p className='col-span-full text-center text-muted-foreground'>Nenhum PDV encontrado. Vá ao Dashboard e clique em "Popular Dados Iniciais" no card de "Configurações".</p>}
           {pdvs &&
             pdvs.map(pdv => (
               <Button
