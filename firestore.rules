@@ -1,102 +1,53 @@
 /**
- * @fileoverview Firestore Security Rules for the cashless payment system.
- *
- * Core Philosophy:
- * This ruleset prioritizes security and efficiency by enforcing strict ownership and utilizing data denormalization
- * to minimize reads within security rules. It aims to secure card and transaction data, allowing only authorized
- * access based on API keys for Points of Sale (PDVs).
- *
- * Data Structure:
- * - /cards/{cardId}: Stores card details.
- * - /cards/{cardId}/transactions/{transactionId}: Stores transaction data associated with a card.
- * - /points_of_sale/{pdvId}: Stores PDV information, including API keys for authentication.
- *
- * Key Security Decisions:
- * - Transactions are secured under each card using the `cardId` as an ownership reference.
- * - API keys are used to authenticate PDVs, ensuring only authorized terminals can create transactions.
- * - Data denormalization is employed to make security rules independent and efficient, avoiding costly `get()` calls.
- * - Listing all PDVs is disallowed. Only authenticated PDVs can access their own data.
- *
- * Denormalization for Authorization:
- * - The `transactions` subcollection denormalizes `cardId` to avoid requiring reads from the parent `card` document.
+ * @file Firestore Security Rules
+ * @core_philosophy This ruleset provides completely open access for all read and write operations on all collections. This is ONLY suitable for the prototyping phase.
+ * @data_structure The database contains three top-level collections: `cards`, `points_of_sale`, and the subcollection `transactions` under each card.
+ * @key_security_decisions All read and write operations are allowed without authentication or authorization checks. This is highly insecure and should be replaced with proper rules for production.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Secures the 'cards' collection. Cards can be read by anyone, but writes are denied.
+     * @description Allows all read and write operations on cards.
      * @path /cards/{cardId}
-     * @allow get, list: if true;
-     * @allow create: if false;
-     * @allow update: if false;
-     * @allow delete: if false;
-     * @deny create: if true; // Unauthorized user attempts to create a card.
-     * @deny update: if true; // Unauthorized user attempts to update a card.
-     * @deny delete: if true; // Unauthorized user attempts to delete a card.
-     * @principle Public read, owner-only writes (but writes are disabled in this prototype).
+     * @allow (create) Any user can create a card.
+     * @allow (read) Any user can read a card.
+     * @allow (write) Any user can update or delete a card.
+     * @deny (none) This rule is completely open for prototyping.
+     * @principle Allows all access for rapid prototyping.
      */
     match /cards/{cardId} {
-      allow get: if true;
-      allow list: if true;
-      allow create: if false;
-      allow update: if false;
-      allow delete: if false;
+      allow get, list: if true;
+      allow create, update, delete: if true;
     }
 
     /**
-     * @description Secures the 'transactions' subcollection under a card. Only authorized PDVs can create transactions.
+     * @description Allows all read and write operations on transactions within a card.
      * @path /cards/{cardId}/transactions/{transactionId}
-     * @allow create: if isValidApiKey(request.auth.uid) && request.resource.data.cardId == cardId;
-     * @allow get: if false;
-     * @allow list: if false;
-     * @allow update: if false;
-     * @allow delete: if false;
-     * @deny create: if request.auth == null; // Unauthenticated user attempts to create a transaction.
-     * @deny create: if request.resource.data.cardId != cardId; // The cardId in the data does not match the path.
-     * @deny create: if !isValidApiKey(request.auth.uid); // The API key is invalid for creating transactions.
-     * @principle Valid API key and ownership for writes.
+     * @allow (create) Any user can create a transaction for a card.
+     * @allow (read) Any user can read a transaction for a card.
+     * @allow (write) Any user can update or delete a transaction for a card.
+     * @deny (none) This rule is completely open for prototyping.
+     * @principle Allows all access for rapid prototyping.
      */
     match /cards/{cardId}/transactions/{transactionId} {
-      allow get: if false;
-      allow list: if false;
-      allow create: if isValidApiKey(request.auth.uid) && request.resource.data.cardId == cardId;
-      allow update: if false;
-      allow delete: if false;
+      allow get, list: if true;
+      allow create, update, delete: if true;
     }
 
     /**
-     * @description Secures the 'points_of_sale' collection.  Only the PDV itself can read or update its own document.
+     * @description Allows all read and write operations on points of sale.
      * @path /points_of_sale/{pdvId}
-     * @allow get: if isValidApiKey(pdvId);
-     * @allow list: if false;
-     * @allow create: if false;
-     * @allow update: if isValidApiKey(pdvId) && resource != null;
-     * @allow delete: if false;
-     * @deny get: if request.auth == null; // Attempts to read a PDV without authentication.
-     * @deny update: if request.auth == null; // Attempts to update a PDV without authentication.
-     * @deny update: if resource == null; // Attempting to update a non-existent PDV.
-     * @principle  API key authentication and existence check for writes.
+     * @allow (create) Any user can create a point of sale.
+     * @allow (read) Any user can read a point of sale.
+     * @allow (write) Any user can update or delete a point of sale.
+     * @deny (none) This rule is completely open for prototyping.
+     * @principle Allows all access for rapid prototyping.
      */
     match /points_of_sale/{pdvId} {
-      allow get: if isValidApiKey(pdvId);
-      allow list: if false;
-      allow create: if false;
-      allow update: if isValidApiKey(pdvId) && resource != null;
-      allow delete: if false;
-    }
-
-    // Helper functions
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
-    // Function to validate API key (for PDV authentication).
-    // IMPORTANT:  This is a placeholder and is INSECURE.  In a real application, you MUST
-    // use a secure method for validating API keys, such as storing a hashed version
-    // of the API key and comparing it to the hashed key in the request.
-    function isValidApiKey(pdvId) {
-        return isSignedIn() && request.auth.uid == pdvId;
+      allow get, list: if true;
+      allow create, update, delete: if true;
     }
   }
 }
