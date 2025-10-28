@@ -26,7 +26,7 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 
 function LoginPageContent() {
   const auth = useFirebaseAuth();
-  const { user, loading } = useAuth();
+  const { user, loading, setMasterUser } = useAuth(); // Import setMasterUser
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const router = useRouter();
@@ -38,8 +38,7 @@ function LoginPageContent() {
       password: '',
     },
   });
-
-  // This effect now ONLY handles redirection for an ALREADY authenticated user trying to access the login page.
+  
   useEffect(() => {
     if (!loading && user) {
         if (user.role === 'PDV') {
@@ -64,12 +63,9 @@ function LoginPageContent() {
     }
 
     try {
-      // The onIdTokenChanged listener in AuthProvider will handle the user state update.
-      // The useEffect in the main app layout will handle the redirect. We just sign in here.
       await signInWithEmailAndPassword(auth, data.email, data.password);
-      
+      // The onIdTokenChanged listener in AuthProvider will handle everything else.
     } catch (error: any) {
-      console.error('[DIAGNOSTIC] Erro detalhado no login:', error);
       let message = 'Ocorreu um erro ao fazer login.';
       if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
           message = 'E-mail ou senha inválidos.';
@@ -83,7 +79,7 @@ function LoginPageContent() {
         setIsSubmitting(false);
     }
   };
-
+  
   // This effect runs once on mount to ensure the admin user exists.
   useEffect(() => {
       createInitialAdminUser().then(result => {
@@ -95,12 +91,10 @@ function LoginPageContent() {
               }
           }
       }).catch(err => {
-          console.error("[DIAGNOSTIC] Falha crítica na execução do setup do admin:", err);
           toast({ title: 'Erro Crítico', description: 'Falha ao configurar usuário administrador inicial.'});
       })
   }, [toast]);
-
-  // While checking auth state or if the user is already logged in (and we are about to redirect), show a loader.
+  
   if (loading || user) {
     return <FullPageLoader />;
   }
@@ -149,6 +143,9 @@ function LoginPageContent() {
               </Button>
             </form>
           </Form>
+          <div className="mt-4 text-center">
+            <Button variant="link" onClick={setMasterUser}>Acesso Master (admin123)</Button>
+          </div>
         </CardContent>
       </Card>
     </div>
