@@ -16,15 +16,19 @@ function AppContent({ children }: { children: React.ReactNode }) {
     const pathname = usePathname();
 
     useEffect(() => {
-        // If not loading and no user, redirect to login
-        if (!loading && !user) {
+        if (loading) return; // Do nothing while loading
+        
+        if (!user) {
             router.replace('/login');
             return;
         }
 
         // If user is PDV and not on POS page, redirect them.
-        if (!loading && user && user.role === 'PDV' && pathname !== '/pos') {
+        if (user.role === 'PDV' && pathname !== '/pos') {
             router.replace('/pos');
+        } else if (user.role !== 'PDV' && pathname === '/pos') {
+            // If user is NOT PDV and tries to access POS, redirect them away.
+            router.replace('/dashboard');
         }
     }, [user, loading, router, pathname]);
 
@@ -33,22 +37,24 @@ function AppContent({ children }: { children: React.ReactNode }) {
         return <FullPageLoader />;
     }
     
-    // If user is PDV and we are redirecting, show loader
-    if (user.role === 'PDV' && pathname !== '/pos') {
+    // If user role requires a redirect, show loader while redirecting
+    if ((user.role === 'PDV' && pathname !== '/pos') || (user.role !== 'PDV' && pathname === '/pos')) {
         return <FullPageLoader />;
     }
 
     // Don't render sidebar for PDV users as they only have one page
     if (user.role === 'PDV') {
         return (
-             <main className="p-4 lg:p-6 bg-background h-screen">
+             <div className="flex flex-col h-screen">
                 <Header />
-                {children}
-            </main>
+                <main className="flex-grow p-4 lg:p-6 bg-background">
+                    {children}
+                </main>
+            </div>
         )
     }
 
-    // Once the user object is available, render the app layout.
+    // Once the user object is available, render the app layout for ADMIN/CAIXA.
     return (
         <SidebarProvider>
             <Sidebar>

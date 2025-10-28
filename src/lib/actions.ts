@@ -2,22 +2,21 @@
 
 import { z } from 'zod';
 import { generateRandomId } from './data';
-
 import { initializeApp, getApps, getApp, App } from 'firebase-admin/app';
-import { getFirestore, Timestamp, WriteBatch } from 'firebase-admin/firestore';
+import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
-import type { Card, MenuItem, Pdv } from './definitions';
+import type { Card } from './definitions';
 import { revalidatePath } from 'next/cache';
 
 // Helper to ensure Firebase Admin is initialized only once
-let adminApp: App;
-if (getApps().length === 0) {
-  adminApp = initializeApp();
-} else {
-  adminApp = getApp();
+function getAdminApp(): App {
+  if (getApps().length > 0) {
+    return getApp();
+  }
+  return initializeApp();
 }
 
-
+const adminApp = getAdminApp();
 const db = getFirestore(adminApp);
 const auth = getAuth(adminApp);
 
@@ -38,14 +37,14 @@ const UserSchema = z.object({
 });
 
 export async function createUser(prevState: ActionState | undefined, formData: FormData): Promise<ActionState> {
+    const validatedFields = UserSchema.safeParse(Object.fromEntries(formData.entries()));
+    if(!validatedFields.success) {
+        return { status: 'error', message: 'Dados inválidos.', data: validatedFields.error.flatten().fieldErrors };
+    }
+
+    const { email, password, name, role, pdvId } = validatedFields.data;
+
     try {
-        const validatedFields = UserSchema.safeParse(Object.fromEntries(formData.entries()));
-        if(!validatedFields.success) {
-            return { status: 'error', message: 'Dados inválidos.', data: validatedFields.error.flatten().fieldErrors };
-        }
-
-        const { email, password, name, role, pdvId } = validatedFields.data;
-
         // Create user in Firebase Auth
         const userRecord = await auth.createUser({
             email,
@@ -382,10 +381,11 @@ export async function getCardBalance(
 
 // --- PDV / Menu ---
 export async function getPdvNameById(pdvId: string): Promise<string> {
+    if (pdvId === 'caixa_central') return 'Caixa Central';
     const pdvRef = db.collection('pdvs').doc(pdvId);
     const pdvSnap = await pdvRef.get();
     if (pdvSnap.exists) {
-        return (pdvSnap.data() as Pdv).nome;
+        return (pdvSnap.data() as any).nome;
     }
     return `PDV ID: ${pdvId}`;
 }
@@ -462,64 +462,4 @@ export async function deleteMenuItem(pdvId: string, itemId: string): Promise<Act
   } catch (error) {
     return { status: 'error', message: 'Erro ao excluir item.' };
   }
-}
-
-export async function createInitialAdminUser(): Promise<ActionState> {
-    try {
-        const email = 'thiagoddsm@gmail.com';
-        const password = '10760134';
-        
-        let userRecord;
-        let message: string;
-
-        try {
-            console.log('[DIAGNOSTIC] Verificando se o usuário master existe:', email);
-            userRecord = await auth.getUserByEmail(email);
-            console.log('[DIAGNOSTIC] Usuário master encontrado. UID:', userRecord.uid);
-            await auth.updateUser(userRecord.uid, { password: password });
-            console.log('[DIAGNOSTIC] Senha do usuário master atualizada.');
-            message = 'Usuário administrador já existe e senha foi atualizada.';
-        } catch(error: any) {
-            if (error.code === 'auth/user-not-found') {
-                console.log('[DIAGNOSTIC] Usuário master não encontrado. Criando novo usuário...');
-                userRecord = await auth.createUser({
-                    email: email,
-                    password: password,
-                    displayName: 'Admin Master',
-                });
-                console.log('[DIAGNOSTIC] Usuário master criado com sucesso. UID:', userRecord.uid);
-                message = 'Usuário administrador inicial criado com sucesso.';
-            } else {
-                console.error('[DIAGNOSTIC] Erro ao buscar/criar usuário no Auth:', error);
-                throw error;
-            }
-        }
-        
-        const userDocRef = db.collection('users').doc(userRecord.uid);
-        const userDoc = await userDocRef.get();
-
-        if (!userDoc.exists) {
-            console.log('[DIAGNOSTIC] Perfil do usuário no Firestore não encontrado. Criando...');
-            await userDocRef.set({
-                name: 'Admin Master',
-                email: email,
-                role: 'ADMIN',
-            });
-            console.log('[DIAGNOSTIC] Perfil do usuário no Firestore criado.');
-        } else {
-             console.log('[DIAGNOSTIC] Perfil do usuário no Firestore encontrado. Verificando papel...');
-             if(userDoc.data()?.role !== 'ADMIN') {
-                await userDocRef.update({ role: 'ADMIN' });
-                console.log('[DIAGNOSTIC] Papel do usuário atualizado para ADMIN.');
-             } else {
-                console.log('[DIAGNOSTIC] Papel do usuário já é ADMIN.');
-             }
-        }
-        
-        return { status: 'success', message: message };
-
-    } catch (error) {
-        console.error("[DIAGNOSTIC] Erro crítico na função createInitialAdminUser:", error);
-        return { status: 'error', message: 'Falha ao criar/atualizar usuário administrador inicial.' };
-    }
 }
