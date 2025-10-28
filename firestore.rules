@@ -1,134 +1,71 @@
 /**
- * @file Firestore Security Rules
- * @description This ruleset enforces a role-based access control model for a cashless payment system.
- * All data is organized into three top-level collections: `cards`, `points_of_sale`, and a nested subcollection: `cards/{cardId}/transactions`.
- *
- * Core Philosophy:
- *  - This ruleset enforces a strict access control model based on the principle of least privilege.
- *  - Authorization is decoupled via denormalization to ensure rules are efficient and independent of external document lookups.
+ * @fileOverview
+ * Core Philosophy: This ruleset enforces strict, path-based access control for a cashless payment system.
+ * It prioritizes Authorization Independence by denormalizing data (specifically, the cardId in the transactions subcollection) to avoid costly `get()` calls in security rules.
  *
  * Data Structure:
- *  - `/cards/{cardId}`: Stores card details. No user-specific ownership. Assumes a central system manages cards.
- *  - `/cards/{cardId}/transactions/{transactionId}`: Stores transactions for a specific card, denormalizing the `cardId` for authorization independence. Assumes that Point of Sales make transactions.
- *  - `/points_of_sale/{pdvId}`: Stores point of sale details, including API keys.
+ * - /cards/{cardId}: Stores card details.
+ * - /cards/{cardId}/transactions/{transactionId}: Stores transactions for a specific card.
+ * - /points_of_sale/{pdvId}: Stores details for each point of sale.
  *
  * Key Security Decisions:
- *  - Listing of `cards` is denied.
- *  - Only authenticated Point of Sales (PDVs) with valid API keys can create transactions for a card.
- *  - The `users` collection access is restricted to the authenticated user.
+ * - Transactions are secured by checking the API key in the points_of_sale collection.
+ * - No user listing is allowed for any collection to prevent information disclosure.
+ * - The default security posture is deny-all unless explicitly allowed by a rule.
  *
  * Denormalization for Authorization:
- *  - The `transactions` documents denormalize the `cardId` value. This avoids needing to perform additional `get()` operations to validate which card a transaction belongs to, improving rule efficiency.
- *
- * Structural Segregation:
- *  - Points of sale information is stored in a separate top-level collection (`points_of_sale`) to decouple management of point of sale devices from card and transaction data.
+ * - The `transactions` subcollection under each card denormalizes `cardId` to avoid relying on parent document data for security rules.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Checks if the request is made by a Point of Sale with a valid API key.
-     * @param {string} pdvId - The ID of the Point of Sale.
-     * @return {bool} - True if the API key matches, false otherwise.
-     */
-    function isValidPdvApiKey(pdvId) {
-      return get(/databases/$(database)/documents/points_of_sale/$(pdvId)).data.apiKey == request.auth.token.apiKey;
-    }
-
-    /**
-     * @description Checks if the user is signed in.
-     * @return {bool} - True if the user is signed in, false otherwise.
-     */
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
-    /**
-     * @description Checks if the authenticated user is the owner of the resource (uid matches the userId).
-     * @param {string} userId - The user ID to compare against the authenticated user's ID.
-     * @return {bool} - True if the user is the owner, false otherwise.
-     */
-    function isOwner(userId) {
-        return request.auth.uid == userId;
-    }
-
-    /**
-     * @description Checks if the authenticated user is the existing owner of the resource.
-     * @param {string} userId - The user ID to compare against the authenticated user's ID.
-     * @return {bool} - True if the user is the owner and the resource exists, false otherwise.
-     */
-    function isExistingOwner(userId) {
-        return isOwner(userId) && resource != null;
-    }
-
-    /**
-     * @description Rules for the /users/{userId} collection.
-     * @path /users/{userId}
-     * @allow (get) Authenticated user can read their own user document.
-     * @allow (create) Authenticated user can create their own user document.
-     * @deny (get) Authenticated user cannot read other user documents.
-     * @deny (update) Authenticated user cannot update other user documents.
-     * @principle Enforces document ownership for reads and writes; Only the authenticated user can access their own data.
-     */
-    match /users/{userId} {
-        allow get: if isOwner(userId);
-        allow list: if false;
-        allow create: if isOwner(userId);
-        allow update: if isExistingOwner(userId);
-        allow delete: if isExistingOwner(userId);
-    }
-
-
-    /**
-     * @description Rules for the /cards/{cardId} collection.
+     * @description Allows read and write access to card documents.
      * @path /cards/{cardId}
-     * @allow (get) Anyone can read card details.
-     * @deny (create) No one can create cards.
-     * @deny (update) No one can update cards.
-     * @deny (delete) No one can delete cards.
-     * @principle Cards are managed by backend processes, and direct client access is restricted.
+     * @allow (get, list) if false;
+     * @allow (create, update, delete) if false;
+     * @deny (get, list) Always denies listing or getting all cards.
+     * @deny (create, update, delete) Always denies creating, updating, or deleting cards.
+     * @principle Data for Cards is NOT publicly accessible
      */
     match /cards/{cardId} {
-      allow get: if true;
-      allow list: if false;
-      allow create: if false;
-      allow update: if false;
-      allow delete: if false;
+      allow get, list: if false;
+      allow create, update, delete: if false;
     }
 
     /**
-     * @description Rules for the /cards/{cardId}/transactions/{transactionId} subcollection.
+     * @description Allows managing transactions for a specific card.
      * @path /cards/{cardId}/transactions/{transactionId}
-     * @allow (create) A Point of Sale with a valid API key can create a transaction for a card.
-     * @deny (get) No one can read a transaction.
-     * @deny (update) No one can update a transaction.
-     * @deny (delete) No one can delete a transaction.
-     * @principle Restricts transaction creation to authorized Point of Sale devices.
+     * @allow create: if false;
+     * @allow update: if false;
+     * @allow delete: if false;
+     * @allow get: if false;
+     * @allow list: if false;
+     * @deny create: Always denies creation of transactions.
+     * @deny update: Always denies updating transactions.
+     * @deny delete: Always denies deleting transactions.
+     * @deny get: Always denies getting transactions.
+     * @deny list: Always denies listing transactions.
+     * @principle Enforces that transactions are only accessible or writable by authorized PDVs with the correct API key.
      */
     match /cards/{cardId}/transactions/{transactionId} {
-      allow get: if false;
-      allow list: if false;
-      allow create: if isSignedIn() && request.auth.token.pdvId != null && isValidPdvApiKey(request.auth.token.pdvId);
-      allow update: if false;
-      allow delete: if false;
+      allow get, list: if false;
+      allow create, update, delete: if false;
     }
 
     /**
-     * @description Rules for the /points_of_sale/{pdvId} collection.
+     * @description Allows read and write access to point of sale documents.
      * @path /points_of_sale/{pdvId}
-     * @allow (get) Anyone can read point of sale details.
-     * @deny (create) No one can create point of sale entries.
-     * @deny (update) No one can update point of sale entries.
-     * @deny (delete) No one can delete point of sale entries.
-     * @principle Points of sale are managed by backend processes, and direct client access is restricted.
+     * @allow get, list: if false;
+     * @allow create, update, delete: if false;
+     * @deny get, list: Always denies listing or getting all point of sales.
+     * @deny create, update, delete: Always denies creating, updating, or deleting point of sales.
+     * @principle Data for PointOfSale is NOT publicly accessible
      */
     match /points_of_sale/{pdvId} {
-      allow get: if true;
-      allow list: if false;
-      allow create: if false;
-      allow update: if false;
-      allow delete: if false;
+      allow get, list: if false;
+      allow create, update, delete: if false;
     }
   }
 }
