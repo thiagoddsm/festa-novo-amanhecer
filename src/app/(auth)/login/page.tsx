@@ -11,7 +11,6 @@ import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
-import { createInitialAdminUser } from '@/lib/actions';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useAuth, AuthProvider } from '@/hooks/use-auth-context';
@@ -79,21 +78,6 @@ function LoginPageContent() {
         setIsSubmitting(false);
     }
   };
-  
-  // This effect runs once on mount to ensure the admin user exists.
-  useEffect(() => {
-      createInitialAdminUser().then(result => {
-          if (result && result.message) {
-              if (result.status === 'success' && result.message.includes('criado')) {
-                toast({ title: 'Configuração do Sistema', description: result.message });
-              } else if (result.status === 'error') {
-                toast({ title: 'Aviso de Configuração', description: result.message, variant: 'destructive'});
-              }
-          }
-      }).catch(err => {
-          toast({ title: 'Erro Crítico', description: 'Falha ao configurar usuário administrador inicial.'});
-      })
-  }, [toast]);
   
   if (loading || user) {
     return <FullPageLoader />;
