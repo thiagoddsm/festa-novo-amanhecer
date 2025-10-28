@@ -3,7 +3,7 @@
 import { SidebarProvider, Sidebar, SidebarInset } from "@/components/ui/sidebar";
 import { SidebarNav } from "@/components/layout/SidebarNav";
 import { Header } from "@/components/layout/Header";
-import { FirebaseClientProvider, useAuth } from "@/firebase";
+import { FirebaseClientProvider } from "@/firebase";
 import { useUserData } from "@/hooks/use-user-data";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";

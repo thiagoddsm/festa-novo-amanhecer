@@ -15,6 +15,7 @@ import { Loader2 } from 'lucide-react';
 import { createInitialAdminUser } from '@/lib/actions';
 import Image from 'next/image';
 import { FullPageLoader } from '@/components/ui/loader';
+import { useUserData } from '@/hooks/use-user-data';
 
 const loginSchema = z.object({
   email: z.string().email('Por favor, insira um e-mail válido.'),
@@ -28,15 +29,14 @@ function LoginPageContent() {
   const router = useRouter();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
-  const [isAuthReady, setIsAuthReady] = useState(false);
+  const { user, loading: userLoading } = useUserData();
 
-  // Check if auth is initialized. If user is logged in, layout will redirect them.
+  // Redirect if user is already logged in
   useEffect(() => {
-    if (auth) {
-      setIsAuthReady(true);
+    if (!userLoading && user) {
+      router.replace('/dashboard');
     }
-  }, [auth]);
-
+  }, [user, userLoading, router]);
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -59,12 +59,13 @@ function LoginPageContent() {
     }
     try {
       await signInWithEmailAndPassword(auth, data.email, data.password);
-      // On success, the layout's auth listener will handle the redirect.
+      // On success, the main app layout's auth listener will handle the redirect.
       router.push('/dashboard');
     } catch (error: any) {
       console.error(error);
       let message = 'Ocorreu um erro ao fazer login.';
-      if(error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+      // Catch specific Firebase auth errors for invalid credentials
+      if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
           message = 'E-mail ou senha inválidos.';
       }
       toast({
@@ -76,16 +77,19 @@ function LoginPageContent() {
     }
   };
 
-  // One-time action to create the initial admin user.
+  // One-time action to create/update the initial admin user.
   useEffect(() => {
       createInitialAdminUser().then(result => {
-          if (result.status === 'success') {
+          if (result && result.status === 'success' && result.message) {
               toast({ title: 'Setup', description: result.message });
           }
+      }).catch(err => {
+          console.error("Failed to run initial admin user setup:", err);
       })
   }, [toast]);
   
-  if (!isAuthReady) {
+  // Show a loader while we determine auth state
+  if (userLoading || (!userLoading && user)) {
     return <FullPageLoader />;
   }
 

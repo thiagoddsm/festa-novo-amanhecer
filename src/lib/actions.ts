@@ -477,7 +477,7 @@ export async function createInitialAdminUser(): Promise<ActionState> {
 
         try {
             userRecord = await auth.getUserByEmail(email);
-            // User exists, update password
+            // User exists, update password to ensure it is correct
             await auth.updateUser(userRecord.uid, { password: password });
         } catch(error: any) {
             if (error.code === 'auth/user-not-found') {
