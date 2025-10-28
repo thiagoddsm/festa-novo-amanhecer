@@ -89,37 +89,51 @@ body {
 
 /* Print styles */
 @media print {
-  /* Hide everything by default */
+  @page {
+    size: 98mm 50mm;
+    margin: 0;
+  }
+
+  body {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .screen-only {
+    display: none !important;
+  }
+
   body * {
     visibility: hidden;
   }
 
-  /* Make the printable area and its children visible */
   .print-only, .print-only * {
     visibility: visible;
   }
 
-  /* Position the printable area to take up the whole page */
   .print-only {
     position: absolute;
     left: 0;
     top: 0;
     width: 100%;
     height: 100%;
-    display: flex;
-    justify-content: center;
-    align-items: center;
   }
 
-  /* Ensure screen-only elements are hidden when printing */
-  .screen-only {
-    display: none;
+  .printable-card {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    width: 98mm;
+    height: 50mm;
+    background-color: white;
+    padding: 2mm;
+    box-sizing: border-box;
   }
 }
 
 /* Screen styles */
 @media screen {
-  /* Hide print-only elements on the screen */
   .print-only {
     display: none;
   }

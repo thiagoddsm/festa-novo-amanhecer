@@ -23,7 +23,7 @@ import type { Card as CardType } from '@/lib/definitions';
 import QRCode from 'react-qr-code';
 
 const initialState = {
-  status: 'success' as 'success' | 'error',
+  status: 'idle' as 'idle' |'success' | 'error',
   message: '',
 };
 
@@ -37,42 +37,44 @@ function SubmitButton() {
 }
 
 // This component is only visible when printing
-const PrintableCard = ({ card }: { card: CardType | null }) => {
+const PrintableCard = React.forwardRef<HTMLDivElement, { card: CardType | null }>(({ card }, ref) => {
     if (!card) return null;
 
     return (
-        <div className="print-only">
-            <div className="my-4 rounded-lg border bg-white p-6 text-center text-black">
-                <div className="flex justify-center items-center mb-4">
-                    <QrCode className="h-8 w-8 text-primary" />
-                    <h3 className='text-xl font-bold ml-2'>FestaPay</h3>
+        <div ref={ref} className="print-only">
+             <div className="printable-card">
+                <div className="flex justify-center items-center mb-2">
+                    <QrCode className="h-6 w-6 text-black" />
+                    <h3 className='text-lg font-bold ml-1 text-black'>FestaPay</h3>
                 </div>
                 {card.nome_cliente && (
-                    <div className='mb-4'>
-                        <p className="text-sm font-medium text-gray-500">Cliente</p>
-                        <p className="flex items-center justify-center gap-2 text-lg font-semibold">
-                            <User className='h-4 w-4' /> {card.nome_cliente}
+                    <div className='mb-2 text-center'>
+                        <p className="text-xs font-medium text-gray-600">Cliente</p>
+                        <p className="text-sm font-semibold text-black flex items-center justify-center gap-1">
+                            <User className='h-3 w-3' /> {card.nome_cliente}
                         </p>
                     </div>
                 )}
-                <div className="flex justify-center my-4">
-                    <QRCode value={card.qr_code_id} size={128} />
+                <div className="flex justify-center my-2">
+                    <QRCode value={card.qr_code_id} size={80} />
                 </div>
-                <p className="text-xs font-medium text-gray-500">ID: {card.qr_code_id}</p>
-                <p className="mt-4 text-sm font-medium text-gray-500">Saldo Inicial</p>
-                <p className="text-2xl font-bold">
+                <p className="text-xs font-mono text-gray-700">ID: {card.qr_code_id}</p>
+                <p className="mt-2 text-xs font-medium text-gray-600">Saldo Inicial</p>
+                <p className="text-xl font-bold text-black">
                 {formatCurrency(card.saldo_centavos ?? 0)}
                 </p>
             </div>
         </div>
     );
-};
+});
+PrintableCard.displayName = 'PrintableCard';
 
 
 export default function CreateCardForm() {
   const [state, formAction] = useActionState(createCard, initialState);
   const { toast } = useToast();
   const formRef = useRef<HTMLFormElement>(null);
+  const printableRef = useRef<HTMLDivElement>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [newCard, setNewCard] = useState<CardType | null>(null);
 
@@ -83,6 +85,7 @@ export default function CreateCardForm() {
   const resetForm = () => {
       setNewCard(null);
       formRef.current?.reset();
+      // Reset the action state if possible, or handle UI reset logic here
   }
 
   useEffect(() => {
@@ -97,16 +100,22 @@ export default function CreateCardForm() {
       });
       setNewCard(null);
     }
-    if (state.status === 'success' && state.message) {
+    if (state.status === 'success' && state.data) {
       setNewCard(state.data);
-      setDialogOpen(true);
+      setDialogOpen(true); // Open dialog for confirmation
       formRef.current?.reset();
+      // The printing will be triggered by the user from the UI
+      // but we will trigger it automatically here.
+      // Small delay to ensure the state is set and the printable component is rendered.
+      setTimeout(() => {
+          handlePrint();
+      }, 100);
     }
   }, [state, toast]);
 
   return (
     <>
-      <PrintableCard card={newCard} />
+      <PrintableCard card={newCard} ref={printableRef} />
       
       <Card className="screen-only">
         <CardHeader>
@@ -150,10 +159,6 @@ export default function CreateCardForm() {
         {newCard && (
             <CardFooter className="flex-col items-stretch gap-2 border-t pt-4">
                 <p className="text-sm text-center text-muted-foreground">Cartão para <span className="font-bold text-primary">{newCard.nome_cliente || 'cliente'}</span> criado!</p>
-                <Button variant="outline" onClick={handlePrint}>
-                    <Printer className="mr-2" />
-                    Imprimir / Salvar PDF
-                </Button>
                  <Button variant="secondary" onClick={resetForm}>
                     Criar Novo Cartão
                 </Button>
@@ -168,11 +173,14 @@ export default function CreateCardForm() {
               <QrCode /> Cartão Criado com Sucesso!
             </AlertDialogTitle>
             <AlertDialogDescription>
-              O cartão foi ativado. Você pode imprimir o comprovante para o cliente ou fechar esta janela.
+              O comprovante será impresso automaticamente. Você pode fechar esta janela.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-              <AlertDialogAction onClick={() => setDialogOpen(false)}>
+              <AlertDialogAction onClick={() => {
+                  setDialogOpen(false);
+                  resetForm();
+                }}>
                 Fechar
               </AlertDialogAction>
           </AlertDialogFooter>
