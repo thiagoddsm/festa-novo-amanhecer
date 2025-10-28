@@ -23,12 +23,12 @@ function AppContent({ children }: { children: React.ReactNode }) {
         }
 
         // If user is PDV and not on POS page, redirect them.
-        if (user && user.role === 'PDV' && pathname !== '/pos') {
+        if (!loading && user && user.role === 'PDV' && pathname !== '/pos') {
             router.replace('/pos');
         }
     }, [user, loading, router, pathname]);
 
-    // While checking auth state or if there's no user, show a full-page loader.
+    // While checking auth state or if there's no user (and we're about to redirect), show a full-page loader.
     if (loading || !user) {
         return <FullPageLoader />;
     }
@@ -42,6 +42,7 @@ function AppContent({ children }: { children: React.ReactNode }) {
     if (user.role === 'PDV') {
         return (
              <main className="p-4 lg:p-6 bg-background h-screen">
+                <Header />
                 {children}
             </main>
         )
