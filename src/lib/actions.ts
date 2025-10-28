@@ -3,20 +3,23 @@
 import { z } from 'zod';
 import { generateRandomId } from './data';
 
-import { initializeApp, getApps, getApp } from 'firebase-admin/app';
+import { initializeApp, getApps, getApp, App } from 'firebase-admin/app';
 import { getFirestore, Timestamp, WriteBatch } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 import type { Card, MenuItem, Pdv } from './definitions';
 import { revalidatePath } from 'next/cache';
 
 // Helper to ensure Firebase Admin is initialized only once
-if (!getApps().length) {
-    // Rely on default credentials provided by the environment
-    initializeApp();
+let adminApp: App;
+if (getApps().length === 0) {
+  adminApp = initializeApp();
+} else {
+  adminApp = getApp();
 }
 
-const db = getFirestore();
-const auth = getAuth();
+
+const db = getFirestore(adminApp);
+const auth = getAuth(adminApp);
 
 
 export type ActionState = {
