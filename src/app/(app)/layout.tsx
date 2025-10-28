@@ -16,21 +16,27 @@ function AppPagesLayout({ children }: { children: React.ReactNode }) {
   const { user, loading } = useUserData();
 
   useEffect(() => {
-    // If loading, don't do anything.
+    // If still loading, don't do anything yet.
     if (loading) {
       return;
     }
-    // If not logged in, redirect to login page.
+
+    // If not loading and there's no Firebase Auth user, redirect to login.
     if (!auth?.currentUser) {
       router.push("/login");
+      return;
     }
-    // If logged in but no user data found (e.g. profile not in firestore), log out.
-    if (auth?.currentUser && !user) {
+
+    // If there is a Firebase Auth user but we couldn't find their profile data in Firestore,
+    // it's an inconsistent state. Forcing a sign-out is a safe way to handle it.
+    // This can happen if a user is deleted from Firestore but not from Auth.
+    if (auth.currentUser && !user) {
         auth.signOut();
         router.push('/login');
     }
   }, [auth, user, loading, router]);
 
+  // Show a loader while authentication state is being determined or user data is being fetched.
   if (loading || !user) {
     return <FullPageLoader />;
   }

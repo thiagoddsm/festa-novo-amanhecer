@@ -28,11 +28,19 @@ function LoginPageContent() {
   const router = useRouter();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
+   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
   // Redirect if already logged in
   useEffect(() => {
-    if (auth?.currentUser) {
-      router.push('/dashboard');
+    if (auth) {
+        const unsubscribe = auth.onAuthStateChanged(user => {
+            if (user) {
+                router.push('/dashboard');
+            } else {
+                setIsCheckingAuth(false);
+            }
+        });
+        return () => unsubscribe();
     }
   }, [auth, router]);
 
@@ -82,6 +90,14 @@ function LoginPageContent() {
           }
       })
   }, [toast]);
+  
+  if (isCheckingAuth) {
+    return (
+        <div className="flex min-h-screen items-center justify-center bg-background">
+            <Loader2 className="animate-spin h-8 w-8" />
+        </div>
+    )
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
