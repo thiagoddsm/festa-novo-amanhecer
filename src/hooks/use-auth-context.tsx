@@ -9,7 +9,7 @@ import {
 } from 'react';
 import { onIdTokenChanged, type User, signOut as firebaseSignOut } from 'firebase/auth';
 import { useAuth as useFirebaseAuth, useFirestore } from '@/firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import type { AuthenticatedUser } from '@/lib/auth-defs';
 import { mapFirebaseAuthToAuthenticatedUser } from '@/lib/auth-defs';
 import { useToast } from './use-toast';
@@ -41,22 +41,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setLoading(true);
         try {
           const userDocRef = doc(firestore, 'users', firebaseUser.uid);
-          const docSnap = await getDoc(userDocRef);
+          let docSnap = await getDoc(userDocRef);
 
-          if (docSnap.exists()) {
-            const userProfile = docSnap.data();
-            const authenticatedUser = mapFirebaseAuthToAuthenticatedUser(firebaseUser, userProfile);
-            setUser(authenticatedUser);
-          } else {
-            // This case can happen if a user is in Auth but not in Firestore.
-            // This could be a half-completed sign-up or data inconsistency.
-            // We sign them out to force a clean login flow.
-            console.error("User profile not found in Firestore. Signing out.");
-            await firebaseSignOut(auth);
-            setUser(null);
+          if (!docSnap.exists()) {
+            // If the user profile doesn't exist, create it.
+            // This is crucial for first-time Google sign-ins.
+            const newUserProfile = {
+                name: firebaseUser.displayName || firebaseUser.email || 'Novo Usuário',
+                email: firebaseUser.email,
+                role: 'CAIXA', // Default role for any new user
+                pdvId: null,
+            };
+            await setDoc(userDocRef, newUserProfile);
+            // Re-fetch the document to ensure we have the latest data
+            docSnap = await getDoc(userDocRef);
           }
+
+          const userProfile = docSnap.data();
+          const authenticatedUser = mapFirebaseAuthToAuthenticatedUser(firebaseUser, userProfile!);
+          setUser(authenticatedUser);
+
         } catch (error) {
-          console.error("Error fetching user profile:", error);
+          console.error("Error fetching or creating user profile:", error);
           toast({
             variant: "destructive",
             title: "Erro de Autenticação",

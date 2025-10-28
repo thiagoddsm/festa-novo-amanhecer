@@ -3,8 +3,8 @@ import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, getAdditionalUserInfo } from 'firebase/auth';
-import { useAuth as useFirebaseAuth, useFirestore } from '@/firebase';
+import { signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
+import { useAuth as useFirebaseAuth } from '@/firebase';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -15,7 +15,6 @@ import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth-context';
 import { FullPageLoader } from '@/components/ui/loader';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { Separator } from '@/components/ui/separator';
 import { FirebaseClientProvider } from '@/firebase/client-provider';
 import { AuthProvider } from '@/hooks/use-auth-context';
@@ -35,7 +34,6 @@ const GoogleIcon = () => (
 
 function LoginPageContent() {
   const firebaseAuth = useFirebaseAuth();
-  const firestore = useFirestore();
   const { user, loading } = useAuth();
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -51,31 +49,6 @@ function LoginPageContent() {
       router.replace(user.role === 'PDV' ? '/pos' : '/dashboard');
     }
   }, [user, loading, router]);
-
-  const handleAuthSuccess = async (firebaseUser: any) => {
-    if (!firestore) return;
-
-    const userDocRef = doc(firestore, 'users', firebaseUser.uid);
-    const userDocSnap = await getDoc(userDocRef);
-
-    if (!userDocSnap.exists()) {
-      // Create a user profile in Firestore for new Google Sign-In users
-      try {
-        await setDoc(userDocRef, {
-          name: firebaseUser.displayName || 'Novo Usuário',
-          email: firebaseUser.email,
-          role: 'CAIXA', // Default role for new sign-ups
-        });
-      } catch (error) {
-         console.error("Error creating user profile:", error);
-         toast({ variant: 'destructive', title: 'Erro de Perfil', description: 'Não foi possível criar seu perfil de usuário.' });
-         // Sign out if profile creation fails
-         await firebaseSignOut(firebaseAuth);
-      }
-    }
-    // For existing users (or email/password users), the profile should already exist.
-    // The AuthProvider will handle fetching the profile and redirecting.
-  };
 
   const onEmailSubmit = async (data: LoginFormValues) => {
     if (!firebaseAuth) return;
@@ -99,10 +72,8 @@ function LoginPageContent() {
     setIsSubmitting(true);
     const provider = new GoogleAuthProvider();
     try {
-        const result = await signInWithPopup(firebaseAuth, provider);
-        // After successful sign in, ensure profile exists
-        await handleAuthSuccess(result.user);
-        // AuthProvider will now detect the new user and handle the redirect
+        await signInWithPopup(firebaseAuth, provider);
+        // AuthProvider will now handle profile creation and redirection
     } catch (error: any) {
         if (error.code !== 'auth/popup-closed-by-user') {
             toast({ variant: 'destructive', title: 'Erro de Login', description: 'Não foi possível fazer login com o Google.' });
