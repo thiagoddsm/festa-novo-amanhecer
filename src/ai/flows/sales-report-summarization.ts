@@ -43,15 +43,9 @@ const prompt = ai.definePrompt({
   prompt: `You are an expert sales data analyst. You will be provided with sales data from an event, and you will generate a report summarizing the data, identifying trends and insights.
 
 Sales Data:
-{{{jsonStringify salesData}}}
+{{salesData}}
 
 Generate a concise summary of the sales data, highlighting key trends, insights, and recommendations for optimizing resource allocation and improving the event experience.`,
-  customize: (prompt, input) => {
-    prompt.helpers = {
-      jsonStringify: (obj: any) => JSON.stringify(obj),
-    };
-    return prompt;
-  }
 });
 
 const summarizeSalesReportFlow = ai.defineFlow(
