@@ -7,9 +7,9 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { onIdTokenChanged, type User, signOut as firebaseSignOut } from 'firebase/auth';
+import { onIdTokenChanged, type User, signOut as firebaseSignOut, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { useAuth as useFirebaseAuth, useFirestore } from '@/firebase';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, getDocs } from 'firebase/firestore';
 import type { AuthenticatedUser } from '@/lib/auth-defs';
 import { mapFirebaseAuthToAuthenticatedUser } from '@/lib/auth-defs';
 import { useToast } from './use-toast';
@@ -18,12 +18,12 @@ type AuthContextType = {
   user: AuthenticatedUser | null;
   loading: boolean;
   signOut: () => Promise<void>;
+  signInWithGoogle: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 // This function checks if a user profile exists and creates one on first login.
-// It's the key to fixing the "profile not found" error.
 const checkAndCreateUserProfile = async (firestore: any, user: User): Promise<void> => {
     if (!user) return;
     const userDocRef = doc(firestore, 'users', user.uid);
@@ -31,19 +31,24 @@ const checkAndCreateUserProfile = async (firestore: any, user: User): Promise<vo
         const docSnap = await getDoc(userDocRef);
         if (!docSnap.exists()) {
             // If the user profile doesn't exist, create it.
-            // This is crucial for first-time sign-ins.
+            console.log(`Profile for ${user.uid} not found, creating...`);
+
+            // Check if this is the very first user signing up to grant admin rights.
+            const usersCollectionRef = collection(firestore, 'users');
+            const allUsersSnap = await getDocs(usersCollectionRef);
+            const isFirstUser = allUsersSnap.empty;
+
             const newUserProfile = {
                 name: user.displayName || user.email || 'Novo Usuário',
                 email: user.email,
-                role: 'CAIXA', // Default role for any new user
+                role: isFirstUser ? 'ADMIN' : 'CAIXA', // Make first user ADMIN
                 pdvId: null,
             };
             await setDoc(userDocRef, newUserProfile);
-            console.log(`Created profile for new user: ${user.uid}`);
+            console.log(`Created profile for new user: ${user.uid} with role: ${newUserProfile.role}`);
         }
     } catch (error) {
         console.error("Error in checkAndCreateUserProfile: ", error);
-        // We might want to handle this error more gracefully, but for now, we log it.
     }
 };
 
@@ -61,10 +66,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     const unsubscribe = onIdTokenChanged(auth, async (firebaseUser: User | null) => {
+      setLoading(true);
       if (firebaseUser) {
-        setLoading(true);
-
-        // Ensure the user profile exists before proceeding.
         await checkAndCreateUserProfile(firestore, firebaseUser);
 
         try {
@@ -76,12 +79,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const authenticatedUser = mapFirebaseAuthToAuthenticatedUser(firebaseUser, userProfile!);
             setUser(authenticatedUser);
           } else {
-            // This case should be rare now, but as a fallback, we log out to prevent loops.
-            console.error("User profile not found in Firestore after creation attempt. Signing out.");
-            toast({
+             console.error("User profile not found in Firestore after creation attempt. Signing out.");
+             toast({
                 variant: "destructive",
                 title: "Erro de Perfil",
-                description: "Não foi possível carregar seu perfil. Tente novamente."
+                description: "Seu perfil não foi encontrado e não pôde ser criado. Tente novamente."
             });
             await firebaseSignOut(auth);
             setUser(null);
@@ -95,18 +97,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           });
           await firebaseSignOut(auth);
           setUser(null);
-        } finally {
-          setLoading(false);
         }
       } else {
         // No Firebase user found
         setUser(null);
-        setLoading(false);
       }
+       setLoading(false);
     });
 
     return () => unsubscribe();
   }, [auth, firestore, toast]);
+
+  const signInWithGoogle = async () => {
+    if (!auth) return;
+    setLoading(true);
+    const provider = new GoogleAuthProvider();
+    try {
+        await signInWithPopup(auth, provider);
+        // onIdTokenChanged will handle profile creation and redirection
+    } catch (error: any) {
+        if (error.code !== 'auth/popup-closed-by-user') {
+            toast({ variant: 'destructive', title: 'Erro de Login', description: 'Não foi possível fazer login com o Google.' });
+        }
+    } finally {
+      // setLoading(false); // Let the listener handle the loading state
+    }
+  }
 
   const signOut = async () => {
     if (!auth) return;
@@ -127,7 +143,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, signOut }}>
+    <AuthContext.Provider value={{ user, loading, signOut, signInWithGoogle }}>
         {children}
     </AuthContext.Provider>
   );
