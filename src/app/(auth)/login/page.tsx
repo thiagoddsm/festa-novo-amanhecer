@@ -52,18 +52,26 @@ function LoginPageContent() {
     }
   }, [user, loading, router]);
 
-  const handleAuthSuccess = async (firebaseUser: any, isNewUser: boolean) => {
+  const handleAuthSuccess = async (firebaseUser: any) => {
     if (!firestore) return;
 
     const userDocRef = doc(firestore, 'users', firebaseUser.uid);
+    const userDocSnap = await getDoc(userDocRef);
 
-    if (isNewUser) {
+    if (!userDocSnap.exists()) {
       // Create a user profile in Firestore for new Google Sign-In users
-      await setDoc(userDocRef, {
-        name: firebaseUser.displayName || 'Novo Usuário',
-        email: firebaseUser.email,
-        role: 'CAIXA', // Default role for new sign-ups
-      });
+      try {
+        await setDoc(userDocRef, {
+          name: firebaseUser.displayName || 'Novo Usuário',
+          email: firebaseUser.email,
+          role: 'CAIXA', // Default role for new sign-ups
+        });
+      } catch (error) {
+         console.error("Error creating user profile:", error);
+         toast({ variant: 'destructive', title: 'Erro de Perfil', description: 'Não foi possível criar seu perfil de usuário.' });
+         // Sign out if profile creation fails
+         await firebaseSignOut(firebaseAuth);
+      }
     }
     // For existing users (or email/password users), the profile should already exist.
     // The AuthProvider will handle fetching the profile and redirecting.
@@ -92,11 +100,9 @@ function LoginPageContent() {
     const provider = new GoogleAuthProvider();
     try {
         const result = await signInWithPopup(firebaseAuth, provider);
-        const additionalUserInfo = getAdditionalUserInfo(result);
-        if (additionalUserInfo?.isNewUser) {
-            await handleAuthSuccess(result.user, true);
-        }
-        // AuthProvider will detect the new user and handle the redirect
+        // After successful sign in, ensure profile exists
+        await handleAuthSuccess(result.user);
+        // AuthProvider will now detect the new user and handle the redirect
     } catch (error: any) {
         if (error.code !== 'auth/popup-closed-by-user') {
             toast({ variant: 'destructive', title: 'Erro de Login', description: 'Não foi possível fazer login com o Google.' });
