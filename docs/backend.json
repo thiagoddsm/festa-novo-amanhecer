@@ -1,287 +1,177 @@
 {
   "entities": {
-    "UserProfile": {
-      "title": "User Profile",
-      "description": "Represents a user's profile in the system.",
+    "Card": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Card",
       "type": "object",
+      "description": "Represents a cashless card used for transactions within the event.",
       "properties": {
-        "email": {
+        "id": {
           "type": "string",
-          "format": "email",
-          "description": "The user's email address."
+          "description": "Unique identifier for the Card entity."
         },
-        "name": {
+        "qrCodeId": {
           "type": "string",
-          "description": "The user's full name."
+          "description": "The unique QR code identifier associated with the card."
         },
-        "role": {
+        "balanceCents": {
+          "type": "number",
+          "description": "The card balance, stored in cents to avoid floating-point precision issues."
+        },
+        "status": {
           "type": "string",
-          "description": "The user's role in the system.",
-          "enum": [
-            "ADMIN",
-            "CAIXA",
-            "PDV"
-          ]
+          "description": "The status of the card (e.g., ACTIVE, INACTIVE, BLOCKED).",
+          "format": "string"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "The timestamp when the card was created.",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "The timestamp when the card was last updated.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "qrCodeId",
+        "balanceCents",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Transaction": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Transaction",
+      "type": "object",
+      "description": "Represents a transaction made using a cashless card.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Transaction entity."
+        },
+        "cardId": {
+          "type": "string",
+          "description": "Reference to Card. (Relationship: Card 1:N Transaction)"
         },
         "pdvId": {
           "type": "string",
-          "description": "The ID of the PDV this user is associated with (if role is PDV)."
+          "description": "Reference to PointOfSale. (Relationship: PointOfSale 1:N Transaction)"
+        },
+        "type": {
+          "type": "string",
+          "description": "The type of transaction (e.g., RECHARGE, SALE, REFUND).",
+          "format": "string"
+        },
+        "valueCents": {
+          "type": "number",
+          "description": "The transaction value, stored in cents."
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "The timestamp when the transaction occurred.",
+          "format": "date-time"
         }
       },
       "required": [
-        "email",
+        "id",
+        "cardId",
+        "pdvId",
+        "type",
+        "valueCents",
+        "createdAt"
+      ]
+    },
+    "PointOfSale": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "PointOfSale",
+      "type": "object",
+      "description": "Represents a point of sale (PDV) where transactions can be made.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the PointOfSale entity."
+        },
+        "name": {
+          "type": "string",
+          "description": "The name of the point of sale (e.g., 'Food Stand', 'Central Cashier')."
+        },
+        "apiKey": {
+          "type": "string",
+          "description": "The API key used for device/app authentication."
+        }
+      },
+      "required": [
+        "id",
         "name",
-        "role"
-      ]
-    },
-    "Card": {
-      "title": "Card",
-      "description": "Represents a cashless card in the system.",
-      "type": "object",
-      "properties": {
-        "qr_code_id": {
-          "type": "string",
-          "description": "The unique identifier for the QR code."
-        },
-        "saldo_centavos": {
-          "type": "number",
-          "description": "The balance of the card in cents."
-        },
-        "status": {
-          "type": "string",
-          "description": "The status of the card.",
-          "enum": [
-            "ATIVO",
-            "INATIVO",
-            "BLOQUEADO"
-          ]
-        },
-        "created_at": {
-          "type": "string",
-          "format": "date-time",
-          "description": "The timestamp when the card was created."
-        },
-        "updated_at": {
-          "type": "string",
-          "format": "date-time",
-          "description": "The timestamp when the card was last updated."
-        },
-        "nome_cliente": {
-          "type": "string",
-          "description": "The name of the customer."
-        },
-        "telefone_cliente": {
-          "type": "string",
-          "description": "The phone number of the customer."
-        }
-      },
-      "required": [
-        "qr_code_id",
-        "saldo_centavos",
-        "status"
-      ]
-    },
-    "CardDetails": {
-      "title": "CardDetails",
-      "description": "Represents the details of a card returned from a query.",
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "The Firestore document ID."
-        },
-        "qr_code_id": {
-          "type": "string"
-        },
-        "saldo_centavos": {
-          "type": "number"
-        },
-        "status": {
-          "type": "string",
-          "enum": [
-            "ATIVO",
-            "INATIVO",
-            "BLOQUEADO"
-          ]
-        },
-        "created_at": {
-          "type": "string",
-          "format": "date-time"
-        },
-        "updated_at": {
-          "type": "string",
-          "format": "date-time"
-        },
-        "nome_cliente": {
-          "type": "string"
-        },
-        "telefone_cliente": {
-          "type": "string"
-        }
-      }
-    },
-    "Transaction": {
-      "title": "Transaction",
-      "description": "Represents a single financial transaction.",
-      "type": "object",
-      "properties": {
-        "cartao_id": {
-          "type": "string",
-          "description": "The Firestore document ID of the card."
-        },
-        "pdv_id": {
-          "type": "string",
-          "description": "The Firestore document ID of the point of sale."
-        },
-        "tipo": {
-          "type": "string",
-          "description": "The type of transaction.",
-          "enum": [
-            "RECARGA",
-            "VENDA",
-            "REEMBOLSO"
-          ]
-        },
-        "valor_centavos": {
-          "type": "number",
-          "description": "The value of the transaction in cents."
-        },
-        "created_at": {
-          "type": "string",
-          "format": "date-time",
-          "description": "The timestamp when the transaction occurred."
-        },
-        "items": {
-          "type": "array",
-          "description": "A list of items sold in the transaction.",
-          "items": {
-            "type": "object",
-            "properties": {
-              "name": {
-                "type": "string"
-              },
-              "price": {
-                "type": "number"
-              },
-              "quantity": {
-                "type": "number"
-              }
-            }
-          }
-        }
-      },
-      "required": [
-        "cartao_id",
-        "pdv_id",
-        "tipo",
-        "valor_centavos"
-      ]
-    },
-    "TransactionDetails": {
-      "title": "TransactionDetails",
-      "description": "Represents the detailed view of a transaction for display.",
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "string"
-        },
-        "cartao_id": {
-          "type": "string"
-        },
-        "card_qr_code_id": {
-          "type": "string",
-          "description": "The QR Code ID of the associated card."
-        },
-        "pdv_id": {
-          "type": "string"
-        },
-        "pdv_nome": {
-          "type": "string",
-          "description": "The name of the Point of Sale."
-        },
-        "tipo": {
-          "type": "string",
-          "enum": [
-            "RECARGA",
-            "VENDA",
-            "REEMBOLSO"
-          ]
-        },
-        "valor_centavos": {
-          "type": "number"
-        },
-        "created_at": {
-          "type": "string",
-          "format": "date-time"
-        }
-      }
-    },
-    "Pdv": {
-      "title": "Pdv",
-      "description": "Represents a Point of Sale (PDV).",
-      "type": "object",
-      "properties": {
-        "nome": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "nome"
-      ]
-    },
-    "MenuItem": {
-      "title": "MenuItem",
-      "description": "Represents an item in a PDV's menu.",
-      "type": "object",
-      "properties": {
-        "nome": {
-          "type": "string"
-        },
-        "preco_centavos": {
-          "type": "number"
-        }
-      },
-      "required": [
-        "nome",
-        "preco_centavos"
+        "apiKey"
       ]
     }
   },
   "auth": {
     "providers": [
-      "password"
+      "password",
+      "anonymous"
     ]
   },
   "firestore": {
-    "/users/{userId}": {
-      "schema": {
-        "$ref": "#/entities/UserProfile"
+    "structure": [
+      {
+        "path": "/cards/{cardId}",
+        "definition": {
+          "entityName": "Card",
+          "schema": {
+            "$ref": "#/backend/entities/Card"
+          },
+          "description": "Stores card details, including balance and status. The document ID is generated by Firestore.",
+          "params": [
+            {
+              "name": "cardId",
+              "description": "The unique identifier for the card."
+            }
+          ]
+        }
       },
-      "description": "Stores user profile information."
-    },
-    "/cards/{cardId}": {
-      "schema": {
-        "$ref": "#/entities/Card"
+      {
+        "path": "/cards/{cardId}/transactions/{transactionId}",
+        "definition": {
+          "entityName": "Transaction",
+          "schema": {
+            "$ref": "#/backend/entities/Transaction"
+          },
+          "description": "Stores transaction details for a specific card. Includes denormalized 'cardId' for authorization independence.",
+          "params": [
+            {
+              "name": "cardId",
+              "description": "The unique identifier for the card."
+            },
+            {
+              "name": "transactionId",
+              "description": "The unique identifier for the transaction."
+            }
+          ]
+        }
       },
-      "description": "Stores information about each cashless card."
-    },
-    "/transactions/{transactionId}": {
-      "schema": {
-        "$ref": "#/entities/Transaction"
-      },
-      "description": "Stores all financial transactions."
-    },
-    "/pdvs/{pdvId}": {
-      "schema": {
-        "$ref": "#/entities/Pdv"
-      },
-      "description": "Stores all Points of Sale."
-    },
-    "/pdvs/{pdvId}/menuItems/{menuItemId}": {
-      "schema": {
-        "$ref": "#/entities/MenuItem"
-      },
-      "description": "Stores menu items for a specific PDV."
-    }
+      {
+        "path": "/points_of_sale/{pdvId}",
+        "definition": {
+          "entityName": "PointOfSale",
+          "schema": {
+            "$ref": "#/backend/entities/PointOfSale"
+          },
+          "description": "Stores details for each point of sale, including name and API key for authentication.",
+          "params": [
+            {
+              "name": "pdvId",
+              "description": "The unique identifier for the point of sale."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "This Firestore data structure is designed to support a cashless payment system for events, focusing on security, scalability, and ease of querying. The core principle is Authorization Independence, achieved through denormalization. This eliminates the need for `get()` calls in security rules, simplifying rule logic and enabling atomic operations.\n\n*   **Cards:** The `cards` collection stores card details. It uses a document ID generated by Firestore. There are no subcollections under `/cards/{cardId}`.\n*   **Transactions:** Transactions are stored in a subcollection `/cards/{cardId}/transactions`. This establishes a 1:N relationship between cards and transactions. `cardId` is denormalized to facilitate querying and enforce security rules without needing to read the parent `card` document. This denormalization is crucial for authorization independence.\n*   **Points of Sale (PDVs):** The `points_of_sale` collection stores PDV details, including an API key for authentication. This collection is separate to manage PDV information and their access.\n\n\n**Authorization Independence (Denormalization):**\n\n*   `transactions`: The `transactions` subcollection under each card denormalizes `cardId` to avoid relying on parent document data for security rules, which is especially important when `cardId` is not the user id and authorization is based on other factors.\n\n**QAPs (Queryability and Security):**\n\n*   The structure uses subcollections (`/cards/{cardId}/transactions`) to enable secure list operations within the scope of a specific card. Security rules can easily enforce that only authorized users (e.g., PDV with correct API key) can access or modify transactions related to a particular card. This separation prevents unauthorized listing of all transactions across all cards.\n*   The segregation of `points_of_sale` into its own collection, coupled with API key-based authentication, supports secure management and access control for PDVs."
   }
 }

@@ -1,10 +1,8 @@
-// This file is not automatically updated by Firebase Studio.
-
 export const firebaseConfig = {
-  apiKey: "AIzaSyDLMu0NLYnz5oSHSvWZ8tJb1QAS2rQX6kk",
-  authDomain: "fiscalflow-zetbu.firebaseapp.com",
-  projectId: "fiscalflow-zetbu",
-  storageBucket: "fiscalflow-zetbu.appspot.com",
-  messagingSenderId: "1078840887676",
-  appId: "1:1078840887676:web:829023d8b884664770bcf9"
+  "projectId": "fiscalflow-zetbu",
+  "appId": "1:1078840887676:web:4608b0f294ed97b070bcf9",
+  "apiKey": "AIzaSyDLMu0NLYnz5oSHSvWZ8tJb1QAS2rQX6kk",
+  "authDomain": "fiscalflow-zetbu.firebaseapp.com",
+  "measurementId": "",
+  "messagingSenderId": "1078840887676"
 };

@@ -1,41 +1,50 @@
-import { initializeApp, getApps, type FirebaseApp } from 'firebase/app';
-import { getAuth, type Auth } from 'firebase/auth';
-import { getFirestore, type Firestore } from 'firebase/firestore';
-import { firebaseConfig } from './config';
+'use client';
 
-export { FirebaseProvider } from './provider';
-export { FirebaseClientProvider } from './client-provider';
-export * from './provider';
+import { firebaseConfig } from '@/firebase/config';
+import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
+import { getAuth } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore'
 
-
-let firebaseApp: FirebaseApp | undefined;
-let auth: Auth | undefined;
-let firestore: Firestore | undefined;
-
-/**
- * Initializes and returns a singleton instance of the Firebase application.
- *
- * This function ensures that Firebase is initialized only once, following the singleton pattern.
- * It is designed to work in environments like Next.js where code might be executed multiple times.
- *
- * @returns An object containing the initialized Firebase app, Auth, and Firestore instances.
- *          - `firebaseApp`: The singleton FirebaseApp instance.
- *          - `auth`: The singleton Auth instance.
- *          - `firestore`: The singleton Firestore instance.
- */
+// IMPORTANT: DO NOT MODIFY THIS FUNCTION
 export function initializeFirebase() {
-  if (typeof window !== 'undefined') {
-    if (!firebaseApp) {
-      const apps = getApps();
-      if (apps.length > 0) {
-        firebaseApp = apps[0];
-      } else {
-        firebaseApp = initializeApp(firebaseConfig);
+  if (!getApps().length) {
+    // Important! initializeApp() is called without any arguments because Firebase App Hosting
+    // integrates with the initializeApp() function to provide the environment variables needed to
+    // populate the FirebaseOptions in production. It is critical that we attempt to call initializeApp()
+    // without arguments.
+    let firebaseApp;
+    try {
+      // Attempt to initialize via Firebase App Hosting environment variables
+      firebaseApp = initializeApp();
+    } catch (e) {
+      // Only warn in production because it's normal to use the firebaseConfig to initialize
+      // during development
+      if (process.env.NODE_ENV === "production") {
+        console.warn('Automatic initialization failed. Falling back to firebase config object.', e);
       }
-      auth = getAuth(firebaseApp);
-      firestore = getFirestore(firebaseApp);
+      firebaseApp = initializeApp(firebaseConfig);
     }
+
+    return getSdks(firebaseApp);
   }
 
-  return { firebaseApp, auth, firestore };
+  // If already initialized, return the SDKs with the already initialized App
+  return getSdks(getApp());
 }
+
+export function getSdks(firebaseApp: FirebaseApp) {
+  return {
+    firebaseApp,
+    auth: getAuth(firebaseApp),
+    firestore: getFirestore(firebaseApp)
+  };
+}
+
+export * from './provider';
+export * from './client-provider';
+export * from './firestore/use-collection';
+export * from './firestore/use-doc';
+export * from './non-blocking-updates';
+export * from './non-blocking-login';
+export * from './errors';
+export * from './error-emitter';
