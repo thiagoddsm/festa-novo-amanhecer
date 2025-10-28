@@ -6,7 +6,6 @@ import { generateRandomId } from './data';
 import { initializeApp, getApps, getApp } from 'firebase-admin/app';
 import { getFirestore, Timestamp, WriteBatch } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
-import { firebaseConfig } from '@/firebase/config';
 import type { Card, MenuItem, Pdv } from './definitions';
 import { revalidatePath } from 'next/cache';
 
@@ -474,16 +473,23 @@ export async function createInitialAdminUser(): Promise<ActionState> {
         const password = '10760134';
         
         let userRecord;
+        let message = 'Usuário administrador já existe e foi atualizado.';
+
         try {
             userRecord = await auth.getUserByEmail(email);
+            // User exists, update password
+            await auth.updateUser(userRecord.uid, { password: password });
         } catch(error: any) {
             if (error.code === 'auth/user-not-found') {
+                // User does not exist, create them
                  userRecord = await auth.createUser({
                     email: email,
                     password: password,
                     displayName: 'Admin Master',
                 });
+                message = 'Usuário administrador inicial criado com sucesso.';
             } else {
+                // Another error occurred
                 throw error;
             }
         }
@@ -497,13 +503,17 @@ export async function createInitialAdminUser(): Promise<ActionState> {
                 email: email,
                 role: 'ADMIN',
             });
-            return { status: 'success', message: 'Usuário administrador inicial criado com sucesso.'};
+             return { status: 'success', message: message};
         } else {
-             return { status: 'idle', message: 'Usuário administrador já existe.'};
+             // If user document exists, ensure role is correct
+             if(userDoc.data()?.role !== 'ADMIN') {
+                await userDocRef.update({ role: 'ADMIN' });
+             }
+             return { status: 'success', message: 'Usuário administrador já configurado.'};
         }
 
     } catch (error) {
-        console.error("Error creating initial admin user:", error);
-        return { status: 'error', message: 'Falha ao criar usuário administrador inicial.' };
+        console.error("Error creating/updating initial admin user:", error);
+        return { status: 'error', message: 'Falha ao criar/atualizar usuário administrador inicial.' };
     }
 }
