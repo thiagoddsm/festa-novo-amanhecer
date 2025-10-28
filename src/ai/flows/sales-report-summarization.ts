@@ -15,7 +15,7 @@ const SalesDataSchema = z.object({
   total_recarregado_centavos: z.number().describe('The total amount recharged in cents.'),
   vendas_por_pdv: z.array(
     z.object({
-      pdv_id: z.number().describe('The ID of the point of sale.'),
+      pdv_id: z.string().describe('The ID of the point of sale.'),
       nome: z.string().describe('The name of the point of sale.'),
       total_centavos: z.number().describe('The total amount sold at this point of sale in cents.'),
     })
@@ -43,7 +43,7 @@ const prompt = ai.definePrompt({
   prompt: `You are an expert sales data analyst. You will be provided with sales data from an event, and you will generate a report summarizing the data, identifying trends and insights.
 
 Sales Data:
-{{{JSON.stringify salesData}}}
+{{{JSON_stringify salesData}}}
 
 Generate a concise summary of the sales data, highlighting key trends, insights, and recommendations for optimizing resource allocation and improving the event experience.`, 
 });
