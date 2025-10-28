@@ -14,8 +14,6 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import { createInitialAdminUser } from '@/lib/actions';
 import Image from 'next/image';
-import { FullPageLoader } from '@/components/ui/loader';
-import { useUserData } from '@/hooks/use-user-data';
 
 const loginSchema = z.object({
   email: z.string().email('Por favor, insira um e-mail válido.'),
@@ -29,13 +27,6 @@ function LoginPageContent() {
   const router = useRouter();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
-  const { user, loading: userLoading } = useUserData();
-
-  useEffect(() => {
-    if (!userLoading && user) {
-      router.replace('/dashboard');
-    }
-  }, [user, userLoading, router]);
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -47,10 +38,7 @@ function LoginPageContent() {
 
   const onSubmit = async (data: LoginFormValues) => {
     setIsLoading(true);
-    console.log('[DIAGNOSTIC] Tentativa de login iniciada para:', data.email);
-
     if (!auth) {
-        console.error('[DIAGNOSTIC] Objeto de autenticação do Firebase é nulo.');
         toast({
             variant: 'destructive',
             title: 'Erro Crítico de Configuração',
@@ -61,9 +49,7 @@ function LoginPageContent() {
     }
 
     try {
-      console.log('[DIAGNOSTIC] Chamando signInWithEmailAndPassword...');
       await signInWithEmailAndPassword(auth, data.email, data.password);
-      console.log('[DIAGNOSTIC] Login bem-sucedido. Redirecionando para /dashboard');
       router.push('/dashboard');
     } catch (error: any) {
       console.error('[DIAGNOSTIC] Erro detalhado no login:', error);
@@ -79,16 +65,13 @@ function LoginPageContent() {
         description: message,
       });
     } finally {
-        console.log('[DIAGNOSTIC] Finalizando tentativa de login.');
         setIsLoading(false);
     }
   };
 
   useEffect(() => {
-      console.log('[DIAGNOSTIC] Executando createInitialAdminUser setup...');
       createInitialAdminUser().then(result => {
           if (result && result.message) {
-              console.log('[DIAGNOSTIC] Resultado do setup do admin:', result);
               if (result.status === 'success') {
                 toast({ title: 'Configuração do Sistema', description: result.message });
               } else {
@@ -101,10 +84,6 @@ function LoginPageContent() {
       })
   }, [toast]);
   
-  if (userLoading || (!userLoading && user)) {
-    return <FullPageLoader />;
-  }
-
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
       <Card className="w-full max-w-sm">
