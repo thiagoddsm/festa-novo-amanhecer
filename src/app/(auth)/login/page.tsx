@@ -28,7 +28,7 @@ function LoginPageContent() {
   const auth = useFirebaseAuth();
   const { user, loading } = useAuth();
   const { toast } = useToast();
-  const [isLoading, setIsLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const router = useRouter();
 
   const form = useForm<LoginFormValues>({
@@ -39,8 +39,8 @@ function LoginPageContent() {
     },
   });
 
+  // This effect now ONLY handles redirection for an ALREADY authenticated user trying to access the login page.
   useEffect(() => {
-    // If the user is already authenticated, redirect them based on role.
     if (!loading && user) {
         if (user.role === 'PDV') {
             router.replace('/pos');
@@ -52,21 +52,22 @@ function LoginPageContent() {
 
 
   const onSubmit = async (data: LoginFormValues) => {
-    setIsLoading(true);
+    setIsSubmitting(true);
     if (!auth) {
         toast({
             variant: 'destructive',
             title: 'Erro Crítico de Configuração',
             description: 'O serviço de autenticação não foi inicializado corretamente.',
         });
-        setIsLoading(false);
+        setIsSubmitting(false);
         return;
     }
 
     try {
-      await signInWithEmailAndPassword(auth, data.email, data.password);
       // The onIdTokenChanged listener in AuthProvider will handle the user state update.
-      // The useEffect above will handle the redirect.
+      // The useEffect in the main app layout will handle the redirect. We just sign in here.
+      await signInWithEmailAndPassword(auth, data.email, data.password);
+      
     } catch (error: any) {
       console.error('[DIAGNOSTIC] Erro detalhado no login:', error);
       let message = 'Ocorreu um erro ao fazer login.';
@@ -79,7 +80,7 @@ function LoginPageContent() {
         description: message,
       });
     } finally {
-        setIsLoading(false);
+        setIsSubmitting(false);
     }
   };
 
@@ -99,8 +100,9 @@ function LoginPageContent() {
       })
   }, [toast]);
 
+  // While checking auth state or if the user is already logged in (and we are about to redirect), show a loader.
   if (loading || user) {
-    return <FullPageLoader />; // Show loader while redirecting
+    return <FullPageLoader />;
   }
   
   return (
@@ -142,8 +144,8 @@ function LoginPageContent() {
                   </FormItem>
                 )}
               />
-              <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? <Loader2 className="animate-spin" /> : 'Entrar'}
+              <Button type="submit" className="w-full" disabled={isSubmitting}>
+                {isSubmitting ? <Loader2 className="animate-spin" /> : 'Entrar'}
               </Button>
             </form>
           </Form>
