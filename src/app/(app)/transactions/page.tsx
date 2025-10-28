@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useFirestore } from '@/firebase';
-import { collection, onSnapshot, doc, getDoc, Timestamp } from 'firebase/firestore';
+import { collection, onSnapshot, doc, getDoc, Timestamp, query, orderBy } from 'firebase/firestore';
 import type { Transaction, Card as CardType, Pdv } from '@/lib/definitions';
 import { formatCurrency, formatDateTime } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -43,7 +43,8 @@ function useTransactionDetails() {
 
 
     const transCollRef = collection(firestore, 'transactions');
-    const unsubTrans = onSnapshot(transCollRef, async (snapshot) => {
+    const q = query(transCollRef, orderBy('created_at', 'desc'));
+    const unsubTrans = onSnapshot(q, async (snapshot) => {
       const allTransDocs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Transaction));
 
       // Enrich transactions with details
@@ -71,13 +72,8 @@ function useTransactionDetails() {
         })
       );
       
-      const sortedTransactions = enrichedTransactions.sort((a,b) => {
-          const dateA = a.created_at instanceof Timestamp ? a.created_at.toDate() : new Date();
-          const dateB = b.created_at instanceof Timestamp ? b.created_at.toDate() : new Date();
-          return dateB.getTime() - dateA.getTime();
-      });
 
-      setTransactions(sortedTransactions);
+      setTransactions(enrichedTransactions);
     });
 
     return () => {

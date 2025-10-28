@@ -1,5 +1,39 @@
 {
   "entities": {
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "Represents a user's profile in the system.",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "The user's email address."
+        },
+        "name": {
+          "type": "string",
+          "description": "The user's full name."
+        },
+        "role": {
+          "type": "string",
+          "description": "The user's role in the system.",
+          "enum": [
+            "ADMIN",
+            "CAIXA",
+            "PDV"
+          ]
+        },
+        "pdvId": {
+          "type": "string",
+          "description": "The ID of the PDV this user is associated with (if role is PDV)."
+        }
+      },
+      "required": [
+        "email",
+        "name",
+        "role"
+      ]
+    },
     "Card": {
       "title": "Card",
       "description": "Represents a cashless card in the system.",
@@ -214,9 +248,17 @@
     }
   },
   "auth": {
-    "providers": []
+    "providers": [
+      "password"
+    ]
   },
   "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/UserProfile"
+      },
+      "description": "Stores user profile information."
+    },
     "/cards/{cardId}": {
       "schema": {
         "$ref": "#/entities/Card"

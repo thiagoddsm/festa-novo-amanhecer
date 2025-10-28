@@ -2,27 +2,31 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, ShoppingCart, WalletCards, Users, List } from "lucide-react";
+import { LayoutDashboard, ShoppingCart, WalletCards, Users, List, UserCog } from "lucide-react";
 import { SidebarHeader, SidebarMenu, SidebarMenuItem, SidebarMenuButton } from "@/components/ui/sidebar";
 import Image from "next/image";
 import type { AuthenticatedUser } from "@/lib/auth";
 
 const allNavItems = [
-    { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', role: 'CAIXA' },
-    { href: '/cards', icon: Users, label: 'Cartões', role: 'CAIXA' },
-    { href: '/transactions', icon: List, label: 'Transações', role: 'CAIXA' },
-    { href: '/cashier', icon: WalletCards, label: 'Caixa', role: 'CAIXA' },
-    { href: '/pos', icon: ShoppingCart, label: 'PDV', role: 'CAIXA' },
-    { href: '/pos', icon: ShoppingCart, label: 'PDV', role: 'PDV' },
+    { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', roles: ['ADMIN', 'CAIXA'] },
+    { href: '/cards', icon: Users, label: 'Cartões', roles: ['ADMIN', 'CAIXA'] },
+    { href: '/transactions', icon: List, label: 'Transações', roles: ['ADMIN', 'CAIXA'] },
+    { href: '/cashier', icon: WalletCards, label: 'Caixa', roles: ['ADMIN', 'CAIXA'] },
+    { href: '/pos', icon: ShoppingCart, label: 'PDV', roles: ['ADMIN', 'PDV'] },
+    { href: '/admin/users', icon: UserCog, label: 'Usuários', roles: ['ADMIN'] },
 ]
 
 export function SidebarNav({ user }: { user: AuthenticatedUser | null }) {
     const pathname = usePathname();
 
-    const navItems = allNavItems.filter(item => item.role === user?.role);
+    // Filter nav items based on user role
+    const navItems = allNavItems.filter(item => user?.role && item.roles.includes(user.role));
 
-    // If PDV user, don't show sidebar if it only has one item
-    if (user?.role === 'PDV' && navItems.length <= 1) {
+    // If PDV user, redirect to /pos and don't show sidebar if it only has one item
+    if (user?.role === 'PDV' && navItems.length === 1 && pathname !== '/pos') {
+        return null;
+    }
+     if (user?.role === 'PDV' && navItems.length <= 1) {
         return null;
     }
 
@@ -36,7 +40,7 @@ export function SidebarNav({ user }: { user: AuthenticatedUser | null }) {
             </SidebarHeader>
             <SidebarMenu>
                 {navItems.map(item => (
-                    <SidebarMenuItem key={`${item.href}-${item.role}`}>
+                    <SidebarMenuItem key={`${item.href}-${item.label}`}>
                         <SidebarMenuButton
                             asChild
                             isActive={pathname === item.href}

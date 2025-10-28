@@ -3,20 +3,25 @@
 import { z } from 'zod';
 import { generateRandomId } from './data';
 
-import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore, collection, addDoc, serverTimestamp, where, query, getDocs, doc, updateDoc, Timestamp, writeBatch, documentId, getDoc, deleteDoc } from 'firebase/firestore';
+import { initializeApp, getApps, getApp } from 'firebase-admin/app';
+import { getFirestore, Timestamp, WriteBatch } from 'firebase-admin/firestore';
+import { getAuth } from 'firebase-admin/auth';
 import { firebaseConfig } from '@/firebase/config';
 import type { Card, MenuItem, Pdv } from './definitions';
 import { revalidatePath } from 'next/cache';
 
-// Helper to ensure Firebase is initialized only once on the server
-let app, db;
-if (getApps().length === 0) {
-  app = initializeApp(firebaseConfig);
+// Helper to ensure Firebase Admin is initialized only once
+let adminApp;
+if (!getApps().length) {
+    adminApp = initializeApp({
+        // You might need to set credentials for admin SDK
+    });
 } else {
-  app = getApp();
+    adminApp = getApp();
 }
-db = getFirestore(app);
+
+const db = getFirestore(adminApp);
+const auth = getAuth(adminApp);
 
 
 export type ActionState = {
@@ -24,6 +29,53 @@ export type ActionState = {
   message: string;
   data?: any;
 };
+
+// --- User Management (Admin) ---
+const UserSchema = z.object({
+  email: z.string().email('Email inválido.'),
+  password: z.string().min(6, 'A senha deve ter pelo menos 6 caracteres.'),
+  name: z.string().min(1, 'O nome é obrigatório.'),
+  role: z.enum(['ADMIN', 'CAIXA', 'PDV']),
+  pdvId: z.string().optional(),
+});
+
+export async function createUser(prevState: ActionState | undefined, formData: FormData): Promise<ActionState> {
+    try {
+        const validatedFields = UserSchema.safeParse(Object.fromEntries(formData.entries()));
+        if(!validatedFields.success) {
+            return { status: 'error', message: 'Dados inválidos.', data: validatedFields.error.flatten().fieldErrors };
+        }
+
+        const { email, password, name, role, pdvId } = validatedFields.data;
+
+        // Create user in Firebase Auth
+        const userRecord = await auth.createUser({
+            email,
+            password,
+            displayName: name,
+        });
+
+        // Store user profile with role in Firestore
+        await db.collection('users').doc(userRecord.uid).set({
+            name,
+            email,
+            role,
+            pdvId: role === 'PDV' ? pdvId : null,
+        });
+        
+        revalidatePath('/admin/users');
+        return { status: 'success', message: 'Usuário criado com sucesso!' };
+
+    } catch (error: any) {
+        console.error(error);
+        let message = 'Ocorreu um erro desconhecido.';
+        if (error.code === 'auth/email-already-exists') {
+            message = 'Este e-mail já está em uso.';
+        }
+        return { status: 'error', message };
+    }
+}
+
 
 // --- Card Creation ---
 const CreateCardSchema = z.object({
@@ -37,7 +89,7 @@ export async function createCard(
   formData: FormData
 ): Promise<ActionState> {
   try {
-    const batch = writeBatch(db);
+    const batch = db.batch();
 
     const validatedFields = CreateCardSchema.safeParse({
       saldo_inicial: formData.get('saldo_inicial'),
@@ -63,21 +115,21 @@ export async function createCard(
         nome_cliente: nome_cliente ?? '',
         telefone_cliente: telefone_cliente ?? '',
         status: 'ATIVO',
-        created_at: serverTimestamp(),
-        updated_at: serverTimestamp(),
+        created_at: Timestamp.now(),
+        updated_at: Timestamp.now(),
     };
 
-    const cardDocRef = doc(collection(db, "cards"));
+    const cardDocRef = db.collection("cards").doc();
     batch.set(cardDocRef, cardData);
 
     if (saldo_centavos > 0) {
-        const transactionRef = doc(collection(db, "transactions"));
+        const transactionRef = db.collection("transactions").doc();
         batch.set(transactionRef, {
             cartao_id: cardDocRef.id,
             pdv_id: 'caixa_central', // Caixa Central
             tipo: 'RECARGA',
             valor_centavos: saldo_centavos,
-            created_at: serverTimestamp()
+            created_at: Timestamp.now()
         });
     }
     
@@ -115,7 +167,7 @@ export async function rechargeCard(
   formData: FormData
 ): Promise<ActionState> {
   try {
-    const batch = writeBatch(db);
+    const batch = db.batch();
 
     const validatedFields = RechargeSchema.safeParse({
       qr_code_id: formData.get('qr_code_id'),
@@ -132,9 +184,9 @@ export async function rechargeCard(
 
     const { qr_code_id, valor_recarga } = validatedFields.data;
     
-    const cardsRef = collection(db, 'cards');
-    const q = query(cardsRef, where('qr_code_id', '==', qr_code_id));
-    const querySnapshot = await getDocs(q);
+    const cardsRef = db.collection('cards');
+    const q = cardsRef.where('qr_code_id', '==', qr_code_id);
+    const querySnapshot = await q.get();
 
     if (querySnapshot.empty) {
       return { status: 'error', message: 'Cartão não encontrado.' };
@@ -150,19 +202,19 @@ export async function rechargeCard(
     const valor_recarga_centavos = valor_recarga * 100;
     const novo_saldo_centavos = card.saldo_centavos + valor_recarga_centavos;
 
-    const cardDocRef = doc(db, 'cards', cardDoc.id);
+    const cardDocRef = db.collection('cards').doc(cardDoc.id);
     batch.update(cardDocRef, {
         saldo_centavos: novo_saldo_centavos,
-        updated_at: serverTimestamp()
+        updated_at: Timestamp.now()
     });
 
-    const transactionRef = doc(collection(db, "transactions"));
+    const transactionRef = db.collection("transactions").doc();
     batch.set(transactionRef, {
       cartao_id: cardDoc.id,
       pdv_id: 'caixa_central', // Caixa Central
       tipo: 'RECARGA',
       valor_centavos: valor_recarga_centavos,
-      created_at: serverTimestamp()
+      created_at: Timestamp.now()
     });
     
     await batch.commit();
@@ -199,7 +251,7 @@ export async function processSale(
     formData: FormData
 ): Promise<ActionState> {
     try {
-        const batch = writeBatch(db);
+        const batch = db.batch();
 
         const items = JSON.parse(formData.get('items') as string);
         const total_venda = parseFloat(formData.get('total_venda') as string);
@@ -222,9 +274,9 @@ export async function processSale(
 
         const { qr_code_id, pdv_id, total_venda: valor_venda_centavos } = validatedFields.data;
 
-        const cardsRef = collection(db, 'cards');
-        const q = query(cardsRef, where('qr_code_id', '==', qr_code_id));
-        const querySnapshot = await getDocs(q);
+        const cardsRef = db.collection('cards');
+        const q = cardsRef.where('qr_code_id', '==', qr_code_id);
+        const querySnapshot = await q.get();
 
         if (querySnapshot.empty) {
             return { status: 'error', message: 'Cartão não encontrado.' };
@@ -243,19 +295,19 @@ export async function processSale(
 
         const novo_saldo_centavos = card.saldo_centavos - valor_venda_centavos;
 
-        const cardDocRef = doc(db, 'cards', cardDoc.id);
+        const cardDocRef = db.collection('cards').doc(cardDoc.id);
         batch.update(cardDocRef, {
             saldo_centavos: novo_saldo_centavos,
-            updated_at: serverTimestamp()
+            updated_at: Timestamp.now()
         });
         
-        const transactionRef = doc(collection(db, "transactions"));
+        const transactionRef = db.collection("transactions").doc();
         batch.set(transactionRef, {
           cartao_id: cardDoc.id,
           pdv_id: pdv_id,
           tipo: 'VENDA',
           valor_centavos: valor_venda_centavos,
-          created_at: serverTimestamp(),
+          created_at: Timestamp.now(),
           items: validatedFields.data.items.map(item => ({name: item.name, price: item.price, quantity: item.quantity}))
         });
 
@@ -298,10 +350,10 @@ export async function getCardBalance(
         
         const { qr_code_id } = validatedFields.data;
         
-        const cardsRef = collection(db, 'cards');
-        const q = query(cardsRef, where('qr_code_id', '==', qr_code_id));
+        const cardsRef = db.collection('cards');
+        const q = cardsRef.where('qr_code_id', '==', qr_code_id);
         
-        const querySnapshot = await getDocs(q);
+        const querySnapshot = await q.get();
         
         if (querySnapshot.empty) {
             return { status: 'error', message: 'Cartão não encontrado.' };
@@ -313,8 +365,8 @@ export async function getCardBalance(
         const returnData = {
           ...cardData,
           id: cardDoc.id,
-          created_at: cardData.created_at ? (cardData.created_at as Timestamp).toDate().toISOString() : new Date().toISOString(),
-          updated_at: cardData.updated_at ? (cardData.updated_at as Timestamp).toDate().toISOString() : new Date().toISOString(),
+          created_at: cardData.created_at ? (cardData.created_at as unknown as Timestamp).toDate().toISOString() : new Date().toISOString(),
+          updated_at: cardData.updated_at ? (cardData.updated_at as unknown as Timestamp).toDate().toISOString() : new Date().toISOString(),
         }
 
         return {
@@ -332,9 +384,9 @@ export async function getCardBalance(
 
 // --- PDV / Menu ---
 export async function getPdvNameById(pdvId: string): Promise<string> {
-    const pdvRef = doc(db, 'pdvs', pdvId);
-    const pdvSnap = await getDoc(pdvRef);
-    if (pdvSnap.exists()) {
+    const pdvRef = db.collection('pdvs').doc(pdvId);
+    const pdvSnap = await pdvRef.get();
+    if (pdvSnap.exists) {
         return (pdvSnap.data() as Pdv).nome;
     }
     return `PDV ID: ${pdvId}`;
@@ -362,8 +414,8 @@ export async function addMenuItem( prevState: ActionState | undefined, formData:
     const { nome, preco_reais, pdvId } = validatedFields.data;
     const preco_centavos = Math.round(preco_reais * 100);
     
-    const menuItemsCollection = collection(db, 'pdvs', pdvId, 'menuItems');
-    await addDoc(menuItemsCollection, { nome, preco_centavos });
+    const menuItemsCollection = db.collection('pdvs').doc(pdvId).collection('menuItems');
+    await menuItemsCollection.add({ nome, preco_centavos });
 
     revalidatePath('/pos');
     return { status: 'success', message: 'Item adicionado com sucesso!' };
@@ -388,8 +440,8 @@ export async function updateMenuItem(prevState: ActionState | undefined, formDat
     const { nome, preco_reais, pdvId, itemId } = validatedFields.data;
     const preco_centavos = Math.round(preco_reais * 100);
 
-    const itemRef = doc(db, 'pdvs', pdvId, 'menuItems', itemId);
-    await updateDoc(itemRef, { nome, preco_centavos });
+    const itemRef = db.collection('pdvs').doc(pdvId).collection('menuItems').doc(itemId);
+    await itemRef.update({ nome, preco_centavos });
 
     revalidatePath('/pos');
     return { status: 'success', message: 'Item atualizado com sucesso!' };
@@ -404,12 +456,54 @@ export async function deleteMenuItem(pdvId: string, itemId: string): Promise<Act
   }
 
   try {
-    const itemRef = doc(db, 'pdvs', pdvId, 'menuItems', itemId);
-    await deleteDoc(itemRef);
+    const itemRef = db.collection('pdvs').doc(pdvId).collection('menuItems').doc(itemId);
+    await itemRef.delete();
 
     revalidatePath('/pos');
     return { status: 'success', message: 'Item excluído com sucesso!' };
   } catch (error) {
     return { status: 'error', message: 'Erro ao excluir item.' };
   }
+}
+
+// This is a one-time action to create the admin user if it doesn't exist.
+// This should be run by an administrator.
+export async function createInitialAdminUser(): Promise<ActionState> {
+    try {
+        const email = 'thiagoddsm@gmail.com';
+        const password = '10760134';
+        
+        let userRecord;
+        try {
+            userRecord = await auth.getUserByEmail(email);
+        } catch(error: any) {
+            if (error.code === 'auth/user-not-found') {
+                 userRecord = await auth.createUser({
+                    email: email,
+                    password: password,
+                    displayName: 'Admin Master',
+                });
+            } else {
+                throw error;
+            }
+        }
+        
+        const userDocRef = db.collection('users').doc(userRecord.uid);
+        const userDoc = await userDocRef.get();
+
+        if (!userDoc.exists) {
+            await userDocRef.set({
+                name: 'Admin Master',
+                email: email,
+                role: 'ADMIN',
+            });
+            return { status: 'success', message: 'Usuário administrador inicial criado com sucesso.'};
+        } else {
+             return { status: 'idle', message: 'Usuário administrador já existe.'};
+        }
+
+    } catch (error) {
+        console.error("Error creating initial admin user:", error);
+        return { status: 'error', message: 'Falha ao criar usuário administrador inicial.' };
+    }
 }

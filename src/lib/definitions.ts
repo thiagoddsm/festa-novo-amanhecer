@@ -1,5 +1,13 @@
 import { Timestamp } from 'firebase/firestore';
 
+export type UserProfile = {
+  id: string; // Firestore document ID (same as Firebase Auth UID)
+  email: string;
+  name: string;
+  role: 'ADMIN' | 'CAIXA' | 'PDV';
+  pdvId?: string; // Only for PDV users
+}
+
 export type Card = {
   id: string; // Firestore document ID
   qr_code_id: string;
