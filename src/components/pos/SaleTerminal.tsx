@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/utils';
 import type { Pdv, MenuItem } from '@/lib/definitions';
-import { CheckCircle2, XCircle, Loader2, ShoppingCart, X, ArrowLeft, Trash2, Pencil } from 'lucide-react';
+import { CheckCircle2, XCircle, Loader2, ShoppingCart, X, ArrowLeft, Trash2, Pencil, QrCode } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useFirestore } from '@/firebase';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
@@ -17,6 +17,7 @@ import { ScrollArea } from '../ui/scroll-area';
 import { Badge } from '../ui/badge';
 import { Separator } from '../ui/separator';
 import EditMenuSheet from './EditMenuSheet';
+import QrScannerDialog from '../common/QrScanner';
 
 const initialState: {
     status: 'idle' | 'success' | 'error';
@@ -54,6 +55,8 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv, onGoBack: ()
   const [cart, setCart] = useState<CartItem[]>([]);
   const [qrCodeId, setQrCodeId] = useState('');
   const [isMenuSheetOpen, setIsMenuSheetOpen] = useState(false);
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
+
 
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -119,6 +122,11 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv, onGoBack: ()
     setCart([]);
   }
 
+  const handleScan = (data: string) => {
+      setQrCodeId(data);
+      setIsScannerOpen(false);
+  }
+
   return (
     <>
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 items-start">
@@ -182,15 +190,20 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv, onGoBack: ()
                 <Separator className="my-4"/>
                 <form ref={formRef} action={formAction}>
                     <div className="space-y-4">
-                        <Input
-                            id="qr_code_id"
-                            name="qr_code_id"
-                            placeholder="Escaneie ou digite o ID do cliente"
-                            required
-                            value={qrCodeId}
-                            onChange={(e) => setQrCodeId(e.target.value)}
-                            className="h-12 text-center text-lg"
-                        />
+                        <div className="flex gap-2">
+                            <Input
+                                id="qr_code_id"
+                                name="qr_code_id"
+                                placeholder="ID do cliente"
+                                required
+                                value={qrCodeId}
+                                onChange={(e) => setQrCodeId(e.target.value)}
+                                className="h-12 text-center text-lg flex-grow"
+                            />
+                             <Button type="button" variant="outline" size="icon" className="h-12 w-12" onClick={() => setIsScannerOpen(true)}>
+                                <QrCode className="h-6 w-6" />
+                            </Button>
+                        </div>
                          <input type="hidden" name="pdv_id" value={pdv.id} />
                          <input type="hidden" name="items" value={JSON.stringify(cart)} />
                          <input type="hidden" name="total_venda" value={total} />
@@ -210,6 +223,12 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv, onGoBack: ()
         menuItems={menuItems || []}
         isOpen={isMenuSheetOpen}
         onOpenChange={setIsMenuSheetOpen}
+      />
+
+       <QrScannerDialog
+        open={isScannerOpen}
+        onOpenChange={setIsScannerOpen}
+        onScan={handleScan}
       />
 
       {confirmation && (

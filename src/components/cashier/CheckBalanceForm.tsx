@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useActionState, useEffect, useRef } from 'react';
+import React, { useActionState, useEffect, useRef, useState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { getCardBalance } from '@/lib/actions';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -10,9 +10,10 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/utils';
 import type { Card as CardType } from '@/lib/definitions';
-import { Loader2, User, CircleAlert, Wallet, Hash } from 'lucide-react';
+import { Loader2, User, CircleAlert, Wallet, Hash, QrCode } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { cn } from '@/lib/utils';
+import QrScannerDialog from '../common/QrScanner';
+
 
 const initialState = {
   status: 'success' as 'success' | 'error',
@@ -33,6 +34,8 @@ export default function CheckBalanceForm() {
   const [state, formAction] = useActionState(getCardBalance, initialState);
   const { toast } = useToast();
   const formRef = useRef<HTMLFormElement>(null);
+  const [qrCodeId, setQrCodeId] = useState('');
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
 
   useEffect(() => {
     if (!state || !state.message) return;
@@ -47,7 +50,7 @@ export default function CheckBalanceForm() {
     
     // Reset form only on successful search
     if (state.status === 'success') {
-      formRef.current?.reset();
+      setQrCodeId('');
     }
 
   }, [state, toast]);
@@ -65,7 +68,17 @@ export default function CheckBalanceForm() {
     }
   }
 
+  const handleScan = (data: string) => {
+      setQrCodeId(data);
+      setIsScannerOpen(false);
+      // Automatically submit form after scanning
+      setTimeout(() => {
+          formRef.current?.requestSubmit();
+      }, 100)
+  }
+
   return (
+    <>
     <Card>
       <CardHeader>
         <CardTitle>Consultar Saldo</CardTitle>
@@ -77,12 +90,19 @@ export default function CheckBalanceForm() {
         <form ref={formRef} action={formAction} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="qr_code_id">QR Code ID</Label>
-            <Input
-              id="qr_code_id"
-              name="qr_code_id"
-              placeholder="Escaneie ou digite o ID"
-              required
-            />
+            <div className="flex gap-2">
+                <Input
+                id="qr_code_id"
+                name="qr_code_id"
+                placeholder="Escaneie ou digite o ID"
+                required
+                value={qrCodeId}
+                onChange={(e) => setQrCodeId(e.target.value)}
+                />
+                <Button type='button' variant="outline" size="icon" onClick={() => setIsScannerOpen(true)}>
+                    <QrCode className="h-4 w-4" />
+                </Button>
+            </div>
           </div>
           <SubmitButton />
         </form>
@@ -116,5 +136,11 @@ export default function CheckBalanceForm() {
          </CardFooter>
        )}
     </Card>
+     <QrScannerDialog
+        open={isScannerOpen}
+        onOpenChange={setIsScannerOpen}
+        onScan={handleScan}
+      />
+    </>
   );
 }
