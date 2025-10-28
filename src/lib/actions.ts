@@ -11,6 +11,7 @@ import { revalidatePath } from 'next/cache';
 
 // Helper to ensure Firebase Admin is initialized only once
 if (!getApps().length) {
+    // Rely on default credentials provided by the environment
     initializeApp();
 }
 
@@ -519,5 +520,3 @@ export async function createInitialAdminUser(): Promise<ActionState> {
         return { status: 'error', message: 'Falha ao criar/atualizar usuário administrador inicial.' };
     }
 }
-
-    
