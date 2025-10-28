@@ -31,7 +31,6 @@ function LoginPageContent() {
   const [isLoading, setIsLoading] = useState(false);
   const { user, loading: userLoading } = useUserData();
 
-  // Redirect if user is already logged in
   useEffect(() => {
     if (!userLoading && user) {
       router.replace('/dashboard');
@@ -48,47 +47,60 @@ function LoginPageContent() {
 
   const onSubmit = async (data: LoginFormValues) => {
     setIsLoading(true);
+    console.log('[DIAGNOSTIC] Tentativa de login iniciada para:', data.email);
+
     if (!auth) {
+        console.error('[DIAGNOSTIC] Objeto de autenticação do Firebase é nulo.');
         toast({
             variant: 'destructive',
-            title: 'Erro de Autenticação',
-            description: 'O serviço de autenticação não está disponível.',
+            title: 'Erro Crítico de Configuração',
+            description: 'O serviço de autenticação não foi inicializado corretamente.',
         });
         setIsLoading(false);
         return;
     }
+
     try {
+      console.log('[DIAGNOSTIC] Chamando signInWithEmailAndPassword...');
       await signInWithEmailAndPassword(auth, data.email, data.password);
-      // On success, the main app layout's auth listener will handle the redirect.
+      console.log('[DIAGNOSTIC] Login bem-sucedido. Redirecionando para /dashboard');
       router.push('/dashboard');
     } catch (error: any) {
-      console.error(error);
+      console.error('[DIAGNOSTIC] Erro detalhado no login:', error);
       let message = 'Ocorreu um erro ao fazer login.';
-      // Catch specific Firebase auth errors for invalid credentials
       if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
           message = 'E-mail ou senha inválidos.';
+      } else {
+          message = `Erro: ${error.message}`;
       }
       toast({
         variant: 'destructive',
         title: 'Erro de Login',
         description: message,
       });
-       setIsLoading(false);
+    } finally {
+        console.log('[DIAGNOSTIC] Finalizando tentativa de login.');
+        setIsLoading(false);
     }
   };
 
-  // One-time action to create/update the initial admin user.
   useEffect(() => {
+      console.log('[DIAGNOSTIC] Executando createInitialAdminUser setup...');
       createInitialAdminUser().then(result => {
-          if (result && result.status === 'success' && result.message) {
-              toast({ title: 'Setup', description: result.message });
+          if (result && result.message) {
+              console.log('[DIAGNOSTIC] Resultado do setup do admin:', result);
+              if (result.status === 'success') {
+                toast({ title: 'Configuração do Sistema', description: result.message });
+              } else {
+                toast({ title: 'Aviso de Configuração', description: result.message, variant: 'destructive'});
+              }
           }
       }).catch(err => {
-          console.error("Failed to run initial admin user setup:", err);
+          console.error("[DIAGNOSTIC] Falha crítica na execução do setup do admin:", err);
+          toast({ title: 'Erro Crítico', description: 'Falha ao configurar usuário administrador inicial.'});
       })
   }, [toast]);
   
-  // Show a loader while we determine auth state
   if (userLoading || (!userLoading && user)) {
     return <FullPageLoader />;
   }

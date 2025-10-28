@@ -465,31 +465,33 @@ export async function deleteMenuItem(pdvId: string, itemId: string): Promise<Act
   }
 }
 
-// This is a one-time action to create the admin user if it doesn't exist.
-// This should be run by an administrator.
 export async function createInitialAdminUser(): Promise<ActionState> {
     try {
         const email = 'thiagoddsm@gmail.com';
         const password = '10760134';
         
         let userRecord;
-        let message = 'Usuário administrador já existe e foi atualizado.';
+        let message: string;
 
         try {
+            console.log('[DIAGNOSTIC] Verificando se o usuário master existe:', email);
             userRecord = await auth.getUserByEmail(email);
-            // User exists, update password to ensure it is correct
+            console.log('[DIAGNOSTIC] Usuário master encontrado. UID:', userRecord.uid);
             await auth.updateUser(userRecord.uid, { password: password });
+            console.log('[DIAGNOSTIC] Senha do usuário master atualizada.');
+            message = 'Usuário administrador já existe e foi atualizado.';
         } catch(error: any) {
             if (error.code === 'auth/user-not-found') {
-                // User does not exist, create them
-                 userRecord = await auth.createUser({
+                console.log('[DIAGNOSTIC] Usuário master não encontrado. Criando novo usuário...');
+                userRecord = await auth.createUser({
                     email: email,
                     password: password,
                     displayName: 'Admin Master',
                 });
+                console.log('[DIAGNOSTIC] Usuário master criado com sucesso. UID:', userRecord.uid);
                 message = 'Usuário administrador inicial criado com sucesso.';
             } else {
-                // Another error occurred
+                console.error('[DIAGNOSTIC] Erro ao buscar/criar usuário no Auth:', error);
                 throw error;
             }
         }
@@ -498,22 +500,27 @@ export async function createInitialAdminUser(): Promise<ActionState> {
         const userDoc = await userDocRef.get();
 
         if (!userDoc.exists) {
+            console.log('[DIAGNOSTIC] Perfil do usuário no Firestore não encontrado. Criando...');
             await userDocRef.set({
                 name: 'Admin Master',
                 email: email,
                 role: 'ADMIN',
             });
-             return { status: 'success', message: message};
+            console.log('[DIAGNOSTIC] Perfil do usuário no Firestore criado.');
         } else {
-             // If user document exists, ensure role is correct
+             console.log('[DIAGNOSTIC] Perfil do usuário no Firestore encontrado. Verificando papel...');
              if(userDoc.data()?.role !== 'ADMIN') {
                 await userDocRef.update({ role: 'ADMIN' });
+                console.log('[DIAGNOSTIC] Papel do usuário atualizado para ADMIN.');
+             } else {
+                console.log('[DIAGNOSTIC] Papel do usuário já é ADMIN.');
              }
-             return { status: 'success', message: 'Usuário administrador já configurado.'};
         }
+        
+        return { status: 'success', message: message };
 
     } catch (error) {
-        console.error("Error creating/updating initial admin user:", error);
+        console.error("[DIAGNOSTIC] Erro crítico na função createInitialAdminUser:", error);
         return { status: 'error', message: 'Falha ao criar/atualizar usuário administrador inicial.' };
     }
 }
