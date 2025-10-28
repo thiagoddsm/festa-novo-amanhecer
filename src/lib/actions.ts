@@ -2,8 +2,6 @@
 
 import { z } from 'zod';
 import { generateRandomId } from './data';
-import { summarizeSalesReport } from '@/ai/flows/sales-report-summarization';
-import { seedPdvsAndMenus } from './seed';
 
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore, collection, addDoc, serverTimestamp, where, query, getDocs, doc, updateDoc, Timestamp, writeBatch, documentId, getDoc, deleteDoc } from 'firebase/firestore';
@@ -277,36 +275,6 @@ export async function processSale(
 }
 
 
-// --- AI Summary ---
-export async function generateSummary(
-    prevState: ActionState | undefined,
-    formData: FormData
-): Promise<ActionState> {
-    try {
-        const salesData = await getSalesReportFromFirestore();
-        
-        if (salesData.total_vendido_centavos === 0 && salesData.total_recarregado_centavos === 0) {
-            return {
-                status: 'success',
-                message: 'Nenhuma venda registrada para gerar o relatório.',
-                data: { summary: "Não há dados de vendas ou recargas para gerar um resumo. Realize algumas transações e tente novamente."}
-            }
-        }
-        
-        const summaryResponse = await summarizeSalesReport({ salesData });
-
-        return {
-            status: 'success',
-            message: 'Relatório gerado.',
-            data: { summary: summaryResponse.summary }
-        };
-
-    } catch(error) {
-        console.error(error);
-        return { status: 'error', message: 'Erro ao gerar relatório com IA.' };
-    }
-}
-
 // --- Check Balance ---
 const CheckBalanceSchema = z.object({
   qr_code_id: z.string().min(1, 'QR Code ID é obrigatório.'),
@@ -444,50 +412,4 @@ export async function deleteMenuItem(pdvId: string, itemId: string): Promise<Act
   } catch (error) {
     return { status: 'error', message: 'Erro ao excluir item.' };
   }
-}
-
-
-// --- REPORTING (SERVER-SIDE) ---
-async function getSalesReportFromFirestore() {
-    const transactionsSnapshot = await getDocs(collection(db, 'transactions'));
-    const allTransactions = transactionsSnapshot.docs.map(doc => doc.data());
-
-    const total_vendido_centavos = allTransactions
-        .filter(t => t.tipo === 'VENDA')
-        .reduce((sum, t) => sum + t.valor_centavos, 0);
-
-    const total_recarregado_centavos = allTransactions
-        .filter(t => t.tipo === 'RECARGA')
-        .reduce((sum, t) => sum + t.valor_centavos, 0);
-
-    const pdvsSnapshot = await getDocs(collection(db, 'pdvs'));
-    const pdvs = pdvsSnapshot.docs.map(doc => ({id: doc.id, ...doc.data() as Pdv}));
-
-
-    const vendas_por_pdv = pdvs
-        .map(pdv => {
-            const total_centavos = allTransactions
-                .filter(t => t.pdv_id === pdv.id && t.tipo === 'VENDA')
-                .reduce((sum, t) => sum + t.valor_centavos, 0);
-            return {
-                pdv_id: pdv.id,
-                nome: pdv.nome,
-                total_centavos,
-            }
-        });
-
-    return { total_vendido_centavos, total_recarregado_centavos, vendas_por_pdv: vendas_por_pdv };
-}
-
-
-// --- Database Seeding ---
-export async function seedDatabase(): Promise<ActionState> {
-    try {
-        await seedPdvsAndMenus(db);
-        return { status: 'success', message: 'PDVs e cardápios iniciais foram cadastrados com sucesso!' };
-    } catch (error) {
-        console.error("Error seeding database:", error);
-        const errorMessage = error instanceof Error ? error.message : 'Ocorreu um erro desconhecido.';
-        return { status: 'error', message: `Erro ao popular banco de dados: ${errorMessage}` };
-    }
 }

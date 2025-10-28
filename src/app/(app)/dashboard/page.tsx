@@ -1,18 +1,15 @@
 'use client'
-import { getPdvNameById, seedDatabase } from '@/lib/actions';
+import { getPdvNameById } from '@/lib/actions';
 import { formatCurrency, formatDateTime } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import AiSummary from '@/components/dashboard/AiSummary';
-import { DollarSign, CreditCard, ShoppingBag, TrendingUp, TestTube, Users } from 'lucide-react';
+import { DollarSign, CreditCard, ShoppingBag, TrendingUp, Users } from 'lucide-react';
 import StatCard from '@/components/dashboard/StatCard';
 import { useState, useEffect, useMemo } from 'react';
 import type { Card as CardType, Pdv, Transaction, TransactionDetails } from '@/lib/definitions';
-import { Button } from '@/components/ui/button';
 import { useFirestore } from '@/firebase';
 import { collection, onSnapshot, query, orderBy, limit, Timestamp } from 'firebase/firestore';
-import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
 
@@ -44,34 +41,7 @@ const formatTimestamp = (ts: Timestamp | Date) => {
   return ts;
 }
 
-function SeedDataButton() {
-    const { toast } = useToast();
-    const [isSeeding, setIsSeeding] = useState(false);
-
-    const handleSeed = async () => {
-        setIsSeeding(true);
-        toast({ title: "Populando banco de dados...", description: "Isso pode levar alguns segundos." });
-        try {
-            const result = await seedDatabase();
-            if (result.status === 'success') {
-                toast({ title: "Sucesso!", description: result.message });
-            } else {
-                toast({ variant: 'destructive', title: "Erro", description: result.message });
-            }
-        } catch (error) {
-            toast({ variant: 'destructive', title: "Erro Inesperado", description: "Não foi possível popular o banco de dados." });
-        } finally {
-            setIsSeeding(false);
-        }
-    };
-
-    return <Button onClick={handleSeed} disabled={isSeeding}>Popular Dados Iniciais (PDVs e Cardápios)</Button>
-}
-
-
 export default function DashboardPage() {
-  const { toast } = useToast();
-  
   // Fetch data in real-time from Firestore
   const allCards = useCollection<CardType>('cards');
   const allTransactions = useCollection<Transaction>('transactions');
@@ -162,57 +132,43 @@ export default function DashboardPage() {
         )}
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle>Transações Recentes</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {isLoading ? <Skeleton className="h-96" /> : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>PDV</TableHead>
-                    <TableHead>Tipo</TableHead>
-                    <TableHead>Valor</TableHead>
-                    <TableHead>Data</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {recentTransactions.length > 0 ? recentTransactions.map((tx) => {
-                    return (
-                      <TableRow key={tx.id}>
-                        <TableCell>{pdvNames[tx.pdv_id] || 'Carregando...'}</TableCell>
-                        <TableCell>
-                          <Badge variant={tx.tipo === 'VENDA' ? 'destructive' : 'secondary'}>{tx.tipo}</Badge>
-                        </TableCell>
-                        <TableCell>{formatCurrency(tx.valor_centavos)}</TableCell>
-                        <TableCell>{formatDateTime(formatTimestamp(tx.created_at))}</TableCell>
-                      </TableRow>
-                    )
-                  }) : (
-                    <TableRow>
-                      <TableCell colSpan={4} className="text-center">Nenhuma transação recente.</TableCell>
+      <Card>
+        <CardHeader>
+          <CardTitle>Transações Recentes</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? <Skeleton className="h-96" /> : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>PDV</TableHead>
+                  <TableHead>Tipo</TableHead>
+                  <TableHead>Valor</TableHead>
+                  <TableHead>Data</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {recentTransactions.length > 0 ? recentTransactions.map((tx) => {
+                  return (
+                    <TableRow key={tx.id}>
+                      <TableCell>{pdvNames[tx.pdv_id] || 'Carregando...'}</TableCell>
+                      <TableCell>
+                        <Badge variant={tx.tipo === 'VENDA' ? 'destructive' : 'secondary'}>{tx.tipo}</Badge>
+                      </TableCell>
+                      <TableCell>{formatCurrency(tx.valor_centavos)}</TableCell>
+                      <TableCell>{formatDateTime(formatTimestamp(tx.created_at))}</TableCell>
                     </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
-        <div className="flex flex-col gap-6">
-          <AiSummary />
-          <Card>
-              <CardHeader>
-                  <CardTitle>Configurações</CardTitle>
-                  <CardDescription>Ações administrativas para o sistema.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                  <SeedDataButton />
-              </CardContent>
-          </Card>
-        </div>
-      </div>
+                  )
+                }) : (
+                  <TableRow>
+                    <TableCell colSpan={4} className="text-center">Nenhuma transação recente.</TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
