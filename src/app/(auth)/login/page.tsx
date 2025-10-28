@@ -32,15 +32,10 @@ function LoginPageContent() {
 
   // Redirect if already logged in
   useEffect(() => {
-    if (auth) {
-        const unsubscribe = auth.onAuthStateChanged(user => {
-            if (user) {
-                router.push('/dashboard');
-            } else {
-                setIsCheckingAuth(false);
-            }
-        });
-        return () => unsubscribe();
+    if (auth?.currentUser) {
+        router.push('/dashboard');
+    } else {
+        setIsCheckingAuth(false);
     }
   }, [auth, router]);
 
