@@ -20,14 +20,15 @@ export function SidebarNav() {
     const pathname = usePathname();
     const { user } = useAuth();
 
+    if (!user) {
+        return null; // Don't render anything if user is not loaded yet
+    }
+
     // Filter nav items based on user role
     const navItems = allNavItems.filter(item => user?.role && item.roles.includes(user.role));
 
-    // If PDV user, redirect to /pos and don't show sidebar if it only has one item
-    if (user?.role === 'PDV' && navItems.length === 1 && pathname !== '/pos') {
-        return null;
-    }
-     if (user?.role === 'PDV' && navItems.length <= 1) {
+    // If user is PDV, their layout is different and doesn't include the main sidebar
+    if (user.role === 'PDV') {
         return null;
     }
 

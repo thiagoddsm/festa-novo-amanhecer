@@ -4,10 +4,9 @@ import { SidebarProvider, Sidebar, SidebarInset } from "@/components/ui/sidebar"
 import { SidebarNav } from "@/components/layout/SidebarNav";
 import { Header } from "@/components/layout/Header";
 import { FirebaseClientProvider } from "@/firebase";
-import { AuthProvider } from "@/hooks/use-auth-context";
+import { AuthProvider, useAuth } from "@/hooks/use-auth-context";
 import { usePathname, useRouter } from "next/navigation";
 import { FullPageLoader } from "@/components/ui/loader";
-import { useAuth } from "@/hooks/use-auth-context";
 import { useEffect } from "react";
 
 
@@ -29,7 +28,7 @@ function AppContent({ children }: { children: React.ReactNode }) {
         }
     }, [user, loading, router, pathname]);
 
-    // While checking auth state, show a full-page loader.
+    // While checking auth state or if there's no user, show a full-page loader.
     if (loading || !user) {
         return <FullPageLoader />;
     }
@@ -37,6 +36,15 @@ function AppContent({ children }: { children: React.ReactNode }) {
     // If user is PDV and we are redirecting, show loader
     if (user.role === 'PDV' && pathname !== '/pos') {
         return <FullPageLoader />;
+    }
+
+    // Don't render sidebar for PDV users as they only have one page
+    if (user.role === 'PDV') {
+        return (
+             <main className="p-4 lg:p-6 bg-background h-screen">
+                {children}
+            </main>
+        )
     }
 
     // Once the user object is available, render the app layout.

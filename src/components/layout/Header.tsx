@@ -4,7 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Button } from "../ui/button";
 import { LogOut } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth-context";
-
+import { useAuth as useFirebaseAuth } from "@/firebase";
 
 const getTitleFromPathname = (pathname: string): string => {
     switch (pathname) {
@@ -29,14 +29,14 @@ export function Header() {
     const pathname = usePathname();
     const router = useRouter();
     const { user } = useAuth();
+    const firebaseAuth = useFirebaseAuth();
     const title = getTitleFromPathname(pathname);
     
     const handleLogout = async () => {
-        const res = await fetch('/api/logout', {
-            method: 'POST',
-        });
-        if (res.ok) {
-            router.push('/login');
+        if (firebaseAuth) {
+            await firebaseAuth.signOut();
+            // The AuthProvider will detect the change and the layout will redirect to /login
+            router.push('/login'); 
         }
     }
     

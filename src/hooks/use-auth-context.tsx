@@ -12,7 +12,6 @@ import { useAuth as useFirebaseAuth } from '@/firebase';
 import { doc, getDoc, getFirestore } from 'firebase/firestore';
 import type { AuthenticatedUser } from '@/lib/auth';
 import { mapFirebaseAuthToAuthenticatedUser } from '@/lib/auth';
-import { FullPageLoader } from '@/components/ui/loader';
 
 type AuthContextType = {
   user: AuthenticatedUser | null;

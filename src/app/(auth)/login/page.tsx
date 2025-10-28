@@ -14,6 +14,8 @@ import { Loader2 } from 'lucide-react';
 import { createInitialAdminUser } from '@/lib/actions';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
+import { useAuth, AuthProvider } from '@/hooks/use-auth-context';
+import { FullPageLoader } from '@/components/ui/loader';
 
 const loginSchema = z.object({
   email: z.string().email('Por favor, insira um e-mail válido.'),
@@ -24,6 +26,7 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 
 function LoginPageContent() {
   const auth = useFirebaseAuth();
+  const { user, loading } = useAuth();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
@@ -35,6 +38,18 @@ function LoginPageContent() {
       password: '',
     },
   });
+
+  useEffect(() => {
+    // If the user is already authenticated, redirect them based on role.
+    if (!loading && user) {
+        if (user.role === 'PDV') {
+            router.replace('/pos');
+        } else {
+            router.replace('/dashboard');
+        }
+    }
+  }, [user, loading, router]);
+
 
   const onSubmit = async (data: LoginFormValues) => {
     setIsLoading(true);
@@ -49,26 +64,9 @@ function LoginPageContent() {
     }
 
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, data.email, data.password);
-      const idToken = await userCredential.user.getIdToken();
-
-      // Send the token to the server to create a session cookie
-      const res = await fetch('/api/login', {
-          method: 'POST',
-          headers: {
-              'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ idToken }),
-      });
-
-      if(res.ok) {
-        // Redirect to dashboard after session is created
-        router.push('/dashboard');
-      } else {
-        const errorData = await res.json();
-        throw new Error(errorData.error || 'Falha ao criar sessão');
-      }
-
+      await signInWithEmailAndPassword(auth, data.email, data.password);
+      // The onIdTokenChanged listener in AuthProvider will handle the user state update.
+      // The useEffect above will handle the redirect.
     } catch (error: any) {
       console.error('[DIAGNOSTIC] Erro detalhado no login:', error);
       let message = 'Ocorreu um erro ao fazer login.';
@@ -100,6 +98,10 @@ function LoginPageContent() {
           toast({ title: 'Erro Crítico', description: 'Falha ao configurar usuário administrador inicial.'});
       })
   }, [toast]);
+
+  if (loading || user) {
+    return <FullPageLoader />; // Show loader while redirecting
+  }
   
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
@@ -155,7 +157,9 @@ function LoginPageContent() {
 export default function LoginPage() {
     return (
         <FirebaseClientProvider>
-            <LoginPageContent />
+            <AuthProvider>
+                <LoginPageContent />
+            </AuthProvider>
         </FirebaseClientProvider>
     )
 }
