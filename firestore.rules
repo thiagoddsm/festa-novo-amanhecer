@@ -1,71 +1,51 @@
 /**
- * @fileOverview
- * Core Philosophy: This ruleset enforces strict, path-based access control for a cashless payment system.
- * It prioritizes Authorization Independence by denormalizing data (specifically, the cardId in the transactions subcollection) to avoid costly `get()` calls in security rules.
+ * @file Firestore Security Rules
+ * @description This ruleset is configured for maximum testing flexibility, granting all possible permissions to all users.
  *
- * Data Structure:
- * - /cards/{cardId}: Stores card details.
- * - /cards/{cardId}/transactions/{transactionId}: Stores transactions for a specific card.
- * - /points_of_sale/{pdvId}: Stores details for each point of sale.
+ * Core Philosophy: All reads and writes are allowed without authentication or authorization checks. This is for testing purposes only and should NEVER be used in a production environment.
+ * Data Structure: The rules cover three top-level collections: /cards/{cardId}, /cards/{cardId}/transactions/{transactionId}, and /points_of_sale/{pdvId}.
+ * Key Security Decisions: All access is public and unrestricted.
  *
- * Key Security Decisions:
- * - Transactions are secured by checking the API key in the points_of_sale collection.
- * - No user listing is allowed for any collection to prevent information disclosure.
- * - The default security posture is deny-all unless explicitly allowed by a rule.
- *
- * Denormalization for Authorization:
- * - The `transactions` subcollection under each card denormalizes `cardId` to avoid relying on parent document data for security rules.
+ * WARNING: This configuration is INSECURE and should only be used for local testing.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Allows read and write access to card documents.
+     * @description Allows all reads and writes to the cards collection.
      * @path /cards/{cardId}
-     * @allow (get, list) if false;
-     * @allow (create, update, delete) if false;
-     * @deny (get, list) Always denies listing or getting all cards.
-     * @deny (create, update, delete) Always denies creating, updating, or deleting cards.
-     * @principle Data for Cards is NOT publicly accessible
+     * @allow (get, list, create, update, delete) Any user can perform any operation.
+     * @deny No requests are denied.
+     * @principle Unrestricted access for testing.
      */
     match /cards/{cardId} {
-      allow get, list: if false;
-      allow create, update, delete: if false;
+      allow get, list: if true;
+      allow create, update, delete: if true;
     }
 
     /**
-     * @description Allows managing transactions for a specific card.
+     * @description Allows all reads and writes to the transactions subcollection.
      * @path /cards/{cardId}/transactions/{transactionId}
-     * @allow create: if false;
-     * @allow update: if false;
-     * @allow delete: if false;
-     * @allow get: if false;
-     * @allow list: if false;
-     * @deny create: Always denies creation of transactions.
-     * @deny update: Always denies updating transactions.
-     * @deny delete: Always denies deleting transactions.
-     * @deny get: Always denies getting transactions.
-     * @deny list: Always denies listing transactions.
-     * @principle Enforces that transactions are only accessible or writable by authorized PDVs with the correct API key.
+     * @allow (get, list, create, update, delete) Any user can perform any operation.
+     * @deny No requests are denied.
+     * @principle Unrestricted access for testing.
      */
     match /cards/{cardId}/transactions/{transactionId} {
-      allow get, list: if false;
-      allow create, update, delete: if false;
+      allow get, list: if true;
+      allow create, update, delete: if true;
     }
 
     /**
-     * @description Allows read and write access to point of sale documents.
+     * @description Allows all reads and writes to the points_of_sale collection.
      * @path /points_of_sale/{pdvId}
-     * @allow get, list: if false;
-     * @allow create, update, delete: if false;
-     * @deny get, list: Always denies listing or getting all point of sales.
-     * @deny create, update, delete: Always denies creating, updating, or deleting point of sales.
-     * @principle Data for PointOfSale is NOT publicly accessible
+     * @allow (get, list, create, update, delete) Any user can perform any operation.
+     * @deny No requests are denied.
+     * @principle Unrestricted access for testing.
      */
     match /points_of_sale/{pdvId} {
-      allow get, list: if false;
-      allow create, update, delete: if false;
+      allow get, list: if true;
+      allow create, update, delete: if true;
     }
   }
 }
