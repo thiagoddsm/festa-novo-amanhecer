@@ -5,14 +5,13 @@ import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useRouter } from 'next/navigation';
 import { signInWithEmailAndPassword } from 'firebase/auth';
-import { useAuth, FirebaseClientProvider, useFirebaseApp } from '@/firebase';
+import { useAuth, FirebaseClientProvider } from '@/firebase';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, QrCode } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { createInitialAdminUser } from '@/lib/actions';
 import Image from 'next/image';
 import { FullPageLoader } from '@/components/ui/loader';
@@ -29,27 +28,14 @@ function LoginPageContent() {
   const router = useRouter();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
-  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+  const [isAuthReady, setIsAuthReady] = useState(false);
 
-  // Check auth state
+  // Check if auth is initialized. If user is logged in, layout will redirect them.
   useEffect(() => {
     if (auth) {
-        const unsubscribe = auth.onAuthStateChanged(user => {
-            if (user) {
-                // User is signed in, redirect to dashboard.
-                router.replace('/dashboard');
-            } else {
-                // User is signed out, show the login form.
-                setIsCheckingAuth(false);
-            }
-        });
-        // Cleanup subscription on unmount
-        return () => unsubscribe();
-    } else if (isCheckingAuth) {
-        // Auth is not ready yet, wait for it.
-        // If it never becomes ready, this will show loader indefinitely.
+      setIsAuthReady(true);
     }
-  }, [auth, router, isCheckingAuth]);
+  }, [auth]);
 
 
   const form = useForm<LoginFormValues>({
@@ -73,7 +59,8 @@ function LoginPageContent() {
     }
     try {
       await signInWithEmailAndPassword(auth, data.email, data.password);
-      // The onAuthStateChanged listener will handle the redirect
+      // On success, the layout's auth listener will handle the redirect.
+      router.push('/dashboard');
     } catch (error: any) {
       console.error(error);
       let message = 'Ocorreu um erro ao fazer login.';
@@ -98,7 +85,7 @@ function LoginPageContent() {
       })
   }, [toast]);
   
-  if (isCheckingAuth) {
+  if (!isAuthReady) {
     return <FullPageLoader />;
   }
 
