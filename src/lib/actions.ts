@@ -10,17 +10,12 @@ import type { Card, MenuItem, Pdv } from './definitions';
 import { revalidatePath } from 'next/cache';
 
 // Helper to ensure Firebase Admin is initialized only once
-let adminApp;
 if (!getApps().length) {
-    adminApp = initializeApp({
-        // You might need to set credentials for admin SDK
-    });
-} else {
-    adminApp = getApp();
+    initializeApp();
 }
 
-const db = getFirestore(adminApp);
-const auth = getAuth(adminApp);
+const db = getFirestore();
+const auth = getAuth();
 
 
 export type ActionState = {
@@ -479,7 +474,7 @@ export async function createInitialAdminUser(): Promise<ActionState> {
             console.log('[DIAGNOSTIC] Usuário master encontrado. UID:', userRecord.uid);
             await auth.updateUser(userRecord.uid, { password: password });
             console.log('[DIAGNOSTIC] Senha do usuário master atualizada.');
-            message = 'Usuário administrador já existe e foi atualizado.';
+            message = 'Usuário administrador já existe e senha foi atualizada.';
         } catch(error: any) {
             if (error.code === 'auth/user-not-found') {
                 console.log('[DIAGNOSTIC] Usuário master não encontrado. Criando novo usuário...');

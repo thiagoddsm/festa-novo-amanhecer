@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { LayoutDashboard, ShoppingCart, WalletCards, Users, List, UserCog } from "lucide-react";
 import { SidebarHeader, SidebarMenu, SidebarMenuItem, SidebarMenuButton } from "@/components/ui/sidebar";
 import Image from "next/image";
-import type { AuthenticatedUser } from "@/lib/auth";
+import { useAuth } from "@/hooks/use-auth-context";
 
 const allNavItems = [
     { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', roles: ['ADMIN', 'CAIXA'] },
@@ -16,8 +16,9 @@ const allNavItems = [
     { href: '/admin/users', icon: UserCog, label: 'Usuários', roles: ['ADMIN'] },
 ]
 
-export function SidebarNav({ user }: { user: AuthenticatedUser | null }) {
+export function SidebarNav() {
     const pathname = usePathname();
+    const { user } = useAuth();
 
     // Filter nav items based on user role
     const navItems = allNavItems.filter(item => user?.role && item.roles.includes(user.role));

@@ -3,9 +3,8 @@ import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useRouter } from 'next/navigation';
 import { signInWithEmailAndPassword } from 'firebase/auth';
-import { useAuth, FirebaseClientProvider } from '@/firebase';
+import { useAuth as useFirebaseAuth, FirebaseClientProvider } from '@/firebase';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -14,6 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import { createInitialAdminUser } from '@/lib/actions';
 import Image from 'next/image';
+import { useRouter } from 'next/navigation';
 
 const loginSchema = z.object({
   email: z.string().email('Por favor, insira um e-mail válido.'),
@@ -23,10 +23,10 @@ const loginSchema = z.object({
 type LoginFormValues = z.infer<typeof loginSchema>;
 
 function LoginPageContent() {
-  const auth = useAuth();
-  const router = useRouter();
+  const auth = useFirebaseAuth();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
+  const router = useRouter();
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -49,15 +49,31 @@ function LoginPageContent() {
     }
 
     try {
-      await signInWithEmailAndPassword(auth, data.email, data.password);
-      router.push('/dashboard');
+      const userCredential = await signInWithEmailAndPassword(auth, data.email, data.password);
+      const idToken = await userCredential.user.getIdToken();
+
+      // Send the token to the server to create a session cookie
+      const res = await fetch('/api/login', {
+          method: 'POST',
+          headers: {
+              'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ idToken }),
+      });
+
+      if(res.ok) {
+        // Redirect to dashboard after session is created
+        router.push('/dashboard');
+      } else {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Falha ao criar sessão');
+      }
+
     } catch (error: any) {
       console.error('[DIAGNOSTIC] Erro detalhado no login:', error);
       let message = 'Ocorreu um erro ao fazer login.';
       if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
           message = 'E-mail ou senha inválidos.';
-      } else {
-          message = `Erro: ${error.message}`;
       }
       toast({
         variant: 'destructive',
@@ -69,12 +85,13 @@ function LoginPageContent() {
     }
   };
 
+  // This effect runs once on mount to ensure the admin user exists.
   useEffect(() => {
       createInitialAdminUser().then(result => {
           if (result && result.message) {
-              if (result.status === 'success') {
+              if (result.status === 'success' && result.message.includes('criado')) {
                 toast({ title: 'Configuração do Sistema', description: result.message });
-              } else {
+              } else if (result.status === 'error') {
                 toast({ title: 'Aviso de Configuração', description: result.message, variant: 'destructive'});
               }
           }

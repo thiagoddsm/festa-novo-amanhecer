@@ -4,64 +4,65 @@ import { SidebarProvider, Sidebar, SidebarInset } from "@/components/ui/sidebar"
 import { SidebarNav } from "@/components/layout/SidebarNav";
 import { Header } from "@/components/layout/Header";
 import { FirebaseClientProvider } from "@/firebase";
-import { useUserData } from "@/hooks/use-user-data";
-import { useEffect } from "react";
+import { AuthProvider } from "@/hooks/use-auth-context";
 import { usePathname, useRouter } from "next/navigation";
 import { FullPageLoader } from "@/components/ui/loader";
-import type { AuthenticatedUser } from "@/lib/auth";
+import { useAuth } from "@/hooks/use-auth-context";
+import { useEffect } from "react";
 
-function AppPagesLayout({ children }: { children: React.ReactNode }) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const { user, loading } = useUserData();
 
-  useEffect(() => {
-    // If loading is finished and there's no user, redirect to login.
-    if (!loading && !user) {
-      router.replace("/login");
+function AppContent({ children }: { children: React.ReactNode }) {
+    const { user, loading } = useAuth();
+    const router = useRouter();
+    const pathname = usePathname();
+
+    useEffect(() => {
+        // If not loading and no user, redirect to login
+        if (!loading && !user) {
+            router.replace('/login');
+            return;
+        }
+
+        // If user is PDV and not on POS page, redirect them.
+        if (user && user.role === 'PDV' && pathname !== '/pos') {
+            router.replace('/pos');
+        }
+    }, [user, loading, router, pathname]);
+
+    // While checking auth state, show a full-page loader.
+    if (loading || !user) {
+        return <FullPageLoader />;
     }
-  }, [user, loading, router]);
+    
+    // If user is PDV and we are redirecting, show loader
+    if (user.role === 'PDV' && pathname !== '/pos') {
+        return <FullPageLoader />;
+    }
 
-  // While checking auth state, show a full-page loader.
-  if (loading) {
-    return <FullPageLoader />;
-  }
-
-  // If loading is done, but there's no user, the effect above has already
-  // started the redirect. Rendering null prevents a flash of app content.
-  if (!user) {
-    return null;
-  }
-  
-  // If user is PDV and not on POS page, redirect them.
-  if (user.role === 'PDV' && pathname !== '/pos') {
-    router.replace('/pos');
-    return <FullPageLoader />;
-  }
-
-  // Once the user object is available, render the app layout.
-  return (
-      <SidebarProvider>
-          <Sidebar>
-              <SidebarNav user={user} />
-          </Sidebar>
-          <SidebarInset>
-              <Header user={user} />
-              <main className="p-4 lg:p-6 bg-background">
-                  {children}
-              </main>
-          </SidebarInset>
-      </SidebarProvider>
-  );
+    // Once the user object is available, render the app layout.
+    return (
+        <SidebarProvider>
+            <Sidebar>
+                <SidebarNav />
+            </Sidebar>
+            <SidebarInset>
+                <Header />
+                <main className="p-4 lg:p-6 bg-background">
+                    {children}
+                </main>
+            </SidebarInset>
+        </SidebarProvider>
+    );
 }
-
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <FirebaseClientProvider>
-      <AppPagesLayout>
-        {children}
-      </AppPagesLayout>
+      <AuthProvider>
+        <AppContent>
+          {children}
+        </AppContent>
+      </AuthProvider>
     </FirebaseClientProvider>
   );
 }

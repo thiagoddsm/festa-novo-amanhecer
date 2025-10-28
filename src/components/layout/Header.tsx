@@ -1,10 +1,9 @@
 'use client';
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { usePathname, useRouter } from "next/navigation";
-import type { AuthenticatedUser } from "@/lib/auth";
-import { useAuth } from "@/firebase";
 import { Button } from "../ui/button";
 import { LogOut } from "lucide-react";
+import { useAuth } from "@/hooks/use-auth-context";
 
 
 const getTitleFromPathname = (pathname: string): string => {
@@ -26,15 +25,17 @@ const getTitleFromPathname = (pathname: string): string => {
     }
 }
 
-export function Header({ user }: { user: AuthenticatedUser | null }) {
+export function Header() {
     const pathname = usePathname();
-    const title = getTitleFromPathname(pathname);
-    const auth = useAuth();
     const router = useRouter();
-
+    const { user } = useAuth();
+    const title = getTitleFromPathname(pathname);
+    
     const handleLogout = async () => {
-        if (auth) {
-            await auth.signOut();
+        const res = await fetch('/api/logout', {
+            method: 'POST',
+        });
+        if (res.ok) {
             router.push('/login');
         }
     }
