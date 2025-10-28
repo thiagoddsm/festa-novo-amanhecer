@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from 'react';
 import { onIdTokenChanged, type User } from 'firebase/auth';
-import { useAuth as useFirebaseAuth } from '@/firebase';
+import { useAuth as useFirebaseAuth, errorEmitter, FirestorePermissionError } from '@/firebase';
 import { doc, getDoc, getFirestore } from 'firebase/firestore';
 import type { AuthenticatedUser } from '@/lib/auth';
 import { mapFirebaseAuthToAuthenticatedUser } from '@/lib/auth';
@@ -31,13 +31,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
     }
 
-    const unsubscribe = onIdTokenChanged(auth, async (firebaseUser: User | null) => {
+    const unsubscribe = onIdTokenChanged(auth, (firebaseUser: User | null) => {
       if (firebaseUser) {
-        try {
-            const firestore = getFirestore(auth.app);
-            const userDocRef = doc(firestore, 'users', firebaseUser.uid);
-            const docSnap = await getDoc(userDocRef);
+        const firestore = getFirestore(auth.app);
+        const userDocRef = doc(firestore, 'users', firebaseUser.uid);
 
+        getDoc(userDocRef).then(docSnap => {
             if (docSnap.exists()) {
                 const userProfile = docSnap.data();
                 const authenticatedUser = mapFirebaseAuthToAuthenticatedUser(
@@ -46,19 +45,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 );
                 setUser(authenticatedUser);
             } else {
-                 console.error("User profile not found in Firestore. Signing out.");
-                 await auth.signOut();
+                 // This case should ideally not happen if user creation is robust.
+                 // It means Auth user exists but Firestore profile doesn't.
+                 auth.signOut();
                  setUser(null);
             }
-        } catch (error) {
-            console.error("Error fetching user profile:", error);
+        }).catch(error => {
+            // This is where permission errors will be caught.
+            const contextualError = new FirestorePermissionError({
+                operation: 'get',
+                path: userDocRef.path,
+            });
+            errorEmitter.emit('permission-error', contextualError);
+            auth.signOut(); // Log out the user as we can't verify their role.
             setUser(null);
-        }
+        }).finally(() => {
+            setLoading(false);
+        });
 
       } else {
         setUser(null);
+        setLoading(false);
       }
-      setLoading(false);
     });
 
     return () => unsubscribe();
