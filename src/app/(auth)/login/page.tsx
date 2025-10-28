@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useRouter } from 'next/navigation';
 import { signInWithEmailAndPassword } from 'firebase/auth';
-import { useAuth, FirebaseClientProvider } from '@/firebase';
+import { useAuth, FirebaseClientProvider, useFirebaseApp } from '@/firebase';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -15,6 +15,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2, QrCode } from 'lucide-react';
 import { createInitialAdminUser } from '@/lib/actions';
 import Image from 'next/image';
+import { FullPageLoader } from '@/components/ui/loader';
 
 const loginSchema = z.object({
   email: z.string().email('Por favor, insira um e-mail válido.'),
@@ -28,16 +29,28 @@ function LoginPageContent() {
   const router = useRouter();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
-   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
-  // Redirect if already logged in
+  // Check auth state
   useEffect(() => {
-    if (auth?.currentUser) {
-        router.push('/dashboard');
-    } else {
-        setIsCheckingAuth(false);
+    if (auth) {
+        const unsubscribe = auth.onAuthStateChanged(user => {
+            if (user) {
+                // User is signed in, redirect to dashboard.
+                router.replace('/dashboard');
+            } else {
+                // User is signed out, show the login form.
+                setIsCheckingAuth(false);
+            }
+        });
+        // Cleanup subscription on unmount
+        return () => unsubscribe();
+    } else if (isCheckingAuth) {
+        // Auth is not ready yet, wait for it.
+        // If it never becomes ready, this will show loader indefinitely.
     }
-  }, [auth, router]);
+  }, [auth, router, isCheckingAuth]);
+
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -60,7 +73,7 @@ function LoginPageContent() {
     }
     try {
       await signInWithEmailAndPassword(auth, data.email, data.password);
-      router.push('/dashboard'); // Redirect to dashboard on successful login
+      // The onAuthStateChanged listener will handle the redirect
     } catch (error: any) {
       console.error(error);
       let message = 'Ocorreu um erro ao fazer login.';
@@ -72,8 +85,7 @@ function LoginPageContent() {
         title: 'Erro de Login',
         description: message,
       });
-    } finally {
-      setIsLoading(false);
+       setIsLoading(false);
     }
   };
 
@@ -87,11 +99,7 @@ function LoginPageContent() {
   }, [toast]);
   
   if (isCheckingAuth) {
-    return (
-        <div className="flex min-h-screen items-center justify-center bg-background">
-            <Loader2 className="animate-spin h-8 w-8" />
-        </div>
-    )
+    return <FullPageLoader />;
   }
 
   return (
