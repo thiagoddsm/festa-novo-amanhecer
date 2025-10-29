@@ -44,3 +44,16 @@ export type MenuItem = {
     nome: string;
     preco_centavos: number;
 }
+
+export type Order = {
+    id: string;
+    pdv_id: string;
+    pdv_nome: string;
+    transaction_id: string;
+    cliente_nome: string;
+    status: 'PENDENTE' | 'EM_PREPARO' | 'PRONTO' | 'ENTREGUE';
+    created_at: Timestamp;
+    updated_at: Timestamp;
+    items: { id: string; name: string; price: number; quantity: number }[];
+    order_number: string;
+}

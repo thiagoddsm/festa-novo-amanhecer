@@ -192,6 +192,7 @@ const SaleItemSchema = z.object({
 const SaleSchema = z.object({
     qr_code_id: z.string().min(1, 'QR Code ID é obrigatório.'),
     pdv_id: z.string().min(1, 'Ponto de Venda é obrigatório.'),
+    pdv_nome: z.string().min(1, 'Nome do Ponto de Venda é obrigatório.'),
     items: z.array(SaleItemSchema).min(1, "O carrinho está vazio."),
     total_venda: z.coerce.number().positive('Valor da venda deve ser positivo.'),
 });
@@ -200,15 +201,15 @@ export async function processSale(
     prevState: ActionState | undefined,
     formData: FormData
 ): Promise<ActionState> {
+    const batch = db.batch();
     try {
-        const batch = db.batch();
-
         const items = JSON.parse(formData.get('items') as string);
         const total_venda = parseFloat(formData.get('total_venda') as string);
 
         const validatedFields = SaleSchema.safeParse({
             qr_code_id: formData.get('qr_code_id'),
             pdv_id: formData.get('pdv_id'),
+            pdv_nome: formData.get('pdv_nome'),
             items: items,
             total_venda: total_venda
         });
@@ -222,7 +223,7 @@ export async function processSale(
             };
         }
 
-        const { qr_code_id, pdv_id, total_venda: valor_venda_centavos } = validatedFields.data;
+        const { qr_code_id, pdv_id, pdv_nome, total_venda: valor_venda_centavos } = validatedFields.data;
 
         const cardsRef = db.collection('cards');
         const q = cardsRef.where('qr_code_id', '==', qr_code_id);
@@ -245,12 +246,14 @@ export async function processSale(
 
         const novo_saldo_centavos = card.saldo_centavos - valor_venda_centavos;
 
+        // 1. Update card balance
         const cardDocRef = db.collection('cards').doc(cardDoc.id);
         batch.update(cardDocRef, {
             saldo_centavos: novo_saldo_centavos,
             updated_at: Timestamp.now()
         });
         
+        // 2. Create transaction record
         const transactionRef = db.collection("transactions").doc();
         batch.set(transactionRef, {
           cartao_id: cardDoc.id,
@@ -259,6 +262,21 @@ export async function processSale(
           valor_centavos: valor_venda_centavos,
           created_at: Timestamp.now(),
           items: validatedFields.data.items.map(item => ({name: item.name, price: item.price, quantity: item.quantity}))
+        });
+
+        // 3. Create order record
+        const orderRef = db.collection('orders').doc();
+        const orderId = (await orderRef.get()).id; // Generate ID now to use in data
+        batch.set(orderRef, {
+            pdv_id: pdv_id,
+            pdv_nome: pdv_nome,
+            transaction_id: transactionRef.id,
+            cliente_nome: card.nome_cliente || 'Cliente',
+            status: 'PENDENTE', // Initial status
+            created_at: Timestamp.now(),
+            updated_at: Timestamp.now(),
+            items: validatedFields.data.items,
+            order_number: `#${orderId.substring(0, 4).toUpperCase()}`
         });
 
         await batch.commit();
@@ -415,4 +433,30 @@ export async function deleteMenuItem(pdvId: string, itemId: string): Promise<Act
   } catch (error) {
     return { status: 'error', message: 'Erro ao excluir item.' };
   }
+}
+
+// --- Order Status ---
+const UpdateOrderStatusSchema = z.object({
+  orderId: z.string(),
+  newStatus: z.enum(['PENDENTE', 'EM_PREPARO', 'PRONTO', 'ENTREGUE']),
+});
+
+export async function updateOrderStatus(orderId: string, newStatus: 'PENDENTE' | 'EM_PREPARO' | 'PRONTO' | 'ENTREGUE'): Promise<ActionState> {
+    const validated = UpdateOrderStatusSchema.safeParse({ orderId, newStatus });
+    if (!validated.success) {
+        return { status: 'error', message: 'Dados inválidos para atualizar o pedido.'};
+    }
+
+    try {
+        const orderRef = db.collection('orders').doc(orderId);
+        await orderRef.update({
+            status: newStatus,
+            updated_at: Timestamp.now(),
+        });
+        revalidatePath('/pos'); // Revalidate to show updated status
+        return { status: 'success', message: 'Status do pedido atualizado.' };
+    } catch (error) {
+        console.error("Error updating order status:", error);
+        return { status: 'error', message: 'Não foi possível atualizar o status do pedido.' };
+    }
 }

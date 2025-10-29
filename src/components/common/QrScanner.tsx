@@ -76,7 +76,10 @@ export default function QrScannerDialog({ open, onOpenChange, onScan }: QrScanne
                 onScan={handleScan}
                 onError={handleError}
                 onLoad={() => setLoading(false)}
-                constraints={{ audio: false, video: { facingMode: facingMode } }}
+                constraints={{ 
+                    audio: false, 
+                    video: { facingMode: facingMode } 
+                }}
                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}
             />
           ) : (

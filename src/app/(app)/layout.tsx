@@ -73,23 +73,15 @@ function AppContent({ children }: { children: React.ReactNode }) {
             </div>
        )
     }
-
-    // Don't render sidebar for PDV users as they only have one page
-    if (user.role === 'PDV') {
-        return (
-             <div className="flex flex-col h-screen">
-                <Header />
-                <MainContent>{children}</MainContent>
-            </div>
-        )
-    }
-
-    // Once the user object is available, render the app layout for ADMIN/CAIXA.
+    
+    // Once the user object is available, render the app layout for ADMIN/CAIXA/PDV.
     return (
         <SidebarProvider>
-            <Sidebar>
-                <SidebarNav />
-            </Sidebar>
+            { user.role !== 'PDV' && (
+                <Sidebar>
+                    <SidebarNav />
+                </Sidebar>
+            )}
             <SidebarInset>
                 <Header />
                 <MainContent>{children}</MainContent>
