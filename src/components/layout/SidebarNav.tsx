@@ -27,9 +27,16 @@ export function SidebarNav() {
     // Filter nav items based on user role
     const navItems = allNavItems.filter(item => user?.role && item.roles.includes(user.role));
 
-    // If user is PDV, their layout is different and doesn't include the main sidebar
-    if (user.role === 'PDV') {
-        return null;
+    // If user has no items to show (like a visitor), don't render the sidebar content
+    if (navItems.length === 0) {
+       return (
+         <SidebarHeader>
+            <div className="flex items-center gap-2">
+                  <Image src="/icon.svg" alt="FestaPay Logo" width={32} height={32} />
+                  <h2 className="text-lg font-semibold tracking-tight">FestaPay</h2>
+            </div>
+        </SidebarHeader>
+       )
     }
 
     return (

@@ -4,7 +4,7 @@ export type UserProfile = {
   id: string; // Firestore document ID (same as Firebase Auth UID)
   email: string;
   name: string;
-  role: 'ADMIN' | 'CAIXA' | 'PDV';
+  role: 'ADMIN' | 'CAIXA' | 'PDV' | 'VISITANTE';
   pdvId?: string; // Only for PDV users
 }
 

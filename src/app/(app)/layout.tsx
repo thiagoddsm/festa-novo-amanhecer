@@ -8,6 +8,8 @@ import { AuthProvider, useAuth } from "@/hooks/use-auth-context";
 import { usePathname, useRouter } from "next/navigation";
 import { FullPageLoader } from "@/components/ui/loader";
 import { useEffect } from "react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Lock } from "lucide-react";
 
 
 function AppContent({ children }: { children: React.ReactNode }) {
@@ -41,15 +43,45 @@ function AppContent({ children }: { children: React.ReactNode }) {
     if ((user.role === 'PDV' && pathname !== '/pos') || (user.role !== 'PDV' && pathname === '/pos')) {
         return <FullPageLoader />;
     }
+    
+    const MainContent = ({children}: {children: React.ReactNode}) => (
+      <main className="flex-grow p-4 lg:p-6 bg-background">
+          {children}
+      </main>
+    );
+
+    // Block visitor access and show a message.
+    if (user.role === 'VISITANTE') {
+       return (
+            <div className="flex flex-col h-screen">
+              <Header />
+              <MainContent>
+                 <div className="flex items-center justify-center h-full">
+                    <Card className="max-w-md text-center">
+                      <CardHeader>
+                        <CardTitle className="flex items-center justify-center gap-2">
+                          <Lock />
+                          Acesso Restrito
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <CardDescription>
+                          Você está logado como visitante. Por favor, aguarde um administrador liberar seu acesso para visualizar o conteúdo.
+                        </CardDescription>
+                      </CardContent>
+                    </Card>
+                 </div>
+              </MainContent>
+            </div>
+       )
+    }
 
     // Don't render sidebar for PDV users as they only have one page
     if (user.role === 'PDV') {
         return (
              <div className="flex flex-col h-screen">
                 <Header />
-                <main className="flex-grow p-4 lg:p-6 bg-background">
-                    {children}
-                </main>
+                <MainContent>{children}</MainContent>
             </div>
         )
     }
@@ -62,9 +94,7 @@ function AppContent({ children }: { children: React.ReactNode }) {
             </Sidebar>
             <SidebarInset>
                 <Header />
-                <main className="p-4 lg:p-6 bg-background">
-                    {children}
-                </main>
+                <MainContent>{children}</MainContent>
             </SidebarInset>
         </SidebarProvider>
     );

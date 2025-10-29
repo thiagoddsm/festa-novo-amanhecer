@@ -1,6 +1,6 @@
 import type { User as FirebaseUser } from 'firebase/auth';
 
-export type UserRole = 'ADMIN' | 'CAIXA' | 'PDV';
+export type UserRole = 'ADMIN' | 'CAIXA' | 'PDV' | 'VISITANTE';
 
 export type AuthenticatedUser = {
   uid: string;
@@ -20,7 +20,7 @@ export const mapFirebaseAuthToAuthenticatedUser = (
     uid: firebaseUser.uid,
     email: firebaseUser.email,
     name: userProfile.name || firebaseUser.displayName || "Usuário",
-    role: userProfile.role || 'CAIXA', // Default to CAIXA if role is not set
+    role: userProfile.role || 'VISITANTE', // Default to VISITANTE if role is not set
     pdvId: userProfile.pdvId,
   };
 };

@@ -1,30 +1,18 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { useForm } from 'react-hook-form';
-import { z } from 'zod';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
+import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { useAuth as useFirebaseAuth } from '@/firebase';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth-context';
 import { FullPageLoader } from '@/components/ui/loader';
-import { Separator } from '@/components/ui/separator';
 import { FirebaseClientProvider } from '@/firebase/client-provider';
 import { AuthProvider } from '@/hooks/use-auth-context';
 
-const loginSchema = z.object({
-  email: z.string().email('Por favor, insira um e-mail válido.'),
-  password: z.string().min(6, 'A senha deve ter pelo menos 6 caracteres.'),
-});
-
-type LoginFormValues = z.infer<typeof loginSchema>;
 
 const GoogleIcon = () => (
     <svg className="mr-2 h-4 w-4" role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -39,33 +27,18 @@ function LoginPageContent() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const router = useRouter();
 
-  const form = useForm<LoginFormValues>({
-    resolver: zodResolver(loginSchema),
-    defaultValues: { email: '', password: '' },
-  });
-
   useEffect(() => {
     if (!loading && user) {
-      router.replace(user.role === 'PDV' ? '/pos' : '/dashboard');
+      if (user.role === 'VISITANTE') {
+        // Stay on a simple page, or maybe redirect to a "waiting for approval" page.
+        // For now, let's keep them on a page that just shows the header.
+        router.replace('/dashboard'); // The layout will handle what they see.
+      } else {
+        router.replace(user.role === 'PDV' ? '/pos' : '/dashboard');
+      }
     }
   }, [user, loading, router]);
 
-  const onEmailSubmit = async (data: LoginFormValues) => {
-    if (!firebaseAuth) return;
-    setIsSubmitting(true);
-    try {
-      await signInWithEmailAndPassword(firebaseAuth, data.email, data.password);
-      // AuthProvider will detect the new user and handle the redirect
-    } catch (error: any) {
-      let message = 'Ocorreu um erro ao fazer login.';
-      if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
-        message = 'E-mail ou senha inválidos.';
-      }
-      toast({ variant: 'destructive', title: 'Erro de Login', description: message });
-      setIsSubmitting(false);
-    }
-    // No need for finally block to set isSubmitting to false, as successful login will unmount the component
-  };
 
   const onGoogleSubmit = async () => {
     if (!firebaseAuth) return;
@@ -94,47 +67,9 @@ function LoginPageContent() {
             <Image src="/icon.svg" alt="FestaPay Logo" width={48} height={48} />
           </div>
           <CardTitle>Bem-vindo ao FestaPay</CardTitle>
-          <CardDescription>Faça login para acessar o painel</CardDescription>
+          <CardDescription>Faça login com sua conta Google para continuar</CardDescription>
         </CardHeader>
         <CardContent>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onEmailSubmit)} className="space-y-4">
-              <FormField
-                control={form.control}
-                name="email"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Email</FormLabel>
-                    <FormControl><Input placeholder="seu@email.com" {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="password"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Senha</FormLabel>
-                    <FormControl><Input type="password" placeholder="******" {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <Button type="submit" className="w-full" disabled={isSubmitting}>
-                {isSubmitting ? <Loader2 className="animate-spin" /> : 'Entrar'}
-              </Button>
-            </form>
-          </Form>
-          <div className="relative my-6">
-            <Separator />
-            <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t" />
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-background px-2 text-muted-foreground">Ou continue com</span>
-            </div>
-          </div>
            <Button variant="outline" className="w-full" onClick={onGoogleSubmit} disabled={isSubmitting}>
                 {isSubmitting ? (
                     <Loader2 className="animate-spin" />

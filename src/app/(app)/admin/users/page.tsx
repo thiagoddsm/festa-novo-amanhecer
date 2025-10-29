@@ -9,7 +9,55 @@ import { UserCog } from 'lucide-react';
 import type { UserProfile } from '@/lib/definitions';
 import { type ColumnDef } from '@tanstack/react-table';
 import { Badge } from '@/components/ui/badge';
-import CreateUserDialog from '@/components/admin/CreateUserDialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { doc, updateDoc } from 'firebase/firestore';
+import { useToast } from '@/hooks/use-toast';
+
+
+const RoleSelector = ({ user }: { user: UserProfile }) => {
+  const [currentRole, setCurrentRole] = useState(user.role);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const firestore = useFirestore();
+  const { toast } = useToast();
+
+  const handleRoleChange = async (newRole: 'ADMIN' | 'CAIXA' | 'PDV' | 'VISITANTE') => {
+    if (newRole === currentRole) return;
+    setIsUpdating(true);
+    const userRef = doc(firestore, 'users', user.id);
+    try {
+      await updateDoc(userRef, { role: newRole });
+      setCurrentRole(newRole);
+      toast({
+        title: 'Sucesso!',
+        description: `A função de ${user.name} foi atualizada para ${newRole}.`
+      });
+    } catch (error) {
+      console.error("Failed to update role:", error);
+      toast({
+        variant: 'destructive',
+        title: 'Erro!',
+        description: 'Não foi possível atualizar a função do usuário.'
+      });
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  return (
+    <Select onValueChange={handleRoleChange} defaultValue={currentRole} disabled={isUpdating}>
+      <SelectTrigger className="w-[180px]">
+        <SelectValue placeholder="Selecione a função" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="ADMIN">Administrador</SelectItem>
+        <SelectItem value="CAIXA">Caixa</SelectItem>
+        <SelectItem value="PDV">Ponto de Venda (PDV)</SelectItem>
+        <SelectItem value="VISITANTE">Visitante</SelectItem>
+      </SelectContent>
+    </Select>
+  );
+};
+
 
 const columns: ColumnDef<UserProfile>[] = [
   {
@@ -24,8 +72,12 @@ const columns: ColumnDef<UserProfile>[] = [
     accessorKey: 'role',
     header: 'Função',
     cell: ({ row }) => {
-      const role = row.getValue('role') as string;
-      return <Badge>{role}</Badge>;
+       const user = row.original;
+       // Prevent role changes for the master admin
+       if (user.email === 'thiagoddsm@gmail.com') {
+         return <Badge>{user.role}</Badge>;
+       }
+       return <RoleSelector user={user} />;
     },
   },
    {
@@ -64,10 +116,6 @@ export default function UsersPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex justify-between items-center">
-        <div/>
-        <CreateUserDialog />
-      </div>
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -75,7 +123,7 @@ export default function UsersPage() {
             Gerenciar Usuários
           </CardTitle>
           <CardDescription>
-            Crie e gerencie os usuários do sistema.
+            Visualize e gerencie as funções dos usuários do sistema.
           </CardDescription>
         </CardHeader>
         <CardContent>

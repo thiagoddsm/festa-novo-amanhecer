@@ -27,53 +27,6 @@ export type ActionState = {
   data?: any;
 };
 
-// --- User Management (Admin) ---
-const UserSchema = z.object({
-  email: z.string().email('Email inválido.'),
-  password: z.string().min(6, 'A senha deve ter pelo menos 6 caracteres.'),
-  name: z.string().min(1, 'O nome é obrigatório.'),
-  role: z.enum(['ADMIN', 'CAIXA', 'PDV']),
-  pdvId: z.string().optional(),
-});
-
-export async function createUser(prevState: ActionState | undefined, formData: FormData): Promise<ActionState> {
-    const validatedFields = UserSchema.safeParse(Object.fromEntries(formData.entries()));
-    if(!validatedFields.success) {
-        return { status: 'error', message: 'Dados inválidos.', data: validatedFields.error.flatten().fieldErrors };
-    }
-
-    const { email, password, name, role, pdvId } = validatedFields.data;
-
-    try {
-        // Create user in Firebase Auth
-        const userRecord = await auth.createUser({
-            email,
-            password,
-            displayName: name,
-        });
-
-        // Store user profile with role in Firestore
-        await db.collection('users').doc(userRecord.uid).set({
-            name,
-            email,
-            role,
-            pdvId: role === 'PDV' ? pdvId : null,
-        });
-        
-        revalidatePath('/admin/users');
-        return { status: 'success', message: 'Usuário criado com sucesso!' };
-
-    } catch (error: any) {
-        console.error(error);
-        let message = 'Ocorreu um erro desconhecido.';
-        if (error.code === 'auth/email-already-exists') {
-            message = 'Este e-mail já está em uso.';
-        }
-        return { status: 'error', message };
-    }
-}
-
-
 // --- Card Creation ---
 const CreateCardSchema = z.object({
   saldo_inicial: z.coerce.number().min(0, 'Valor deve ser positivo.'),

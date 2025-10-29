@@ -42,7 +42,7 @@ const checkAndCreateUserProfile = async (firestore: any, user: User): Promise<vo
             const newUserProfile = {
                 name: user.displayName || user.email || 'Novo Usuário',
                 email: user.email,
-                role: isMasterAdmin || isFirstUser ? 'ADMIN' : 'CAIXA', // Make master user or first user an ADMIN
+                role: isMasterAdmin || isFirstUser ? 'ADMIN' : 'VISITANTE', // Make master user or first user an ADMIN, others VISITANTE
                 pdvId: null,
             };
             await setDoc(userDocRef, newUserProfile);
