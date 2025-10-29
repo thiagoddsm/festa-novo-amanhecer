@@ -28,8 +28,8 @@ function AppContent({ children }: { children: React.ReactNode }) {
         // If user is PDV and not on POS page, redirect them.
         if (user.role === 'PDV' && pathname !== '/pos') {
             router.replace('/pos');
-        } else if (user.role !== 'PDV' && pathname === '/pos') {
-            // If user is NOT PDV and tries to access POS, redirect them away.
+        } else if (user.role !== 'PDV' && pathname === '/pos' && user.role !== 'ADMIN') {
+            // If user is NOT PDV (and not ADMIN) and tries to access POS, redirect them away.
             router.replace('/dashboard');
         }
     }, [user, loading, router, pathname]);
@@ -40,7 +40,7 @@ function AppContent({ children }: { children: React.ReactNode }) {
     }
     
     // If user role requires a redirect, show loader while redirecting
-    if ((user.role === 'PDV' && pathname !== '/pos') || (user.role !== 'PDV' && pathname === '/pos')) {
+    if ((user.role === 'PDV' && pathname !== '/pos') || (user.role !== 'PDV' && user.role !== 'ADMIN' && pathname === '/pos')) {
         return <FullPageLoader />;
     }
     
@@ -53,25 +53,23 @@ function AppContent({ children }: { children: React.ReactNode }) {
     // Block visitor access and show a message.
     if (user.role === 'VISITANTE') {
        return (
-            <div className="flex flex-col h-screen">
+            <div className="flex flex-col h-screen bg-background">
               <Header />
-              <MainContent>
-                 <div className="flex items-center justify-center h-full">
-                    <Card className="max-w-md text-center">
-                      <CardHeader>
-                        <CardTitle className="flex items-center justify-center gap-2">
-                          <Lock />
-                          Acesso Restrito
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <CardDescription>
-                          Você está logado como visitante. Por favor, aguarde um administrador liberar seu acesso para visualizar o conteúdo.
-                        </CardDescription>
-                      </CardContent>
-                    </Card>
-                 </div>
-              </MainContent>
+              <div className="flex flex-grow items-center justify-center p-4">
+                <Card className="max-w-md text-center">
+                  <CardHeader>
+                    <CardTitle className="flex items-center justify-center gap-2">
+                      <Lock />
+                      Acesso Restrito
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <CardDescription>
+                      Você está logado como visitante. Por favor, aguarde um administrador liberar seu acesso para visualizar o conteúdo.
+                    </CardDescription>
+                  </CardContent>
+                </Card>
+              </div>
             </div>
        )
     }
