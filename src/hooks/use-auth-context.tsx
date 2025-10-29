@@ -29,11 +29,12 @@ const checkAndCreateUserProfile = async (firestore: any, user: User): Promise<vo
     const userDocRef = doc(firestore, 'users', user.uid);
     try {
         const docSnap = await getDoc(userDocRef);
-        if (!docSnap.exists()) {
-            // If the user profile doesn't exist, create it.
-            console.log(`Profile for ${user.uid} not found, creating...`);
+        
+        // Specific override to make a certain user an admin.
+        const isMasterAdmin = user.email === 'thiagoddsm@gmail.com';
 
-            // Check if this is the very first user signing up to grant admin rights.
+        if (!docSnap.exists()) {
+            console.log(`Profile for ${user.uid} not found, creating...`);
             const usersCollectionRef = collection(firestore, 'users');
             const allUsersSnap = await getDocs(usersCollectionRef);
             const isFirstUser = allUsersSnap.empty;
@@ -41,11 +42,15 @@ const checkAndCreateUserProfile = async (firestore: any, user: User): Promise<vo
             const newUserProfile = {
                 name: user.displayName || user.email || 'Novo Usuário',
                 email: user.email,
-                role: isFirstUser ? 'ADMIN' : 'CAIXA', // Make first user ADMIN
+                role: isMasterAdmin || isFirstUser ? 'ADMIN' : 'CAIXA', // Make master user or first user an ADMIN
                 pdvId: null,
             };
             await setDoc(userDocRef, newUserProfile);
             console.log(`Created profile for new user: ${user.uid} with role: ${newUserProfile.role}`);
+        } else if (isMasterAdmin && docSnap.data()?.role !== 'ADMIN') {
+            // If the master user exists but is not an admin, promote them.
+            console.log(`Promoting ${user.email} to ADMIN.`);
+            await setDoc(userDocRef, { role: 'ADMIN' }, { merge: true });
         }
     } catch (error) {
         console.error("Error in checkAndCreateUserProfile: ", error);
