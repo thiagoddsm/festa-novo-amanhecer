@@ -85,21 +85,27 @@ export default function OrderKanban({ pdvId }: { pdvId: string }) {
 
     useEffect(() => {
         if (!firestore || !pdvId) return;
-
-        // Query for orders in the last 24 hours. We will filter out 'ENTREGUE' on the client.
-        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        
         const ordersRef = collection(firestore, 'orders');
+        // Simplified query to avoid composite index requirement.
+        // We will filter by date and status on the client-side.
         const q = query(
             ordersRef,
             where('pdv_id', '==', pdvId),
-            where('created_at', '>=', twentyFourHoursAgo),
-            orderBy('created_at', 'asc')
+            orderBy('created_at', 'desc')
         );
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
+            const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+            
             const fetchedOrders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
-            // Filter out delivered orders on the client side
-            const activeOrders = fetchedOrders.filter(order => order.status !== 'ENTREGUE');
+            
+            // Filter out old and delivered orders on the client side
+            const activeOrders = fetchedOrders.filter(order => 
+                order.status !== 'ENTREGUE' &&
+                order.created_at.toDate() >= twentyFourHoursAgo
+            ).sort((a,b) => a.created_at.toMillis() - b.created_at.toMillis()); // re-sort ascending after filtering
+
             setOrders(activeOrders);
         }, (error) => {
             console.error("Error fetching orders:", error);
