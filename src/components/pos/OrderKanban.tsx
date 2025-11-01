@@ -86,20 +86,21 @@ export default function OrderKanban({ pdvId }: { pdvId: string }) {
     useEffect(() => {
         if (!firestore || !pdvId) return;
 
-        // Query for non-delivered orders in the last 24 hours
+        // Query for orders in the last 24 hours. We will filter out 'ENTREGUE' on the client.
         const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
         const ordersRef = collection(firestore, 'orders');
         const q = query(
             ordersRef,
             where('pdv_id', '==', pdvId),
-            where('status', '!=', 'ENTREGUE'),
             where('created_at', '>=', twentyFourHoursAgo),
             orderBy('created_at', 'asc')
         );
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const fetchedOrders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
-            setOrders(fetchedOrders);
+            // Filter out delivered orders on the client side
+            const activeOrders = fetchedOrders.filter(order => order.status !== 'ENTREGUE');
+            setOrders(activeOrders);
         }, (error) => {
             console.error("Error fetching orders:", error);
             toast({ variant: 'destructive', title: 'Erro ao buscar pedidos', description: 'Não foi possível carregar os pedidos em tempo real.' });
@@ -114,7 +115,9 @@ export default function OrderKanban({ pdvId }: { pdvId: string }) {
         };
         if (!orders) return initial;
         return orders.reduce((acc, order) => {
-            acc[order.status].push(order);
+            if (order.status !== 'ENTREGUE') { // Ensure we don't process delivered orders for the columns
+               acc[order.status].push(order);
+            }
             return acc;
         }, initial);
     }, [orders]);
