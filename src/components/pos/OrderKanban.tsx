@@ -87,12 +87,11 @@ export default function OrderKanban({ pdvId }: { pdvId: string }) {
         if (!firestore || !pdvId) return;
         
         const ordersRef = collection(firestore, 'orders');
-        // Simplified query to avoid composite index requirement.
-        // We will filter by date and status on the client-side.
+        // Removed orderBy to avoid composite index requirement.
+        // Filtering and sorting will be done on the client-side.
         const q = query(
             ordersRef,
-            where('pdv_id', '==', pdvId),
-            orderBy('created_at', 'desc')
+            where('pdv_id', '==', pdvId)
         );
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -100,11 +99,13 @@ export default function OrderKanban({ pdvId }: { pdvId: string }) {
             
             const fetchedOrders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
             
-            // Filter out old and delivered orders on the client side
-            const activeOrders = fetchedOrders.filter(order => 
-                order.status !== 'ENTREGUE' &&
-                order.created_at.toDate() >= twentyFourHoursAgo
-            ).sort((a,b) => a.created_at.toMillis() - b.created_at.toMillis()); // re-sort ascending after filtering
+            // Filter and sort on the client side
+            const activeOrders = fetchedOrders
+                .filter(order => 
+                    order.created_at.toDate() >= twentyFourHoursAgo &&
+                    order.status !== 'ENTREGUE'
+                )
+                .sort((a,b) => a.created_at.toMillis() - b.created_at.toMillis());
 
             setOrders(activeOrders);
         }, (error) => {
