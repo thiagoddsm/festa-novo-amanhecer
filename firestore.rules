@@ -1,51 +1,12 @@
-/**
- * @file Firestore Security Rules
- * @description This ruleset is configured for maximum testing flexibility, granting all possible permissions to all users.
- *
- * Core Philosophy: All reads and writes are allowed without authentication or authorization checks. This is for testing purposes only and should NEVER be used in a production environment.
- * Data Structure: The rules cover three top-level collections: /cards/{cardId}, /cards/{cardId}/transactions/{transactionId}, and /points_of_sale/{pdvId}.
- * Key Security Decisions: All access is public and unrestricted.
- *
- * WARNING: This configuration is INSECURE and should only be used for local testing.
- */
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    /**
-     * @description Allows all reads and writes to the cards collection.
-     * @path /cards/{cardId}
-     * @allow (get, list, create, update, delete) Any user can perform any operation.
-     * @deny No requests are denied.
-     * @principle Unrestricted access for testing.
-     */
-    match /cards/{cardId} {
-      allow get, list: if true;
-      allow create, update, delete: if true;
-    }
-
-    /**
-     * @description Allows all reads and writes to the transactions subcollection.
-     * @path /cards/{cardId}/transactions/{transactionId}
-     * @allow (get, list, create, update, delete) Any user can perform any operation.
-     * @deny No requests are denied.
-     * @principle Unrestricted access for testing.
-     */
-    match /cards/{cardId}/transactions/{transactionId} {
-      allow get, list: if true;
-      allow create, update, delete: if true;
-    }
-
-    /**
-     * @description Allows all reads and writes to the points_of_sale collection.
-     * @path /points_of_sale/{pdvId}
-     * @allow (get, list, create, update, delete) Any user can perform any operation.
-     * @deny No requests are denied.
-     * @principle Unrestricted access for testing.
-     */
-    match /points_of_sale/{pdvId} {
-      allow get, list: if true;
-      allow create, update, delete: if true;
+    // ATENÇÃO: Essas regras permitem acesso total ao seu banco de dados.
+    // Elas são destinadas apenas para desenvolvimento e devem ser
+    // substituídas por regras de segurança adequadas antes da produção.
+    match /{document=**} {
+      allow read, write: if true;
     }
   }
 }

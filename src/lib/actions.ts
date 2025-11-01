@@ -2,7 +2,7 @@
 
 import { z } from 'zod';
 import { generateRandomId } from './data';
-import { initializeApp, getApps, getApp, App } from 'firebase-admin/app';
+import { initializeApp, getApps, getApp, App, applicationDefault } from 'firebase-admin/app';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 import type { Card } from './definitions';
@@ -13,7 +13,10 @@ function getAdminApp(): App {
   if (getApps().length > 0) {
     return getApp();
   }
-  return initializeApp();
+  // Use applicationDefault credentials for robust authentication in Google Cloud environments.
+  return initializeApp({
+    credential: applicationDefault(),
+  });
 }
 
 const adminApp = getAdminApp();
