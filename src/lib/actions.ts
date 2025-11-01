@@ -266,7 +266,7 @@ export async function processSale(
 
         // 3. Create order record
         const orderRef = db.collection('orders').doc();
-        const orderId = (await orderRef.get()).id; // Generate ID now to use in data
+        const orderId = orderRef.id;
         batch.set(orderRef, {
             pdv_id: pdv_id,
             pdv_nome: pdv_nome,

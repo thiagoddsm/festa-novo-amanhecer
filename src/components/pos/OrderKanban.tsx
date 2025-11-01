@@ -21,7 +21,7 @@ const statusConfig: Record<OrderStatus, { title: string; variant: 'default' | 's
     'ENTREGUE': { title: 'Entregue', variant: 'outline' }
 };
 
-const KanbanColumn = ({ title, variant, orders, onDrop, onDragOver, onDragStart }: {
+const KanbanColumn = ({ title, variant, orders, onDrop, onDragOver, onDragStart, status }: {
     title: string;
     variant: 'default' | 'secondary' | 'destructive' | 'outline';
     orders: Order[];
@@ -32,7 +32,7 @@ const KanbanColumn = ({ title, variant, orders, onDrop, onDragOver, onDragStart 
 }) => (
     <Card
         className="flex-1 flex flex-col min-w-[280px]"
-        onDrop={onDrop}
+        onDrop={(e) => onDrop(e, status)}
         onDragOver={onDragOver}
     >
         <CardHeader className="p-4">
@@ -179,7 +179,7 @@ export default function OrderKanban({ pdvId }: { pdvId: string }) {
                     variant={statusConfig[status].variant}
                     orders={categorizedOrders[status]}
                     status={status}
-                    onDrop={(e) => handleDrop(e, status)}
+                    onDrop={handleDrop}
                     onDragOver={handleDragOver}
                     onDragStart={handleDragStart}
                 />
