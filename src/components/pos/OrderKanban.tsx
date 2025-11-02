@@ -96,6 +96,7 @@ export default function OrderKanban({ pdvId }: { pdvId: string }) {
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const fetchedOrders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
             
+            // Sort and filter on the client-side
             const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
             
             const activeOrders = fetchedOrders
@@ -155,6 +156,7 @@ export default function OrderKanban({ pdvId }: { pdvId: string }) {
                 });
                 setOrders(originalOrders); 
             }
+            // On success, the onSnapshot listener will update the UI automatically.
         });
     };
 
