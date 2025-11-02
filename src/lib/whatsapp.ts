@@ -9,7 +9,8 @@ export async function sendWhatsappMessage(to: string, text: string) {
         return; // Silently fail in production if key is not set
     }
 
-    const apiUrl = `https://us.api-wa.me/${apiKey}/message/text`;
+    // Corrigido para o endpoint de produção da API
+    const apiUrl = `https://api.api-wa.me/${apiKey}/message/text`;
 
     try {
         // Limpa o número, removendo caracteres não numéricos.
@@ -24,7 +25,7 @@ export async function sendWhatsappMessage(to: string, text: string) {
             },
             body: JSON.stringify({
                 to: cleanedNumber,
-                text: text, // O texto já deve vir formatado, a API espera o texto puro
+                text: text,
             }),
         });
 
