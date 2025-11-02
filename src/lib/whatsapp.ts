@@ -9,8 +9,8 @@ export async function sendWhatsappMessage(to: string, text: string) {
         return; // Silently fail in production if key is not set
     }
 
-    // Corrigido para o endpoint de produção da API
-    const apiUrl = `https://api.api-wa.me/${apiKey}/message/text`;
+    // Corrigido para o endpoint de produção da API, conforme documentação.
+    const apiUrl = `https://us.api-wa.me/${apiKey}/message/text`;
 
     try {
         // Limpa o número, removendo caracteres não numéricos.
