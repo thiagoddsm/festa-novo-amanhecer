@@ -26,6 +26,7 @@ export type OrderItem = {
     price: number; // in cents
     quantity: number;
     observation?: string;
+    ingredientes?: string[];
 };
 
 
@@ -53,6 +54,7 @@ export type MenuItem = {
     id: string; // Firestore document ID
     nome: string;
     preco_centavos: number;
+    ingredientes?: string[];
 }
 
 export type Order = {

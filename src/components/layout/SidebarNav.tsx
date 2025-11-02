@@ -4,8 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LayoutDashboard, ShoppingCart, WalletCards, Users, List, UserCog } from "lucide-react";
 import { SidebarHeader, SidebarMenu, SidebarMenuItem, SidebarMenuButton } from "@/components/ui/sidebar";
-import Image from "next/image";
 import { useAuth } from "@/hooks/use-auth-context";
+import { Logo } from "./Logo";
 
 const allNavItems = [
     { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', roles: ['ADMIN', 'CAIXA'] },
@@ -30,9 +30,7 @@ export function SidebarNav() {
     return (
         <>
             <SidebarHeader>
-                <div className="flex items-center gap-2">
-                     <h2 className="text-lg font-semibold tracking-tight">FestaPay</h2>
-                </div>
+                <Logo />
             </SidebarHeader>
             <SidebarMenu>
                 {navItems.map(item => (

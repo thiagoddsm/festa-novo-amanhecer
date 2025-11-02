@@ -23,6 +23,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import OrderKanban from './OrderKanban';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Label } from '../ui/label';
+import { Checkbox } from '../ui/checkbox';
 
 const initialState: {
     status: 'idle' | 'success' | 'error';
@@ -38,6 +39,7 @@ type CartItem = {
     name: string;
     price: number;
     quantity: number;
+    ingredientes?: string[];
     observation?: string;
 }
 
@@ -51,12 +53,39 @@ function SubmitButton({ disabled }: { disabled: boolean }) {
 }
 
 function ObservationDialog({ item, onSave }: { item: CartItem; onSave: (observation: string) => void }) {
-    const [observation, setObservation] = useState(item.observation || '');
+    const [freeText, setFreeText] = useState('');
+    const [removedIngredients, setRemovedIngredients] = useState<string[]>([]);
     const [isOpen, setIsOpen] = useState(false);
 
+     useEffect(() => {
+        if (isOpen) {
+            // Parse existing observation when dialog opens
+            const obs = item.observation || '';
+            const freeTextMatch = obs.match(/OBS: (.*)/);
+            setFreeText(freeTextMatch ? freeTextMatch[1] : '');
+
+            const removedMatch = obs.match(/SEM: \[(.*?)\]/);
+            const currentRemoved = removedMatch ? removedMatch[1].split(',').map(i => i.trim()) : [];
+            setRemovedIngredients(currentRemoved);
+        }
+    }, [isOpen, item.observation]);
+
     const handleSave = () => {
-        onSave(observation);
+        let finalObservation = '';
+        if (removedIngredients.length > 0) {
+            finalObservation += `SEM: [${removedIngredients.join(', ')}]`;
+        }
+        if (freeText.trim()) {
+            finalObservation += `${finalObservation ? ' | ' : ''}OBS: ${freeText.trim()}`;
+        }
+        onSave(finalObservation);
         setIsOpen(false);
+    }
+    
+    const handleCheckboxChange = (ingredient: string, checked: boolean) => {
+        setRemovedIngredients(prev => 
+            checked ? prev.filter(i => i !== ingredient) : [...prev, ingredient]
+        );
     }
 
     return (
@@ -70,15 +99,41 @@ function ObservationDialog({ item, onSave }: { item: CartItem; onSave: (observat
                 <AlertDialogHeader>
                     <AlertDialogTitle>Observação para: {item.name}</AlertDialogTitle>
                     <AlertDialogDescription>
-                        Adicione instruções especiais para este item. Ex: sem cebola, ponto da carne, etc.
+                        Remova ingredientes ou adicione instruções especiais.
                     </AlertDialogDescription>
                 </AlertDialogHeader>
-                <div className="py-4">
-                    <Textarea
-                        value={observation}
-                        onChange={(e) => setObservation(e.target.value)}
-                        placeholder='Digite a observação aqui...'
-                    />
+                <div className="py-4 space-y-4">
+                    {item.ingredientes && item.ingredientes.length > 0 && (
+                        <div className="space-y-2">
+                             <Label>Remover Ingredientes:</Label>
+                             <div className="flex flex-wrap gap-2">
+                                {item.ingredientes.map(ing => (
+                                    <div key={ing} className="flex items-center space-x-2">
+                                        <Checkbox 
+                                            id={`check-${item.id}-${ing}`} 
+                                            checked={!removedIngredients.includes(ing)}
+                                            onCheckedChange={(checked) => handleCheckboxChange(ing, !!checked)}
+                                        />
+                                        <label
+                                            htmlFor={`check-${item.id}-${ing}`}
+                                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                                        >
+                                           {ing}
+                                        </label>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                    <div>
+                        <Label htmlFor="free-text-obs">Outras Observações:</Label>
+                        <Textarea
+                            id="free-text-obs"
+                            value={freeText}
+                            onChange={(e) => setFreeText(e.target.value)}
+                            placeholder='Ex: Bem passado, sem pimenta...'
+                        />
+                    </div>
                 </div>
                 <AlertDialogFooter>
                     <AlertDialogCancel>Cancelar</AlertDialogCancel>
@@ -141,39 +196,59 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv, onGoBack: ()
 
   const addToCart = (item: MenuItem) => {
     setCart(currentCart => {
-      const existingItem = currentCart.find(cartItem => cartItem.id === item.id && !cartItem.observation);
-      if (existingItem) {
-        return currentCart.map(cartItem =>
-          cartItem.id === item.id && !cartItem.observation ? { ...cartItem, quantity: cartItem.quantity + 1 } : cartItem
-        );
+      const existingItemIndex = currentCart.findIndex(cartItem => cartItem.id === item.id && !cartItem.observation);
+      if (existingItemIndex > -1) {
+          const newCart = [...currentCart];
+          newCart[existingItemIndex].quantity += 1;
+          return newCart;
       }
-      return [...currentCart, { id: item.id, name: item.nome, price: item.preco_centavos, quantity: 1, observation: '' }];
+      return [...currentCart, { id: item.id, name: item.nome, price: item.preco_centavos, quantity: 1, ingredientes: item.ingredientes }];
     });
   };
 
-  const removeFromCart = (itemId: string, itemObservation?: string) => {
+  const removeFromCart = (uniqueId: string) => {
     setCart(currentCart => {
-      const itemIndex = currentCart.findIndex(cartItem => cartItem.id === itemId && cartItem.observation === itemObservation);
+        const itemIndex = currentCart.findIndex(cartItem => `${cartItem.id}-${cartItem.observation}` === uniqueId);
       if (itemIndex === -1) return currentCart;
   
       const item = currentCart[itemIndex];
   
       if (item.quantity > 1) {
-        // Decrease quantity
         const updatedCart = [...currentCart];
         updatedCart[itemIndex] = { ...item, quantity: item.quantity - 1 };
         return updatedCart;
       } else {
-        // Remove item
         return currentCart.filter((_, index) => index !== itemIndex);
       }
     });
   };
   
-  const updateItemObservation = (itemId: string, observation: string) => {
-      setCart(currentCart => currentCart.map(item => 
-        item.id === itemId ? { ...item, observation } : item
-      ));
+  const updateItemObservation = (uniqueId: string, observation: string) => {
+      setCart(currentCart => {
+        const itemIndex = currentCart.findIndex(item => `${item.id}-${item.observation}` === uniqueId);
+        if (itemIndex === -1) return currentCart;
+
+        const newCart = [...currentCart];
+        const item = newCart[itemIndex];
+
+        // Check if another item with the same ID and new observation already exists
+        const existingItemWithNewObsIndex = newCart.findIndex((cartItem, index) => 
+            index !== itemIndex &&
+            cartItem.id === item.id && 
+            cartItem.observation === observation
+        );
+
+        if (existingItemWithNewObsIndex > -1) {
+            // Merge quantities
+            newCart[existingItemWithNewObsIndex].quantity += item.quantity;
+            // Remove the original item
+            return newCart.filter((_, index) => index !== itemIndex);
+        } else {
+            // Just update the observation
+             newCart[itemIndex] = { ...item, observation };
+             return newCart;
+        }
+      });
   };
 
   const clearCart = () => {
@@ -238,19 +313,22 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv, onGoBack: ()
                                 <p className="text-center text-muted-foreground py-10">Clique em um item do cardápio para adicionar.</p>
                             ): (
                                 <div className="space-y-4">
-                                {cart.map((item, index) => (
-                                    <div key={`${item.id}-${index}`} className="flex justify-between items-center">
-                                        <div>
-                                            <div className="font-semibold flex items-center gap-2">{item.name} <Badge variant="secondary">{item.quantity}x</Badge></div>
-                                            <p className="text-sm text-muted-foreground">{formatCurrency(item.price)}</p>
-                                            {item.observation && <p className="text-xs text-blue-500 pl-1">OBS: {item.observation}</p>}
+                                {cart.map((item) => {
+                                    const uniqueId = `${item.id}-${item.observation}`;
+                                    return (
+                                        <div key={uniqueId} className="flex justify-between items-center">
+                                            <div>
+                                                <div className="font-semibold flex items-center gap-2">{item.name} <Badge variant="secondary">{item.quantity}x</Badge></div>
+                                                <p className="text-sm text-muted-foreground">{formatCurrency(item.price)}</p>
+                                                {item.observation && <p className="text-xs text-blue-500 pl-1 max-w-xs truncate" title={item.observation}>OBS: {item.observation}</p>}
+                                            </div>
+                                            <div className="flex items-center gap-1">
+                                                    <ObservationDialog item={item} onSave={(obs) => updateItemObservation(uniqueId, obs)} />
+                                                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => removeFromCart(uniqueId)}><X className='h-4 w-4'/></Button>
+                                            </div>
                                         </div>
-                                        <div className="flex items-center gap-1">
-                                                <ObservationDialog item={item} onSave={(obs) => updateItemObservation(item.id, obs)} />
-                                                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => removeFromCart(item.id, item.observation)}><X className='h-4 w-4'/></Button>
-                                        </div>
-                                    </div>
-                                ))}
+                                    )
+                                })}
                                 </div>
                             )}
                         </ScrollArea>

@@ -198,6 +198,7 @@ const SaleItemSchema = z.object({
     price: z.number(),
     quantity: z.number(),
     observation: z.string().optional(),
+    ingredientes: z.array(z.string()).optional(),
 });
 
 const SaleSchema = z.object({
@@ -380,6 +381,7 @@ export async function getPdvNameById(pdvId: string): Promise<string> {
 const MenuItemSchema = z.object({
   nome: z.string().min(1, 'Nome do item é obrigatório.'),
   preco_reais: z.coerce.number().positive('Preço deve ser positivo.'),
+  ingredientes: z.string().optional(),
   pdvId: z.string(),
   itemId: z.string().optional(),
 });
@@ -388,6 +390,7 @@ export async function addMenuItem( prevState: ActionState | undefined, formData:
   const validatedFields = MenuItemSchema.safeParse({
     nome: formData.get('nome'),
     preco_reais: formData.get('preco_reais'),
+    ingredientes: formData.get('ingredientes'),
     pdvId: formData.get('pdvId'),
   });
 
@@ -396,11 +399,12 @@ export async function addMenuItem( prevState: ActionState | undefined, formData:
   }
 
   try {
-    const { nome, preco_reais, pdvId } = validatedFields.data;
+    const { nome, preco_reais, ingredientes, pdvId } = validatedFields.data;
     const preco_centavos = Math.round(preco_reais * 100);
+    const ingredientesList = ingredientes ? ingredientes.split(',').map(i => i.trim()).filter(Boolean) : [];
     
     const menuItemsCollection = db.collection('pdvs').doc(pdvId).collection('menuItems');
-    await menuItemsCollection.add({ nome, preco_centavos });
+    await menuItemsCollection.add({ nome, preco_centavos, ingredientes: ingredientesList });
 
     return { status: 'success', message: 'Item adicionado com sucesso!' };
   } catch (error) {
@@ -412,6 +416,7 @@ export async function updateMenuItem(prevState: ActionState | undefined, formDat
   const validatedFields = MenuItemSchema.safeParse({
     nome: formData.get('nome'),
     preco_reais: formData.get('preco_reais'),
+    ingredientes: formData.get('ingredientes'),
     pdvId: formData.get('pdvId'),
     itemId: formData.get('itemId'),
   });
@@ -421,11 +426,12 @@ export async function updateMenuItem(prevState: ActionState | undefined, formDat
   }
   
   try {
-    const { nome, preco_reais, pdvId, itemId } = validatedFields.data;
+    const { nome, preco_reais, ingredientes, pdvId, itemId } = validatedFields.data;
     const preco_centavos = Math.round(preco_reais * 100);
+    const ingredientesList = ingredientes ? ingredientes.split(',').map(i => i.trim()).filter(Boolean) : [];
 
     const itemRef = db.collection('pdvs').doc(pdvId).collection('menuItems').doc(itemId);
-    await itemRef.update({ nome, preco_centavos });
+    await itemRef.update({ nome, preco_centavos, ingredientes: ingredientesList });
 
     return { status: 'success', message: 'Item atualizado com sucesso!' };
   } catch (error) {

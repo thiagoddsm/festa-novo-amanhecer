@@ -33,6 +33,7 @@ interface EditingItem {
   id: string;
   nome: string;
   preco_centavos: number;
+  ingredientes: string[];
 }
 
 const initialState = { status: 'success' as 'success' | 'error', message: '' };
@@ -53,6 +54,7 @@ export default function EditMenuSheet({ pdv, menuItems, isOpen, onOpenChange }: 
       id: item.id,
       nome: item.nome,
       preco_centavos: item.preco_centavos,
+      ingredientes: item.ingredientes || [],
     });
   };
 
@@ -116,33 +118,48 @@ export default function EditMenuSheet({ pdv, menuItems, isOpen, onOpenChange }: 
             {menuItems.map(item => (
               <div key={item.id} className="flex items-center justify-between p-2 rounded-md hover:bg-muted">
                 {editingItem?.id === item.id ? (
-                  <form action={handleUpdateSubmit} className="flex-grow flex items-center gap-2">
-                    <Input
-                      name="nome"
-                      defaultValue={editingItem.nome}
-                      className="h-8"
-                      required
-                    />
-                    <Input
-                      name="preco_reais"
-                      type="number"
-                      step="0.01"
-                      defaultValue={editingItem.preco_centavos / 100}
-                      className="h-8 w-24"
-                      required
-                    />
-                    <Button size="icon" variant="ghost" className="h-8 w-8 text-green-600" type="submit" disabled={isPending}>
-                        {isPending ? <Loader2 className="h-4 w-4 animate-spin"/> : <Check className="h-4 w-4" />}
-                    </Button>
-                    <Button size="icon" variant="ghost" className="h-8 w-8" type="button" onClick={handleCancelEdit}>
-                      <X className="h-4 w-4" />
-                    </Button>
+                  <form action={handleUpdateSubmit} className="flex-grow space-y-2">
+                     <div className="flex items-center gap-2">
+                        <Input
+                        name="nome"
+                        defaultValue={editingItem.nome}
+                        className="h-8"
+                        required
+                        />
+                        <Input
+                        name="preco_reais"
+                        type="number"
+                        step="0.01"
+                        defaultValue={editingItem.preco_centavos / 100}
+                        className="h-8 w-24"
+                        required
+                        />
+                        <Button size="icon" variant="ghost" className="h-8 w-8 text-green-600" type="submit" disabled={isPending}>
+                            {isPending ? <Loader2 className="h-4 w-4 animate-spin"/> : <Check className="h-4 w-4" />}
+                        </Button>
+                        <Button size="icon" variant="ghost" className="h-8 w-8" type="button" onClick={handleCancelEdit}>
+                        <X className="h-4 w-4" />
+                        </Button>
+                    </div>
+                     <div>
+                        <Label htmlFor='ingredientes' className="text-xs">Ingredientes (separados por vírgula)</Label>
+                        <Input
+                            name="ingredientes"
+                            defaultValue={editingItem.ingredientes.join(', ')}
+                            className="h-8"
+                        />
+                    </div>
                   </form>
                 ) : (
                   <>
                     <div>
                       <p className="font-medium">{item.nome}</p>
                       <p className="text-sm text-muted-foreground">{formatCurrency(item.preco_centavos)}</p>
+                      {item.ingredientes && item.ingredientes.length > 0 && (
+                          <p className="text-xs text-muted-foreground italic">
+                              {item.ingredientes.join(', ')}
+                          </p>
+                      )}
                     </div>
                     <div className="flex items-center">
                       <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => handleEditClick(item)}>
@@ -190,6 +207,10 @@ export default function EditMenuSheet({ pdv, menuItems, isOpen, onOpenChange }: 
                         <Input id="new-item-price" name="preco_reais" type="number" step="0.01" placeholder="15.00" required/>
                     </div>
                  </div>
+                 <div>
+                    <Label htmlFor="new-item-ingredientes">Ingredientes (separados por vírgula)</Label>
+                    <Input id="new-item-ingredientes" name="ingredientes" placeholder="Ex: Queijo, Bacon, Cheddar" />
+                </div>
                  <Button type="submit" className="w-full" disabled={isPending}>
                     {isPending ? <Loader2 className="animate-spin" /> : 'Adicionar ao Cardápio'}
                  </Button>

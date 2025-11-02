@@ -12,6 +12,7 @@ import { useAuth } from '@/hooks/use-auth-context';
 import { FullPageLoader } from '@/components/ui/loader';
 import { FirebaseClientProvider } from '@/firebase/client-provider';
 import { AuthProvider } from '@/hooks/use-auth-context';
+import { Logo } from '@/components/layout/Logo';
 
 
 const GoogleIcon = () => (
@@ -62,7 +63,8 @@ function LoginPageContent() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
       <Card className="w-full max-w-sm">
-        <CardHeader className="text-center">
+        <CardHeader className="text-center items-center">
+            <Logo className="mb-4" />
           <CardTitle>Bem-vindo ao FestaPay</CardTitle>
           <CardDescription>Faça login com sua conta Google para continuar</CardDescription>
         </CardHeader>
