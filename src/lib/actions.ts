@@ -482,3 +482,42 @@ export async function updateOrderStatus(orderId: string, newStatus: Order['statu
         return { status: 'error', message: 'Não foi possível atualizar o status do pedido.' };
     }
 }
+
+
+// --- Whatsapp Test ---
+const TestWhatsappSchema = z.object({
+  telefone_destinatario: z.string().min(10, 'Número de telefone inválido.'),
+});
+
+export async function sendTestWhatsappMessage(
+  prevState: ActionState | undefined,
+  formData: FormData
+): Promise<ActionState> {
+  try {
+    const validatedFields = TestWhatsappSchema.safeParse({
+      telefone_destinatario: formData.get('telefone_destinatario'),
+    });
+
+    if (!validatedFields.success) {
+      return {
+        status: 'error',
+        message: 'Número de telefone inválido.',
+      };
+    }
+    
+    const { telefone_destinatario } = validatedFields.data;
+
+    const message = `Olá! 👋\n\nEsta é uma mensagem de teste do sistema FestaPay.\n\nSe você recebeu esta mensagem, a integração com o WhatsApp está funcionando corretamente! ✅`;
+    await sendWhatsappMessage(telefone_destinatario, message);
+
+    return {
+      status: 'success',
+      message: 'Mensagem de teste enviada com sucesso!',
+    };
+
+  } catch (error) {
+    console.error(error);
+    const errorMessage = error instanceof Error ? error.message : 'Ocorreu um erro desconhecido.';
+    return { status: 'error', message: `Erro ao enviar mensagem: ${errorMessage}` };
+  }
+}

@@ -12,6 +12,7 @@ import { useFirestore } from '@/firebase';
 import { collection, onSnapshot, query, orderBy, limit, Timestamp } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
+import WhatsappTester from '@/components/dashboard/WhatsappTester';
 
 function useCollection<T>(path: string) {
   const [data, setData] = useState<T[] | null>(null);
@@ -132,43 +133,46 @@ export default function DashboardPage() {
         )}
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Transações Recentes</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? <Skeleton className="h-96" /> : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>PDV</TableHead>
-                  <TableHead>Tipo</TableHead>
-                  <TableHead>Valor</TableHead>
-                  <TableHead>Data</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {recentTransactions.length > 0 ? recentTransactions.map((tx) => {
-                  return (
-                    <TableRow key={tx.id}>
-                      <TableCell>{pdvNames[tx.pdv_id] || 'Carregando...'}</TableCell>
-                      <TableCell>
-                        <Badge variant={tx.tipo === 'VENDA' ? 'destructive' : 'secondary'}>{tx.tipo}</Badge>
-                      </TableCell>
-                      <TableCell>{formatCurrency(tx.valor_centavos)}</TableCell>
-                      <TableCell>{formatDateTime(formatTimestamp(tx.created_at))}</TableCell>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card>
+            <CardHeader>
+            <CardTitle>Transações Recentes</CardTitle>
+            </CardHeader>
+            <CardContent>
+            {isLoading ? <Skeleton className="h-96" /> : (
+                <Table>
+                <TableHeader>
+                    <TableRow>
+                    <TableHead>PDV</TableHead>
+                    <TableHead>Tipo</TableHead>
+                    <TableHead>Valor</TableHead>
+                    <TableHead>Data</TableHead>
                     </TableRow>
-                  )
-                }) : (
-                  <TableRow>
-                    <TableCell colSpan={4} className="text-center">Nenhuma transação recente.</TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+                </TableHeader>
+                <TableBody>
+                    {recentTransactions.length > 0 ? recentTransactions.map((tx) => {
+                    return (
+                        <TableRow key={tx.id}>
+                        <TableCell>{pdvNames[tx.pdv_id] || 'Carregando...'}</TableCell>
+                        <TableCell>
+                            <Badge variant={tx.tipo === 'VENDA' ? 'destructive' : 'secondary'}>{tx.tipo}</Badge>
+                        </TableCell>
+                        <TableCell>{formatCurrency(tx.valor_centavos)}</TableCell>
+                        <TableCell>{formatDateTime(formatTimestamp(tx.created_at))}</TableCell>
+                        </TableRow>
+                    )
+                    }) : (
+                    <TableRow>
+                        <TableCell colSpan={4} className="text-center">Nenhuma transação recente.</TableCell>
+                    </TableRow>
+                    )}
+                </TableBody>
+                </Table>
+            )}
+            </CardContent>
+        </Card>
+        <WhatsappTester />
+      </div>
     </div>
   );
 }
