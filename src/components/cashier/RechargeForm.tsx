@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/utils';
 import { Loader2, QrCode } from 'lucide-react';
-import QrScannerDialog from '../common/QrScanner';
+import QrScannerDialog from '../common/QrScannerDialog';
 
 const initialState = {
   status: 'success' as 'success' | 'error',

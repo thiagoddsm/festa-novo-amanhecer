@@ -12,7 +12,7 @@ import { formatCurrency } from '@/lib/utils';
 import type { Card as CardType } from '@/lib/definitions';
 import { Loader2, User, CircleAlert, Wallet, Hash, QrCode } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import QrScannerDialog from '../common/QrScanner';
+import QrScannerDialog from '../common/QrScannerDialog';
 
 
 const initialState = {
