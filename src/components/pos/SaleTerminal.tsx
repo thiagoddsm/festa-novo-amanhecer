@@ -151,15 +151,22 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv, onGoBack: ()
     });
   };
 
-  const removeFromCart = (itemId: string) => {
+  const removeFromCart = (itemId: string, itemObservation?: string) => {
     setCart(currentCart => {
-      const existingItem = currentCart.find(cartItem => cartItem.id === itemId);
-      if (existingItem && existingItem.quantity > 1) {
-        return currentCart.map(cartItem =>
-          cartItem.id === itemId ? { ...cartItem, quantity: cartItem.quantity - 1 } : cartItem
-        );
+      const itemIndex = currentCart.findIndex(cartItem => cartItem.id === itemId && cartItem.observation === itemObservation);
+      if (itemIndex === -1) return currentCart;
+  
+      const item = currentCart[itemIndex];
+  
+      if (item.quantity > 1) {
+        // Decrease quantity
+        const updatedCart = [...currentCart];
+        updatedCart[itemIndex] = { ...item, quantity: item.quantity - 1 };
+        return updatedCart;
+      } else {
+        // Remove item
+        return currentCart.filter((_, index) => index !== itemIndex);
       }
-      return currentCart.filter(cartItem => cartItem.id !== itemId);
     });
   };
   
@@ -231,16 +238,16 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv, onGoBack: ()
                                 <p className="text-center text-muted-foreground py-10">Clique em um item do cardápio para adicionar.</p>
                             ): (
                                 <div className="space-y-4">
-                                {cart.map(item => (
-                                    <div key={item.id} className="flex justify-between items-center">
+                                {cart.map((item, index) => (
+                                    <div key={`${item.id}-${index}`} className="flex justify-between items-center">
                                         <div>
-                                            <p className="font-semibold">{item.name} <Badge variant="secondary">{item.quantity}x</Badge></p>
+                                            <div className="font-semibold flex items-center gap-2">{item.name} <Badge variant="secondary">{item.quantity}x</Badge></div>
                                             <p className="text-sm text-muted-foreground">{formatCurrency(item.price)}</p>
                                             {item.observation && <p className="text-xs text-blue-500 pl-1">OBS: {item.observation}</p>}
                                         </div>
                                         <div className="flex items-center gap-1">
                                                 <ObservationDialog item={item} onSave={(obs) => updateItemObservation(item.id, obs)} />
-                                                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => removeFromCart(item.id)}><X className='h-4 w-4'/></Button>
+                                                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => removeFromCart(item.id, item.observation)}><X className='h-4 w-4'/></Button>
                                         </div>
                                     </div>
                                 ))}
