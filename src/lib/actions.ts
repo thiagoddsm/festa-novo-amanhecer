@@ -6,7 +6,7 @@ import { initializeApp, getApps, getApp, App, applicationDefault } from 'firebas
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 import type { Card, Order } from './definitions';
-import { sendWhatsappMessage, formatWhatsappMessage } from './whatsapp';
+import { sendWhatsappMessage } from './whatsapp';
 import { formatCurrency } from './utils';
 
 // Helper to ensure Firebase Admin is initialized only once
@@ -92,9 +92,7 @@ export async function createCard(
      // Send WhatsApp notification
     if (cardData.telefone_cliente) {
       const clientName = cardData.nome_cliente ? `, ${cardData.nome_cliente}` : '';
-      const message = formatWhatsappMessage(
-        `Bem-vindo(a) ao FestaPay${clientName}! 🥳\n\nSeu cartão cashless foi criado com sucesso.\n\n*Saldo Inicial:* ${formatCurrency(cardData.saldo_centavos)}\n\nUse o QR Code para consumir no evento. Aproveite!`
-      );
+      const message = `Bem-vindo(a) ao FestaPay${clientName}! 🥳\n\nSeu cartão cashless foi criado com sucesso.\n\n*Saldo Inicial:* ${formatCurrency(cardData.saldo_centavos)}\n\nUse o QR Code para consumir no evento. Aproveite!`;
       await sendWhatsappMessage(cardData.telefone_cliente, message);
     }
 
@@ -184,9 +182,7 @@ export async function rechargeCard(
 
     // Send WhatsApp notification
     if (card.telefone_cliente) {
-      const message = formatWhatsappMessage(
-        `Olá, ${card.nome_cliente || 'cliente'}!\n\nSua recarga foi efetuada com sucesso. ✅\n\n*Valor da Recarga:* ${formatCurrency(valor_recarga_centavos)}\n*Novo Saldo:* ${formatCurrency(novo_saldo_centavos)}`
-      );
+      const message = `Olá, ${card.nome_cliente || 'cliente'}!\n\nSua recarga foi efetuada com sucesso. ✅\n\n*Valor da Recarga:* ${formatCurrency(valor_recarga_centavos)}\n*Novo Saldo:* ${formatCurrency(novo_saldo_centavos)}`;
       await sendWhatsappMessage(card.telefone_cliente, message);
     }
 
@@ -306,9 +302,7 @@ export async function processSale(
 
         // Send WhatsApp notification
         if (card.telefone_cliente) {
-            const message = formatWhatsappMessage(
-                `Nova compra realizada no FestaPay! 🛍️\n\n*Local:* ${pdv_nome}\n*Valor:* -${formatCurrency(valor_venda_centavos)}\n\n*Saldo Restante:* ${formatCurrency(novo_saldo_centavos)}\n\nObrigado!`
-            );
+            const message = `Nova compra realizada no FestaPay! 🛍️\n\n*Local:* ${pdv_nome}\n*Valor:* -${formatCurrency(valor_venda_centavos)}\n\n*Saldo Restante:* ${formatCurrency(novo_saldo_centavos)}\n\nObrigado!`;
             await sendWhatsappMessage(card.telefone_cliente, message);
         }
 

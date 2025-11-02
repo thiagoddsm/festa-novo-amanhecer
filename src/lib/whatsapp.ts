@@ -1,10 +1,5 @@
 'use server';
 
-// Função para formatar a mensagem para o WhatsApp, substituindo quebras de linha por %0A
-export function formatWhatsappMessage(text: string): string {
-    return encodeURIComponent(text);
-}
-
 // Função para enviar a mensagem via API do api-wa.me
 export async function sendWhatsappMessage(to: string, text: string) {
     const apiKey = process.env.WHATSAPP_API_KEY;
@@ -29,7 +24,7 @@ export async function sendWhatsappMessage(to: string, text: string) {
             },
             body: JSON.stringify({
                 to: cleanedNumber,
-                text: decodeURIComponent(text), // Decodifica para enviar o texto puro no JSON
+                text: text, // O texto já deve vir formatado, a API espera o texto puro
             }),
         });
 
