@@ -47,11 +47,12 @@ export function QrScanner({ onScanSuccess, onScanFailure }: QrScannerProps) {
         };
         
         // Start scanning. It will request camera permissions.
-        scanner.render(successCallback, errorCallback)
-          .catch(err => {
-            console.error("Error rendering scanner:", err);
-            onScanFailure(err.message || 'Failed to render scanner.');
-          });
+        try {
+          scanner.render(successCallback, errorCallback);
+        } catch (err: any) {
+          console.error("Error rendering scanner:", err);
+          onScanFailure(err.message || 'Failed to render scanner.');
+        }
           
         scannerRef.current = scanner;
       }
