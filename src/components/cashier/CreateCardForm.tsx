@@ -44,9 +44,6 @@ const PrintableCard = React.forwardRef<HTMLDivElement, { card: CardType | null }
     return (
         <div ref={ref} className="print-only">
              <div className="printable-card">
-                <div className="flex justify-center items-center mb-2">
-                    <h3 className='text-lg font-bold ml-1 text-black'>FestaPay</h3>
-                </div>
                 {card.nome_cliente && (
                     <div className='mb-2 text-center'>
                         <p className="text-xs font-medium text-gray-600">Cliente</p>
@@ -135,11 +132,12 @@ export default function CreateCardForm() {
               />
             </div>
              <div className="space-y-2">
-              <Label htmlFor="telefone_cliente">Telefone (Opcional)</Label>
+              <Label htmlFor="telefone_cliente">Telefone (para notificações via WhatsApp)</Label>
               <Input
                 id="telefone_cliente"
                 name="telefone_cliente"
-                placeholder="Ex: (11) 99999-8888"
+                placeholder="Ex: 5511999998888"
+                required
               />
             </div>
             <div className="space-y-2">
