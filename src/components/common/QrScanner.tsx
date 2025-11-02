@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { Camera, CameraOff } from 'lucide-react';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
-import { QrScanner } from '@yudiel/react-qr-scanner';
+import { Scanner } from '@yudiel/react-qr-scanner';
 
 interface QrScannerDialogProps {
   open: boolean;
@@ -27,7 +27,7 @@ export default function QrScannerDialog({ open, onOpenChange, onScan }: QrScanne
 
   const handleResult = (result: any) => {
     if (result) {
-      onScan(result.getText());
+      onScan(result);
       onOpenChange(false);
     }
   };
@@ -57,11 +57,13 @@ export default function QrScannerDialog({ open, onOpenChange, onScan }: QrScanne
         
         <div className="relative flex h-64 w-full items-center justify-center overflow-hidden rounded-md border bg-muted">
            {open && !hasCameraError && (
-             <QrScanner
-                onDecode={handleResult}
+             <Scanner
+                onResult={handleResult}
                 onError={handleError}
-                constraints={{
-                    facingMode: 'environment'
+                options={{
+                    constraints: {
+                        facingMode: 'environment'
+                    }
                 }}
                 styles={{
                     container: { width: '100%', height: '100%', paddingTop: 0 }
