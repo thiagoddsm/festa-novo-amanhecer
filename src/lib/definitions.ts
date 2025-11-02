@@ -19,6 +19,16 @@ export type Card = {
   telefone_cliente?: string;
 };
 
+// Represents an item within a transaction or order, potentially with an observation
+export type OrderItem = {
+    id: string;
+    name: string;
+    price: number; // in cents
+    quantity: number;
+    observation?: string;
+};
+
+
 export type Transaction = {
   id: string; // Firestore doc id
   cartao_id: string; // Firestore document ID of the card
@@ -26,7 +36,7 @@ export type Transaction = {
   tipo: 'RECARGA' | 'VENDA' | 'REEMBOLSO';
   valor_centavos: number;
   created_at: Timestamp;
-  items?: { name: string; price: number; quantity: number }[];
+  items?: OrderItem[];
 };
 
 export type TransactionDetails = Transaction & {
@@ -53,8 +63,7 @@ export type Order = {
     status: 'PENDENTE' | 'EM_PREPARO' | 'PRONTO' | 'ENTREGUE';
     created_at: Timestamp;
     updated_at: Timestamp;
-    items: { id: string; name: string; price: number; quantity: number }[];
+    items: OrderItem[];
     order_number: string;
     pdv_nome: string;
-    observacoes?: string;
 }

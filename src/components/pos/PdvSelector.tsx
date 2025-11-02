@@ -11,8 +11,7 @@ interface PdvSelectorProps {
 }
 
 export default function PdvSelector({ pdvs, onPdvSelect }: PdvSelectorProps) {
-  const filteredPdvs = pdvs?.filter(p => p.id !== 'caixa_central');
-
+  
   return (
     <div className="mx-auto max-w-2xl">
       <Card>
@@ -34,11 +33,11 @@ export default function PdvSelector({ pdvs, onPdvSelect }: PdvSelectorProps) {
               <Skeleton className="h-24 w-full" />
             </>
           )}
-          {filteredPdvs && filteredPdvs.length === 0 && (
+          {pdvs && pdvs.length === 0 && (
               <p className='col-span-full text-center text-muted-foreground p-4'>Nenhum PDV encontrado. Vá ao Dashboard, encontre o card "Configurações" e clique em "Popular Dados Iniciais" para cadastrar as barracas e cardápios.</p>
           )}
-          {filteredPdvs &&
-            filteredPdvs.map(pdv => (
+          {pdvs &&
+            pdvs.map(pdv => (
               <Button
                 key={pdv.id}
                 variant="outline"

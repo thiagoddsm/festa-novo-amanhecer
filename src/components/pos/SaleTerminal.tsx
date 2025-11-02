@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/utils';
 import type { Pdv, MenuItem } from '@/lib/definitions';
-import { CheckCircle2, XCircle, Loader2, ShoppingCart, X, ArrowLeft, Trash2, Pencil, QrCode } from 'lucide-react';
+import { CheckCircle2, XCircle, Loader2, ShoppingCart, X, ArrowLeft, Trash2, Pencil, QrCode, MessageSquarePlus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useFirestore } from '@/firebase';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
@@ -21,6 +21,8 @@ import EditMenuSheet from './EditMenuSheet';
 import QrScannerDialog from '../common/QrScanner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import OrderKanban from './OrderKanban';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { Label } from '../ui/label';
 
 const initialState: {
     status: 'idle' | 'success' | 'error';
@@ -36,6 +38,7 @@ type CartItem = {
     name: string;
     price: number;
     quantity: number;
+    observation?: string;
 }
 
 function SubmitButton({ disabled }: { disabled: boolean }) {
@@ -45,6 +48,45 @@ function SubmitButton({ disabled }: { disabled: boolean }) {
       {pending ? <Loader2 className="animate-spin" /> : 'Finalizar Venda'}
     </Button>
   );
+}
+
+function ObservationDialog({ item, onSave }: { item: CartItem; onSave: (observation: string) => void }) {
+    const [observation, setObservation] = useState(item.observation || '');
+    const [isOpen, setIsOpen] = useState(false);
+
+    const handleSave = () => {
+        onSave(observation);
+        setIsOpen(false);
+    }
+
+    return (
+        <AlertDialog open={isOpen} onOpenChange={setIsOpen}>
+            <AlertDialogTrigger asChild>
+                <Button variant={item.observation ? "secondary" : "ghost"} size="icon" className="h-7 w-7">
+                    <MessageSquarePlus className="h-4 w-4" />
+                </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Observação para: {item.name}</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        Adicione instruções especiais para este item. Ex: sem cebola, ponto da carne, etc.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <div className="py-4">
+                    <Textarea
+                        value={observation}
+                        onChange={(e) => setObservation(e.target.value)}
+                        placeholder='Digite a observação aqui...'
+                    />
+                </div>
+                <AlertDialogFooter>
+                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleSave}>Salvar</AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+    )
 }
 
 export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv, onGoBack: () => void }) {
@@ -57,7 +99,6 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv, onGoBack: ()
   const [menuItems, setMenuItems] = useState<MenuItem[] | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [qrCodeId, setQrCodeId] = useState('');
-  const [observacoes, setObservacoes] = useState('');
   const [isMenuSheetOpen, setIsMenuSheetOpen] = useState(false);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
 
@@ -92,7 +133,6 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv, onGoBack: ()
       formRef.current?.reset();
       setCart([]);
       setQrCodeId('');
-      setObservacoes('');
     }
 
     const timer = setTimeout(() => setConfirmation(null), 3000);
@@ -101,13 +141,13 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv, onGoBack: ()
 
   const addToCart = (item: MenuItem) => {
     setCart(currentCart => {
-      const existingItem = currentCart.find(cartItem => cartItem.id === item.id);
+      const existingItem = currentCart.find(cartItem => cartItem.id === item.id && !cartItem.observation);
       if (existingItem) {
         return currentCart.map(cartItem =>
-          cartItem.id === item.id ? { ...cartItem, quantity: cartItem.quantity + 1 } : cartItem
+          cartItem.id === item.id && !cartItem.observation ? { ...cartItem, quantity: cartItem.quantity + 1 } : cartItem
         );
       }
-      return [...currentCart, { id: item.id, name: item.nome, price: item.preco_centavos, quantity: 1 }];
+      return [...currentCart, { id: item.id, name: item.nome, price: item.preco_centavos, quantity: 1, observation: '' }];
     });
   };
 
@@ -121,6 +161,12 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv, onGoBack: ()
       }
       return currentCart.filter(cartItem => cartItem.id !== itemId);
     });
+  };
+  
+  const updateItemObservation = (itemId: string, observation: string) => {
+      setCart(currentCart => currentCart.map(item => 
+        item.id === itemId ? { ...item, observation } : item
+      ));
   };
 
   const clearCart = () => {
@@ -180,7 +226,7 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv, onGoBack: ()
                         </div>
                     </CardHeader>
                     <CardContent>
-                        <ScrollArea className="h-40">
+                        <ScrollArea className="h-60">
                             {cart.length === 0 ? (
                                 <p className="text-center text-muted-foreground py-10">Clique em um item do cardápio para adicionar.</p>
                             ): (
@@ -188,12 +234,13 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv, onGoBack: ()
                                 {cart.map(item => (
                                     <div key={item.id} className="flex justify-between items-center">
                                         <div>
-                                            <p className="font-semibold">{item.name}</p>
+                                            <p className="font-semibold">{item.name} <Badge variant="secondary">{item.quantity}x</Badge></p>
                                             <p className="text-sm text-muted-foreground">{formatCurrency(item.price)}</p>
+                                            {item.observation && <p className="text-xs text-blue-500 pl-1">OBS: {item.observation}</p>}
                                         </div>
-                                        <div className="flex items-center gap-2">
-                                                <Badge variant="secondary">{item.quantity}x</Badge>
-                                                <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => removeFromCart(item.id)}><X className='h-4 w-4'/></Button>
+                                        <div className="flex items-center gap-1">
+                                                <ObservationDialog item={item} onSave={(obs) => updateItemObservation(item.id, obs)} />
+                                                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => removeFromCart(item.id)}><X className='h-4 w-4'/></Button>
                                         </div>
                                     </div>
                                 ))}
@@ -203,13 +250,6 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv, onGoBack: ()
                         <Separator className="my-4"/>
                         <form ref={formRef} action={formAction}>
                             <div className="space-y-4">
-                                <Textarea 
-                                    name="observacoes" 
-                                    placeholder="Observações do pedido (ex: sem cebola)"
-                                    value={observacoes}
-                                    onChange={(e) => setObservacoes(e.target.value)}
-                                    rows={2}
-                                />
                                 <div className="flex gap-2">
                                     <Input
                                         id="qr_code_id"

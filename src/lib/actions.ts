@@ -12,6 +12,7 @@ function getAdminApp(): App {
   if (getApps().length > 0) {
     return getApp();
   }
+   // This will use the GOOGLE_APPLICATION_CREDENTIALS environment variable
   return initializeApp({
     credential: applicationDefault(),
   });
@@ -188,6 +189,7 @@ const SaleItemSchema = z.object({
     name: z.string(),
     price: z.number(),
     quantity: z.number(),
+    observation: z.string().optional(),
 });
 
 const SaleSchema = z.object({
@@ -196,7 +198,6 @@ const SaleSchema = z.object({
     pdv_nome: z.string().min(1, 'Nome do Ponto de Venda é obrigatório.'),
     items: z.array(SaleItemSchema).min(1, "O carrinho está vazio."),
     total_venda: z.coerce.number().positive('Valor da venda deve ser positivo.'),
-    observacoes: z.string().optional(),
 });
 
 export async function processSale(
@@ -214,7 +215,6 @@ export async function processSale(
             pdv_nome: formData.get('pdv_nome'),
             items: items,
             total_venda: total_venda,
-            observacoes: formData.get('observacoes'),
         });
 
         if (!validatedFields.success) {
@@ -226,7 +226,7 @@ export async function processSale(
             };
         }
 
-        const { qr_code_id, pdv_id, pdv_nome, total_venda: valor_venda_centavos, observacoes } = validatedFields.data;
+        const { qr_code_id, pdv_id, pdv_nome, total_venda: valor_venda_centavos } = validatedFields.data;
 
         const cardsRef = db.collection('cards');
         const q = cardsRef.where('qr_code_id', '==', qr_code_id);
@@ -264,7 +264,7 @@ export async function processSale(
           tipo: 'VENDA',
           valor_centavos: valor_venda_centavos,
           created_at: Timestamp.now(),
-          items: validatedFields.data.items.map(item => ({name: item.name, price: item.price, quantity: item.quantity}))
+          items: validatedFields.data.items // This now includes observations
         });
 
         // 3. Create order record
@@ -278,9 +278,8 @@ export async function processSale(
             status: 'EM_PREPARO', // Initial status
             created_at: Timestamp.now(),
             updated_at: Timestamp.now(),
-            items: validatedFields.data.items,
+            items: validatedFields.data.items, // This now includes observations
             order_number: `#${orderId.substring(0, 4).toUpperCase()}`,
-            observacoes: observacoes ?? '',
         });
 
         await batch.commit();

@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo, useTransition } from 'react';
 import { useFirestore } from '@/firebase';
 import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
-import { type Order } from '@/lib/definitions';
+import { type Order, type OrderItem } from '@/lib/definitions';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
@@ -11,8 +11,7 @@ import { updateOrderStatus } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '../ui/skeleton';
 import { ScrollArea } from '../ui/scroll-area';
-import { Loader2, StickyNote } from 'lucide-react';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Loader2 } from 'lucide-react';
 
 
 type OrderStatus = 'EM_PREPARO' | 'PRONTO' | 'ENTREGUE';
@@ -65,27 +64,18 @@ const OrderCard = ({ order, onDragStart }: { order: Order, onDragStart: (e: Reac
         <CardHeader className="p-3">
             <CardTitle className="flex justify-between items-start text-base">
                 <span className="font-normal">{order.cliente_nome}</span>
-                <div className="flex items-center gap-2">
-                 {order.observacoes && (
-                     <TooltipProvider>
-                        <Tooltip>
-                            <TooltipTrigger>
-                                <StickyNote className="h-4 w-4 text-muted-foreground" />
-                            </TooltipTrigger>
-                            <TooltipContent>
-                                <p>{order.observacoes}</p>
-                            </TooltipContent>
-                        </Tooltip>
-                    </TooltipProvider>
-                 )}
                 <span className="font-bold text-lg text-primary">{order.order_number}</span>
-                </div>
             </CardTitle>
         </CardHeader>
         <CardContent className="p-3 pt-0 space-y-2">
-            <ul className="text-sm text-muted-foreground">
-                {order.items.map(item => (
-                    <li key={item.id}>{item.quantity}x {item.name}</li>
+            <ul className="text-sm space-y-1">
+                {order.items.map((item: OrderItem, index: number) => (
+                    <li key={`${item.id}-${index}`}>
+                        <span className='text-muted-foreground'>{item.quantity}x</span> {item.name}
+                        {item.observation && (
+                            <p className="text-xs text-blue-600 pl-4">&hookrightarrow; {item.observation}</p>
+                        )}
+                    </li>
                 ))}
             </ul>
         </CardContent>
@@ -114,9 +104,10 @@ export default function OrderKanban({ pdvId }: { pdvId: string }) {
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
             
-            const fetchedOrders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order))
-                .filter(order => order.created_at.toDate() >= twentyFourHoursAgo)
-                .sort((a,b) => a.created_at.toMillis() - b.created_at.toMillis());
+            const fetchedOrders = snapshot.docs
+              .map(doc => ({ id: doc.id, ...doc.data() } as Order))
+              .filter(order => order.created_at.toDate() >= twentyFourHoursAgo && order.status !== 'ENTREGUE')
+              .sort((a,b) => a.created_at.toMillis() - b.created_at.toMillis());
 
             setOrders(fetchedOrders);
         }, (error) => {
@@ -128,8 +119,8 @@ export default function OrderKanban({ pdvId }: { pdvId: string }) {
     }, [firestore, pdvId, toast]);
 
     const categorizedOrders = useMemo(() => {
-        const initial: Record<OrderStatus | 'PENDENTE', Order[]> = {
-            'PENDENTE': [], 'EM_PREPARO': [], 'PRONTO': [], 'ENTREGUE': []
+        const initial: Record<OrderStatus, Order[]> = {
+            'EM_PREPARO': [], 'PRONTO': [], 'ENTREGUE': []
         };
 
         if (!orders) return initial;
@@ -165,18 +156,17 @@ export default function OrderKanban({ pdvId }: { pdvId: string }) {
             )
         );
     
-        startTransition(() => {
-            updateOrderStatus(orderId, newStatus).then(result => {
-                if (result.status === 'error') {
-                     toast({
-                        variant: 'destructive',
-                        title: 'Erro ao atualizar pedido',
-                        description: result.message
-                    });
-                    setOrders(originalOrders);
-                }
-                // On success, the real-time listener will update the state, so no need to do anything here.
-            });
+        startTransition(async () => {
+            const result = await updateOrderStatus(orderId, newStatus);
+            if (result.status === 'error') {
+                 toast({
+                    variant: 'destructive',
+                    title: 'Erro ao atualizar pedido',
+                    description: result.message
+                });
+                setOrders(originalOrders);
+            }
+            // On success, the real-time listener will update the state, so no need to do anything here.
         });
     };
 
