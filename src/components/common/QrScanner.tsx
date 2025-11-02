@@ -1,150 +1,79 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { useToast } from '@/hooks/use-toast';
-import { Camera, CameraOff, Loader2 } from 'lucide-react';
-import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
-import { Scanner } from '@yudiel/react-qr-scanner';
+import { useEffect, useRef } from 'react';
+import type { Html5QrcodeScanner, QrCodeSuccessCallback, QrCodeErrorCallback } from 'html5-qrcode';
 
-interface QrScannerDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onScan: (data: string) => void;
+interface QrScannerProps {
+  onScanSuccess: (decodedText: string) => void;
+  onScanFailure: (error: string) => void;
 }
 
-export default function QrScannerDialog({ open, onOpenChange, onScan }: QrScannerDialogProps) {
-  const { toast } = useToast();
-  const [hasCameraError, setHasCameraError] = useState<string | null>(null);
-  const [isCameraOn, setIsCameraOn] = useState(false);
-  const [isStarting, setIsStarting] = useState(false);
+// This is the core scanner component that interacts with the camera
+export function QrScanner({ onScanSuccess, onScanFailure }: QrScannerProps) {
+  const scannerRef = useRef<Html5QrcodeScanner | null>(null);
 
-  const handleResult = (result: any) => {
-    // The result object from `@yudiel/react-qr-scanner` has the text directly.
-    if (result && result.text) {
-      onScan(result.text);
-      onOpenChange(false); // Close the dialog after a successful scan
-    }
-  };
-
-  const handleError = (error: any) => {
-    console.error("Scanner Error:", error);
-    let errorMessage = 'Não foi possível acessar a câmera.';
-    if (error?.name === 'NotAllowedError') {
-        errorMessage = 'A permissão para acessar a câmera foi negada. Verifique as configurações do seu navegador.';
-    } else if (error?.name === 'NotFoundError') {
-        errorMessage = 'Nenhuma câmera foi encontrada no seu dispositivo.';
-    }
-    setHasCameraError(errorMessage);
-    setIsCameraOn(false);
-    setIsStarting(false);
-  };
-  
-  const startCamera = () => {
-      setHasCameraError(null);
-      setIsStarting(true);
-      // Let the component handle the camera turning on after this state change.
-  }
-
-  // Reset state when dialog is closed to ensure it's clean for the next open
   useEffect(() => {
-    if (!open) {
-      setIsCameraOn(false);
-      setHasCameraError(null);
-      setIsStarting(false);
-    }
-  }, [open]);
+    // Dynamically import the library only on the client-side
+    import('html5-qrcode').then(({ Html5QrcodeScanner }) => {
+      if (!scannerRef.current) {
+        const scanner = new Html5QrcodeScanner(
+          'qr-reader', // The ID of the div to render the scanner in
+          {
+            fps: 10,
+            qrbox: { width: 250, height: 250 },
+            rememberLastUsedCamera: true,
+            supportedScanTypes: [], // Use all available scan types
+          },
+          false // Verbose logging
+        );
 
-  // Effect to turn on the camera after the user clicks the button
-  useEffect(() => {
-      if (isStarting && open && !isCameraOn) {
-          // This timeout gives the UI time to show the "Iniciando..." message
-          // before the browser permission prompt might freeze the UI.
-          setTimeout(() => {
-              setIsCameraOn(true);
-          }, 100);
+        const successCallback: QrCodeSuccessCallback = (decodedText, decodedResult) => {
+          // Wrap in a try-catch in case onScanSuccess throws an error
+          try {
+            onScanSuccess(decodedText);
+          } catch (e) {
+            console.error('Error in onScanSuccess callback:', e);
+          }
+          // Stop scanning after a success
+          if (scannerRef.current) {
+            scannerRef.current.clear().catch(err => console.error("Failed to clear scanner", err));
+          }
+        };
+
+        const errorCallback: QrCodeErrorCallback = (error) => {
+          // This callback is called frequently, so we only log/handle significant errors
+          // It's common for it to fire when no QR code is in view.
+          // onScanFailure(error);
+        };
+        
+        // Start scanning. It will request camera permissions.
+        scanner.render(successCallback, errorCallback)
+          .catch(err => {
+            console.error("Error rendering scanner:", err);
+            onScanFailure(err.message || 'Failed to render scanner.');
+          });
+          
+        scannerRef.current = scanner;
       }
-  }, [isStarting, open, isCameraOn]);
 
+      // Cleanup function to stop the scanner when the component unmounts
+      return () => {
+        if (scannerRef.current) {
+          scannerRef.current.clear().catch(err => {
+            console.error("Failed to clear scanner on unmount:", err);
+          });
+          scannerRef.current = null;
+        }
+      };
+    }).catch(err => {
+        console.error("Failed to load html5-qrcode library", err);
+        onScanFailure('Failed to load scanning library.');
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run only once on component mount
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[425px]">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Camera /> Escanear QR Code
-          </DialogTitle>
-          <DialogDescription>
-            Aponte a câmera para o QR code do cartão do cliente.
-          </DialogDescription>
-        </DialogHeader>
-        
-        <div className="relative flex h-72 w-full items-center justify-center overflow-hidden rounded-md border bg-muted">
-           {isCameraOn && !hasCameraError ? (
-             <Scanner
-                onScan={handleResult}
-                onError={handleError}
-                constraints={{ 
-                    video: { 
-                        facingMode: 'environment',
-                        width: { ideal: 1920 }, // Higher resolution to hint for main camera
-                        height: { ideal: 1080 }
-                    } 
-                }}
-                styles={{
-                    container: { width: '100%', height: '100%', paddingTop: 0, background: 'black' }
-                }}
-                onDecode={() => setIsStarting(false)} // Turn off "Iniciando..." once it starts decoding
-             />
-           ) : (
-                <div className="flex flex-col items-center justify-center text-center p-4">
-                    {hasCameraError ? (
-                         <Alert variant="destructive">
-                            <CameraOff className="h-4 w-4" />
-                            <AlertTitle>Erro de Câmera</AlertTitle>
-                            <AlertDescription>
-                                {hasCameraError}
-                            </AlertDescription>
-                        </Alert>
-                    ) : (
-                        <p className="text-muted-foreground">A câmera está desligada.</p>
-                    )}
-                </div>
-           )}
-           {isStarting && !hasCameraError && (
-               <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50 text-white">
-                   <Loader2 className="h-8 w-8 animate-spin" />
-                   <p className="mt-2">Iniciando câmera...</p>
-               </div>
-           )}
-        </div>
-
-        <DialogFooter className="flex-col-reverse sm:flex-row sm:justify-between sm:space-x-2">
-           {!isCameraOn && !hasCameraError ? (
-                 <Button onClick={startCamera} className="w-full sm:w-auto">
-                    <Camera className="mr-2 h-4 w-4" />
-                    Ligar Câmera
-                </Button>
-            ) : (
-                <Button variant="outline" onClick={() => setIsCameraOn(false)} className="w-full sm:w-auto">
-                    <CameraOff className="mr-2 h-4 w-4" />
-                    Desligar Câmera
-                </Button>
-            )}
-
-          <Button variant="secondary" onClick={() => onOpenChange(false)} className="w-full sm:w-auto">
-            Fechar
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    // This div is where the html5-qrcode library will mount the camera view
+    <div id="qr-reader" className="w-full"></div>
   );
 }

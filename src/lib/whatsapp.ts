@@ -36,7 +36,8 @@ export async function sendWhatsappMessage(to: string, text: string, apiKey: stri
     } catch (error) {
         console.error("Erro ao enviar mensagem de WhatsApp:", error);
         const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido.';
-        return { status: 'error', message: errorMessage };
+        // Re-throw the error to be caught by the calling flow
+        throw new Error(errorMessage);
     }
 }
 
@@ -70,6 +71,7 @@ export async function sendWhatsappImage(to: string, imageUrl: string, caption: s
     } catch (error) {
         console.error("Erro ao enviar imagem de WhatsApp:", error);
         const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido.';
-        return { status: 'error', message: errorMessage };
+        // Re-throw the error to be caught by the calling flow
+        throw new Error(errorMessage);
     }
 }
