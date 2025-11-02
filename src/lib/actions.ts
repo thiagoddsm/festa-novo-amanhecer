@@ -456,7 +456,6 @@ export async function updateOrderStatus(orderId: string, newStatus: 'PENDENTE' |
             status: newStatus,
             updated_at: Timestamp.now(),
         });
-        revalidatePath('/pos'); // Revalidate to show updated status
         return { status: 'success', message: 'Status do pedido atualizado.' };
     } catch (error) {
         console.error("Error updating order status:", error);
