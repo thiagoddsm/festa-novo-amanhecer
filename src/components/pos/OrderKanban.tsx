@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useMemo, useTransition } from 'react';
 import { useFirestore } from '@/firebase';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
 import { type Order } from '@/lib/definitions';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -15,10 +15,9 @@ import { Loader2, StickyNote } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 
-type OrderStatus = 'PENDENTE' | 'EM_PREPARO' | 'PRONTO' | 'ENTREGUE';
+type OrderStatus = 'EM_PREPARO' | 'PRONTO' | 'ENTREGUE';
 
 const statusConfig: Record<OrderStatus, { title: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
-    'PENDENTE': { title: 'Pendente', variant: 'destructive' },
     'EM_PREPARO': { title: 'Em Preparo', variant: 'secondary' },
     'PRONTO': { title: 'Pronto p/ Retirada', variant: 'default' },
     'ENTREGUE': { title: 'Entregue', variant: 'outline' }
@@ -107,15 +106,16 @@ export default function OrderKanban({ pdvId }: { pdvId: string }) {
         if (!firestore || !pdvId) return;
         
         const ordersRef = collection(firestore, 'orders');
-        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
         
         const q = query(ordersRef, 
-            where('pdv_id', '==', pdvId),
-            where('created_at', '>=', twentyFourHoursAgo)
+            where('pdv_id', '==', pdvId)
         );
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
+            const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+            
             const fetchedOrders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order))
+                .filter(order => order.created_at.toDate() >= twentyFourHoursAgo)
                 .sort((a,b) => a.created_at.toMillis() - b.created_at.toMillis());
 
             setOrders(fetchedOrders);
@@ -128,14 +128,22 @@ export default function OrderKanban({ pdvId }: { pdvId: string }) {
     }, [firestore, pdvId, toast]);
 
     const categorizedOrders = useMemo(() => {
-        const initial: Record<OrderStatus, Order[]> = {
+        const initial: Record<OrderStatus | 'PENDENTE', Order[]> = {
             'PENDENTE': [], 'EM_PREPARO': [], 'PRONTO': [], 'ENTREGUE': []
         };
+
         if (!orders) return initial;
+
         return orders.reduce((acc, order) => {
-            acc[order.status].push(order);
+            // Treat PENDENTE as EM_PREPARO for display purposes
+            if (order.status === 'PENDENTE' || order.status === 'EM_PREPARO') {
+                 acc['EM_PREPARO'].push(order);
+            } else if (acc[order.status]) {
+                acc[order.status].push(order);
+            }
             return acc;
         }, initial);
+
     }, [orders]);
 
 
@@ -147,7 +155,7 @@ export default function OrderKanban({ pdvId }: { pdvId: string }) {
         e.preventDefault();
         const orderId = e.dataTransfer.getData('orderId');
         if (!orderId) return;
-
+    
         const originalOrders = orders;
         
         // Optimistic UI update
@@ -156,17 +164,19 @@ export default function OrderKanban({ pdvId }: { pdvId: string }) {
                 o.id === orderId ? { ...o, status: newStatus } : o
             )
         );
-
-        startTransition(async () => {
-            const result = await updateOrderStatus(orderId, newStatus);
-            if (result.status === 'error') {
-                toast({
-                    variant: 'destructive',
-                    title: 'Erro ao atualizar pedido',
-                    description: result.message
-                });
-                setOrders(originalOrders); 
-            }
+    
+        startTransition(() => {
+            updateOrderStatus(orderId, newStatus).then(result => {
+                if (result.status === 'error') {
+                     toast({
+                        variant: 'destructive',
+                        title: 'Erro ao atualizar pedido',
+                        description: result.message
+                    });
+                    setOrders(originalOrders);
+                }
+                // On success, the real-time listener will update the state, so no need to do anything here.
+            });
         });
     };
 

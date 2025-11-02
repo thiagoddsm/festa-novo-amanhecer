@@ -275,7 +275,7 @@ export async function processSale(
             pdv_nome: pdv_nome,
             transaction_id: transactionRef.id,
             cliente_nome: card.nome_cliente || 'Cliente',
-            status: 'PENDENTE', // Initial status
+            status: 'EM_PREPARO', // Initial status
             created_at: Timestamp.now(),
             updated_at: Timestamp.now(),
             items: validatedFields.data.items,
