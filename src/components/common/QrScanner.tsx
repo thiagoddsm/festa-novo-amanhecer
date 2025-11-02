@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { Camera, CameraOff } from 'lucide-react';
+import { Camera, CameraOff, Loader2 } from 'lucide-react';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { Scanner } from '@yudiel/react-qr-scanner';
 
@@ -23,28 +23,47 @@ interface QrScannerDialogProps {
 
 export default function QrScannerDialog({ open, onOpenChange, onScan }: QrScannerDialogProps) {
   const { toast } = useToast();
-  const [hasCameraError, setHasCameraError] = useState(false);
+  const [hasCameraError, setHasCameraError] = useState<string | null>(null);
+  const [isCameraOn, setIsCameraOn] = useState(false);
+  const [isStarting, setIsStarting] = useState(false);
 
   const handleResult = (result: any) => {
     if (result) {
-      onScan(result);
+      onScan(result.getText());
       onOpenChange(false);
     }
   };
 
   const handleError = (error: any) => {
-    console.error(error);
-    setHasCameraError(true);
-    // We show the error inside the dialog now, toast is optional
+    console.error("Scanner Error:", error);
+    let errorMessage = 'Não foi possível acessar a câmera.';
+    if (error?.name === 'NotAllowedError') {
+        errorMessage = 'A permissão para acessar a câmera foi negada. Verifique as configurações do seu navegador.';
+    } else if (error?.name === 'NotFoundError') {
+        errorMessage = 'Nenhuma câmera foi encontrada no seu dispositivo.';
+    }
+    setHasCameraError(errorMessage);
+    setIsCameraOn(false);
+    setIsStarting(false);
   };
+  
+  const startCamera = () => {
+      setHasCameraError(null);
+      setIsStarting(true);
+      setIsCameraOn(true);
+  }
+
+  // Reset state when dialog is closed
+  useEffect(() => {
+    if (!open) {
+      setIsCameraOn(false);
+      setHasCameraError(null);
+      setIsStarting(false);
+    }
+  }, [open]);
 
   return (
-    <Dialog open={open} onOpenChange={(isOpen) => {
-        onOpenChange(isOpen);
-        if (!isOpen) {
-            setHasCameraError(false); // Reset error state on close
-        }
-    }}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -55,36 +74,59 @@ export default function QrScannerDialog({ open, onOpenChange, onScan }: QrScanne
           </DialogDescription>
         </DialogHeader>
         
-        <div className="relative flex h-64 w-full items-center justify-center overflow-hidden rounded-md border bg-muted">
-           {open && !hasCameraError && (
+        <div className="relative flex h-72 w-full items-center justify-center overflow-hidden rounded-md border bg-muted">
+           {isCameraOn ? (
              <Scanner
-                onResult={handleResult}
+                onScan={handleResult}
                 onError={handleError}
-                options={{
-                    constraints: {
-                        facingMode: 'environment'
-                    }
+                constraints={{ 
+                    video: { 
+                        facingMode: 'environment',
+                        width: { ideal: 1920 },
+                        height: { ideal: 1080 }
+                    } 
                 }}
                 styles={{
-                    container: { width: '100%', height: '100%', paddingTop: 0 }
+                    container: { width: '100%', height: '100%', paddingTop: 0, background: 'black' }
                 }}
              />
-           )}
-           {hasCameraError && (
-                <div className="p-4 text-center">
-                     <Alert variant="destructive">
-                        <CameraOff className="h-4 w-4" />
-                        <AlertTitle>Erro de Câmera</AlertTitle>
-                        <AlertDescription>
-                            Não foi possível acessar a câmera. Verifique as permissões no seu navegador e tente novamente.
-                        </AlertDescription>
-                    </Alert>
+           ) : (
+                <div className="flex flex-col items-center justify-center text-center p-4">
+                    {hasCameraError ? (
+                         <Alert variant="destructive">
+                            <CameraOff className="h-4 w-4" />
+                            <AlertTitle>Erro de Câmera</AlertTitle>
+                            <AlertDescription>
+                                {hasCameraError}
+                            </AlertDescription>
+                        </Alert>
+                    ) : (
+                        <p className="text-muted-foreground">A câmera está desligada.</p>
+                    )}
                 </div>
+           )}
+           {isStarting && !hasCameraError && (
+               <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50 text-white">
+                   <Loader2 className="h-8 w-8 animate-spin" />
+                   <p className="mt-2">Iniciando câmera...</p>
+               </div>
            )}
         </div>
 
-        <DialogFooter>
-          <Button variant="secondary" onClick={() => onOpenChange(false)}>
+        <DialogFooter className="flex-col-reverse sm:flex-row sm:justify-between sm:space-x-2">
+           {!isCameraOn ? (
+                 <Button onClick={startCamera} className="w-full sm:w-auto">
+                    <Camera className="mr-2 h-4 w-4" />
+                    Ligar Câmera
+                </Button>
+            ) : (
+                <Button variant="outline" onClick={() => setIsCameraOn(false)} className="w-full sm:w-auto">
+                    <CameraOff className="mr-2 h-4 w-4" />
+                    Desligar Câmera
+                </Button>
+            )}
+
+          <Button variant="secondary" onClick={() => onOpenChange(false)} className="w-full sm:w-auto">
             Fechar
           </Button>
         </DialogFooter>
