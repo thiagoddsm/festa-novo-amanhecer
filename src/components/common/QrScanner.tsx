@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -28,9 +28,11 @@ export default function QrScannerDialog({ open, onOpenChange, onScan }: QrScanne
   const [isStarting, setIsStarting] = useState(false);
 
   const handleResult = (result: any) => {
-    if (result) {
-      onScan(result.getText());
-      onOpenChange(false);
+    // The result object from `@yudiel/react-qr-scanner` has the text directly.
+    // The old library used a `getText()` method. This is the fix.
+    if (result && result.text) {
+      onScan(result.text);
+      onOpenChange(false); // Close the dialog after a successful scan
     }
   };
 
@@ -50,10 +52,10 @@ export default function QrScannerDialog({ open, onOpenChange, onScan }: QrScanne
   const startCamera = () => {
       setHasCameraError(null);
       setIsStarting(true);
-      setIsCameraOn(true);
+      // Let the component handle the camera turning on after this state change.
   }
 
-  // Reset state when dialog is closed
+  // Reset state when dialog is closed to ensure it's clean for the next open
   useEffect(() => {
     if (!open) {
       setIsCameraOn(false);
@@ -61,6 +63,18 @@ export default function QrScannerDialog({ open, onOpenChange, onScan }: QrScanne
       setIsStarting(false);
     }
   }, [open]);
+
+  // Effect to turn on the camera after the user clicks the button
+  useEffect(() => {
+      if (isStarting && open && !isCameraOn) {
+          // This timeout gives the UI time to show the "Iniciando..." message
+          // before the browser permission prompt might freeze the UI.
+          setTimeout(() => {
+              setIsCameraOn(true);
+          }, 100);
+      }
+  }, [isStarting, open, isCameraOn]);
+
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -75,20 +89,21 @@ export default function QrScannerDialog({ open, onOpenChange, onScan }: QrScanne
         </DialogHeader>
         
         <div className="relative flex h-72 w-full items-center justify-center overflow-hidden rounded-md border bg-muted">
-           {isCameraOn ? (
+           {isCameraOn && !hasCameraError ? (
              <Scanner
                 onScan={handleResult}
                 onError={handleError}
                 constraints={{ 
                     video: { 
                         facingMode: 'environment',
-                        width: { ideal: 1920 },
+                        width: { ideal: 1920 }, // Higher resolution to hint for main camera
                         height: { ideal: 1080 }
                     } 
                 }}
                 styles={{
                     container: { width: '100%', height: '100%', paddingTop: 0, background: 'black' }
                 }}
+                onDecode={() => setIsStarting(false)} // Turn off "Iniciando..." once it starts decoding
              />
            ) : (
                 <div className="flex flex-col items-center justify-center text-center p-4">
@@ -114,7 +129,7 @@ export default function QrScannerDialog({ open, onOpenChange, onScan }: QrScanne
         </div>
 
         <DialogFooter className="flex-col-reverse sm:flex-row sm:justify-between sm:space-x-2">
-           {!isCameraOn ? (
+           {!isCameraOn && !hasCameraError ? (
                  <Button onClick={startCamera} className="w-full sm:w-auto">
                     <Camera className="mr-2 h-4 w-4" />
                     Ligar Câmera
