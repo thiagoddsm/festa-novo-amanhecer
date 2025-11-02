@@ -444,11 +444,17 @@ const UpdateOrderStatusSchema = z.object({
   newStatus: z.enum(['PENDENTE', 'EM_PREPARO', 'PRONTO', 'ENTREGUE']),
 });
 
-export async function updateOrderStatus(orderId: string, newStatus: 'PENDENTE' | 'EM_PREPARO' | 'PRONTO' | 'ENTREGUE'): Promise<ActionState> {
-    const validated = UpdateOrderStatusSchema.safeParse({ orderId, newStatus });
+export async function updateOrderStatus(prevState: ActionState, formData: FormData): Promise<ActionState> {
+    const validated = UpdateOrderStatusSchema.safeParse({ 
+        orderId: formData.get('orderId'),
+        newStatus: formData.get('newStatus'),
+    });
+
     if (!validated.success) {
         return { status: 'error', message: 'Dados inválidos para atualizar o pedido.'};
     }
+
+    const { orderId, newStatus } = validated.data;
 
     try {
         const orderRef = db.collection('orders').doc(orderId);

@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useTransition } from 'react';
 import { useFirestore } from '@/firebase';
 import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
 import { type Order } from '@/lib/definitions';
@@ -11,6 +11,7 @@ import { updateOrderStatus } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '../ui/skeleton';
 import { ScrollArea } from '../ui/scroll-area';
+import { Loader2 } from 'lucide-react';
 
 type OrderStatus = 'PENDENTE' | 'EM_PREPARO' | 'PRONTO' | 'ENTREGUE';
 
@@ -21,7 +22,7 @@ const statusConfig: Record<OrderStatus, { title: string; variant: 'default' | 's
     'ENTREGUE': { title: 'Entregue', variant: 'outline' }
 };
 
-const KanbanColumn = ({ title, variant, orders, onDrop, onDragOver, onDragStart, status }: {
+const KanbanColumn = ({ title, variant, orders, onDrop, onDragOver, onDragStart, status, isPending }: {
     title: string;
     variant: 'default' | 'secondary' | 'destructive' | 'outline';
     orders: Order[];
@@ -29,6 +30,7 @@ const KanbanColumn = ({ title, variant, orders, onDrop, onDragOver, onDragStart,
     onDrop: (e: React.DragEvent<HTMLDivElement>, status: OrderStatus) => void;
     onDragOver: (e: React.DragEvent<HTMLDivElement>) => void;
     onDragStart: (e: React.DragEvent<HTMLDivElement>, order: Order) => void;
+    isPending: boolean;
 }) => (
     <Card
         className="flex-1 flex flex-col min-w-[280px]"
@@ -43,6 +45,7 @@ const KanbanColumn = ({ title, variant, orders, onDrop, onDragOver, onDragStart,
         </CardHeader>
         <ScrollArea className="flex-grow bg-muted/50 p-2">
             <div className="space-y-3 p-2 h-full">
+                {isPending && <div className="absolute inset-0 bg-background/50 flex items-center justify-center"><Loader2 className="animate-spin" /></div>}
                 {orders.map(order => (
                     <OrderCard key={order.id} order={order} onDragStart={onDragStart} />
                 ))}
@@ -82,24 +85,19 @@ export default function OrderKanban({ pdvId }: { pdvId: string }) {
     const firestore = useFirestore();
     const { toast } = useToast();
     const [orders, setOrders] = useState<Order[] | null>(null);
+    const [isPending, startTransition] = useTransition();
 
     useEffect(() => {
         if (!firestore || !pdvId) return;
         
         const ordersRef = collection(firestore, 'orders');
-        // Removed orderBy to avoid composite index requirement.
-        // Filtering and sorting will be done on the client-side.
-        const q = query(
-            ordersRef,
-            where('pdv_id', '==', pdvId)
-        );
+        const q = query(ordersRef, where('pdv_id', '==', pdvId));
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
             
             const fetchedOrders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
             
-            // Filter and sort on the client side
             const activeOrders = fetchedOrders
                 .filter(order => 
                     order.created_at.toDate() >= twentyFourHoursAgo &&
@@ -122,7 +120,7 @@ export default function OrderKanban({ pdvId }: { pdvId: string }) {
         };
         if (!orders) return initial;
         return orders.reduce((acc, order) => {
-            if (order.status !== 'ENTREGUE') { // Ensure we don't process delivered orders for the columns
+            if (order.status !== 'ENTREGUE') { 
                acc[order.status].push(order);
             }
             return acc;
@@ -139,7 +137,6 @@ export default function OrderKanban({ pdvId }: { pdvId: string }) {
         const orderId = e.dataTransfer.getData('orderId');
         if (!orderId) return;
 
-        // Optimistic update
         const originalOrders = orders;
         setOrders(prevOrders =>
             prevOrders!.map(o =>
@@ -147,19 +144,25 @@ export default function OrderKanban({ pdvId }: { pdvId: string }) {
             )
         );
 
-        const result = await updateOrderStatus(orderId, newStatus);
-        if (result.status === 'error') {
-            toast({
-                variant: 'destructive',
-                title: 'Erro ao atualizar pedido',
-                description: result.message
-            });
-            setOrders(originalOrders); // Revert on error
-        }
+        const formData = new FormData();
+        formData.append('orderId', orderId);
+        formData.append('newStatus', newStatus);
+
+        startTransition(async () => {
+            const result = await updateOrderStatus(null as any, formData);
+            if (result.status === 'error') {
+                toast({
+                    variant: 'destructive',
+                    title: 'Erro ao atualizar pedido',
+                    description: result.message
+                });
+                setOrders(originalOrders); 
+            }
+        });
     };
 
     const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-        e.preventDefault(); // Necessary to allow drop
+        e.preventDefault();
     };
 
     if (orders === null) {
@@ -192,6 +195,7 @@ export default function OrderKanban({ pdvId }: { pdvId: string }) {
                     onDrop={handleDrop}
                     onDragOver={handleDragOver}
                     onDragStart={handleDragStart}
+                    isPending={isPending}
                 />
             ))}
         </div>
