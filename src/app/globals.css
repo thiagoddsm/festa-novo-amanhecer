@@ -90,33 +90,29 @@ body {
 /* Print styles */
 @media print {
   @page {
-    size: 98mm 50mm;
+    size: auto;
     margin: 0;
   }
 
   body {
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
+    background-color: white;
+    padding: 0;
+    margin: 0;
   }
 
   .screen-only {
     display: none !important;
   }
-
-  body * {
-    visibility: hidden;
-  }
-
-  .print-only, .print-only * {
-    visibility: visible;
-  }
-
+  
   .print-only {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
-    height: 100%;
+    display: block !important;
+  }
+
+  /* Hide everything except the printable area */
+  body > *:not(.print-only) {
+    display: none;
   }
 
   .printable-card {
@@ -124,13 +120,14 @@ body {
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    width: 98mm;
-    height: 50mm;
-    background-color: white;
-    padding: 2mm;
+    width: 100%;
+    height: 100%;
+    padding: 4mm 2mm; /* Added a bit more vertical padding */
     box-sizing: border-box;
+    page-break-inside: avoid;
   }
 }
+
 
 /* Screen styles */
 @media screen {
