@@ -23,6 +23,7 @@ interface QrScannerDialogProps {
 
 export default function QrScannerDialog({ open, onOpenChange, onScan }: QrScannerDialogProps) {
   const { toast } = useToast();
+  const [hasCameraError, setHasCameraError] = useState(false);
 
   const handleResult = (result: any) => {
     if (result) {
@@ -33,16 +34,17 @@ export default function QrScannerDialog({ open, onOpenChange, onScan }: QrScanne
 
   const handleError = (error: any) => {
     console.error(error);
-    toast({
-      variant: 'destructive',
-      title: 'Erro no Scanner',
-      description: error?.message || 'Não foi possível acessar a câmera.',
-    });
-    onOpenChange(false);
+    setHasCameraError(true);
+    // We show the error inside the dialog now, toast is optional
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(isOpen) => {
+        onOpenChange(isOpen);
+        if (!isOpen) {
+            setHasCameraError(false); // Reset error state on close
+        }
+    }}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -54,7 +56,7 @@ export default function QrScannerDialog({ open, onOpenChange, onScan }: QrScanne
         </DialogHeader>
         
         <div className="relative flex h-64 w-full items-center justify-center overflow-hidden rounded-md border bg-muted">
-           {open && (
+           {open && !hasCameraError && (
              <QrScanner
                 onDecode={handleResult}
                 onError={handleError}
@@ -65,6 +67,17 @@ export default function QrScannerDialog({ open, onOpenChange, onScan }: QrScanne
                     container: { width: '100%', height: '100%', paddingTop: 0 }
                 }}
              />
+           )}
+           {hasCameraError && (
+                <div className="p-4 text-center">
+                     <Alert variant="destructive">
+                        <CameraOff className="h-4 w-4" />
+                        <AlertTitle>Erro de Câmera</AlertTitle>
+                        <AlertDescription>
+                            Não foi possível acessar a câmera. Verifique as permissões no seu navegador e tente novamente.
+                        </AlertDescription>
+                    </Alert>
+                </div>
            )}
         </div>
 
