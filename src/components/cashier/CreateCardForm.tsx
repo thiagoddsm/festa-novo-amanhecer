@@ -37,58 +37,96 @@ function SubmitButton() {
   );
 }
 
-// This component is only visible when printing
-const PrintableCard = React.forwardRef<HTMLDivElement, { card: CardType | null }>(({ card }, ref) => {
-    if (!card) return null;
-
-    return (
-        <div ref={ref} className="print-only">
-             <div className="printable-card">
-                {card.nome_cliente && (
-                    <div className='mb-2 text-center'>
-                        <p className="text-xs font-medium text-gray-600">Cliente</p>
-                        <p className="text-sm font-semibold text-black flex items-center justify-center gap-1">
-                            <User className='h-3 w-3' /> {card.nome_cliente}
-                        </p>
-                    </div>
-                )}
-                <div className="flex justify-center my-2">
-                    <QRCode value={card.qr_code_id} size={80} />
-                </div>
-                <p className="text-xs font-mono text-gray-700">ID: {card.qr_code_id}</p>
-                <p className="mt-2 text-xs font-medium text-gray-600">Saldo Inicial</p>
-                <p className="text-xl font-bold text-black">
-                {formatCurrency(card.saldo_centavos ?? 0)}
-                </p>
-            </div>
-        </div>
-    );
-});
-PrintableCard.displayName = 'PrintableCard';
-
-
 export default function CreateCardForm() {
   const [state, formAction] = useActionState(createCard, initialState);
   const { toast } = useToast();
   const formRef = useRef<HTMLFormElement>(null);
-  const printableRef = useRef<HTMLDivElement>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [newCard, setNewCard] = useState<CardType | null>(null);
 
-  const handlePrint = () => {
-    window.print();
+  const handlePrint = (card: CardType) => {
+    const qrCodeSvg = document.createElement('div');
+    const reactDom = require('react-dom');
+    const qrComponent = React.createElement(QRCode, { value: card.qr_code_id, size: 100 });
+    reactDom.render(qrComponent, qrCodeSvg);
+    const qrCodeDataUrl = `data:image/svg+xml;base64,${btoa(qrCodeSvg.innerHTML)}`;
+
+    const printWindow = window.open('', '_blank', 'width=302,height=302');
+    if (!printWindow) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro de Impressão',
+        description: 'Não foi possível abrir a janela de impressão. Verifique se os pop-ups estão bloqueados.',
+      });
+      return;
+    }
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>FestaPay - Comprovante</title>
+          <style>
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+            body { 
+              font-family: 'Inter', sans-serif;
+              margin: 0; 
+              padding: 0;
+              display: flex; 
+              flex-direction: column;
+              align-items: center; 
+              justify-content: center; 
+              width: 98mm; /* Approx width of thermal paper */
+              box-sizing: border-box;
+            }
+            @page { 
+              size: auto;
+              margin: 2mm; 
+            }
+            .content {
+              text-align: center;
+            }
+            .qr-id {
+              font-family: monospace;
+              font-size: 8px;
+              margin-top: 2px;
+            }
+            .client-name {
+              font-size: 14px;
+              font-weight: 600;
+              margin-bottom: 4px;
+            }
+            .balance-label {
+               font-size: 12px;
+               font-weight: 500;
+               margin-top: 4px;
+            }
+            .balance-value {
+              font-size: 18px;
+              font-weight: 700;
+            }
+          </style>
+        </head>
+        <body onload="window.print(); window.close();">
+          <div class="content">
+            ${card.nome_cliente ? `<div class="client-name">${card.nome_cliente}</div>` : ''}
+            <img src="${qrCodeDataUrl}" />
+            <div class="qr-id">ID: ${card.qr_code_id}</div>
+            <div class="balance-label">Saldo Inicial</div>
+            <div class="balance-value">${formatCurrency(card.saldo_centavos ?? 0)}</div>
+          </div>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
   };
   
   const resetForm = () => {
       setNewCard(null);
       formRef.current?.reset();
-      // Reset the action state if possible, or handle UI reset logic here
   }
 
   useEffect(() => {
-    if (!state) {
-      return;
-    }
+    if (!state) return;
     if (state.status === 'error') {
       toast({
         variant: 'destructive',
@@ -98,22 +136,19 @@ export default function CreateCardForm() {
       setNewCard(null);
     }
     if (state.status === 'success' && state.data) {
-      setNewCard(state.data);
-      setDialogOpen(true); // Open dialog for confirmation
+      const cardData = state.data as CardType;
+      setNewCard(cardData);
+      setDialogOpen(true);
       formRef.current?.reset();
-      // The printing will be triggered by the user from the UI
-      // but we will trigger it automatically here.
-      // Small delay to ensure the state is set and the printable component is rendered.
+      
       setTimeout(() => {
-          handlePrint();
+          handlePrint(cardData);
       }, 100);
     }
   }, [state, toast]);
 
   return (
     <>
-      <PrintableCard card={newCard} ref={printableRef} />
-      
       <Card className="screen-only">
         <CardHeader>
           <CardTitle>Novo Cartão</CardTitle>
@@ -171,7 +206,7 @@ export default function CreateCardForm() {
               <QrCode /> Cartão Criado com Sucesso!
             </AlertDialogTitle>
             <AlertDialogDescription>
-              O comprovante será impresso automaticamente. Você pode fechar esta janela.
+              O comprovante foi enviado para a impressão. Você pode fechar esta janela.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
