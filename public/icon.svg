@@ -1,8 +1,1 @@
-<svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-<path d="M24 4C12.95 4 4 12.95 4 24C4 35.05 12.95 44 24 44C35.05 44 44 35.05 44 24C44 12.95 35.05 4 24 4Z" fill="#F3E8FF"/>
-<path d="M25.41 14.12L22.6 24.3L32.79 21.49L25.41 14.12Z" fill="#A855F7"/>
-<path d="M21.49 25.41L14.12 32.79L24.3 22.6L21.49 25.41Z" fill="#9333EA"/>
-<path d:id="path3" d="M22.6 24.3L25.41 21.49L21.49 14.12L14.12 21.49L22.6 24.3Z" fill="#7E22CE"/>
-<path d="M24.3 22.6L32.79 14.12L32.79 32.79L24.3 22.6Z" fill="#581C87"/>
-<path d="M25.41 25.41L32.79 21.49L32.79 32.79L25.41 25.41Z" fill="#6B21A8"/>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-ticket-percent"><path d="M14 6v2.5"/><path d="M14 10.5V13"/><path d="M14 15.5V18"/><path d="M9.5 16.5a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z"/><path d="M14.5 9.5a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z"/><path d="M2 9a3 3 0 0 1 0 6v3a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-3a3 3 0 0 1 0-6V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/></svg>
