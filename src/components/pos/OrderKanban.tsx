@@ -44,7 +44,7 @@ const KanbanColumn = ({ title, variant, orders, onDrop, onDragOver, onDragStart,
             </CardTitle>
         </CardHeader>
         <ScrollArea className="flex-grow bg-muted/50 p-2">
-            <div className="space-y-3 p-2 h-full">
+            <div className="space-y-3 p-2 h-full relative">
                 {isPending && <div className="absolute inset-0 bg-background/50 flex items-center justify-center"><Loader2 className="animate-spin" /></div>}
                 {orders.map(order => (
                     <OrderCard key={order.id} order={order} onDragStart={onDragStart} />
@@ -94,9 +94,9 @@ export default function OrderKanban({ pdvId }: { pdvId: string }) {
         const q = query(ordersRef, where('pdv_id', '==', pdvId));
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
-            const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-            
             const fetchedOrders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
+            
+            const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
             
             const activeOrders = fetchedOrders
                 .filter(order => 
@@ -132,24 +132,21 @@ export default function OrderKanban({ pdvId }: { pdvId: string }) {
         e.dataTransfer.setData('orderId', order.id);
     };
 
-    const handleDrop = async (e: React.DragEvent<HTMLDivElement>, newStatus: OrderStatus) => {
+    const handleDrop = (e: React.DragEvent<HTMLDivElement>, newStatus: OrderStatus) => {
         e.preventDefault();
         const orderId = e.dataTransfer.getData('orderId');
         if (!orderId) return;
 
         const originalOrders = orders;
+        // Optimistic UI update
         setOrders(prevOrders =>
             prevOrders!.map(o =>
                 o.id === orderId ? { ...o, status: newStatus } : o
             )
         );
 
-        const formData = new FormData();
-        formData.append('orderId', orderId);
-        formData.append('newStatus', newStatus);
-
         startTransition(async () => {
-            const result = await updateOrderStatus(null as any, formData);
+            const result = await updateOrderStatus(orderId, newStatus);
             if (result.status === 'error') {
                 toast({
                     variant: 'destructive',
