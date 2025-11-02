@@ -4,7 +4,7 @@ import { initializeApp, getApps, getApp, App, applicationDefault } from 'firebas
 import { getFirestore } from 'firebase-admin/firestore';
 import type { Card } from '../definitions';
 import { formatCurrency } from '../utils';
-import { sendWhatsappMessage } from '../whatsapp';
+import { sendWhatsappMessage, sendWhatsappImage } from '../whatsapp';
 
 // --- Initialization ---
 
@@ -32,7 +32,10 @@ type NotifyResult = {
 async function baseNotificationFlow(
     cardId: string, 
     messageBuilder: (card: Card) => string,
-    testNumber?: string
+    options?: {
+        testNumber?: string;
+        sendQrImage?: boolean;
+    }
 ): Promise<NotifyResult> {
     const apiKey = process.env.WHATSAPP_API_KEY;
     if (!apiKey) {
@@ -41,21 +44,21 @@ async function baseNotificationFlow(
         return { success: false, message: "Configuration error.", error: errorMsg };
     }
 
-    if (cardId === 'test-card-id' && testNumber) {
+    const testCardData: Card = { 
+        id: 'test-card-id', 
+        nome_cliente: 'Cliente Teste', 
+        telefone_cliente: options?.testNumber || '',
+        qr_code_id: 'qr-test-12345',
+        saldo_centavos: 5000,
+        status: 'ATIVO',
+        created_at: new Date() as any,
+        updated_at: new Date() as any,
+    };
+
+    if (cardId === 'test-card-id' && options?.testNumber) {
         // Handle test case directly without hitting Firestore
-        const testCard: Card = { 
-            id: 'test-card-id', 
-            nome_cliente: 'Cliente Teste', 
-            telefone_cliente: testNumber,
-            // Mock other required fields
-            qr_code_id: 'qr-test',
-            saldo_centavos: 5000,
-            status: 'ATIVO',
-            created_at: new Date() as any,
-            updated_at: new Date() as any,
-        };
-        const message = messageBuilder(testCard);
-        await sendWhatsappMessage(testNumber, message, apiKey);
+        const message = messageBuilder(testCardData);
+        await sendWhatsappMessage(options.testNumber, message, apiKey);
         return { success: true, message: "Test message sent." };
     }
 
@@ -68,14 +71,21 @@ async function baseNotificationFlow(
         }
 
         const card = cardSnap.data() as Card;
-        const phoneNumber = testNumber || card.telefone_cliente;
+        const phoneNumber = options?.testNumber || card.telefone_cliente;
 
         if (!phoneNumber) {
             return { success: true, message: "No phone number available for this card. Skipping notification." };
         }
 
+        // Send Text Message
         const message = messageBuilder(card);
         await sendWhatsappMessage(phoneNumber, message, apiKey);
+
+        // Send QR Code Image if requested
+        if (options?.sendQrImage) {
+            const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(card.qr_code_id)}`;
+            await sendWhatsappImage(phoneNumber, qrImageUrl, `Seu QR Code FestaPay`, apiKey);
+        }
 
         return { success: true, message: `Notification sent to card ${cardId}.` };
     } catch (error) {
@@ -90,8 +100,8 @@ async function baseNotificationFlow(
 export async function notifyCardCreation(cardId: string): Promise<NotifyResult> {
     return baseNotificationFlow(cardId, (card) => {
         const clientName = card.nome_cliente ? `, ${card.nome_cliente}` : '';
-        return `Bem-vindo(a) ao FestaPay${clientName}! 🥳\n\nSeu cartão cashless foi criado com sucesso.\n\n*Saldo Inicial:* ${formatCurrency(card.saldo_centavos)}\n\nAproveite!`;
-    });
+        return `Bem-vindo(a) ao FestaPay${clientName}! 🥳\n\nSeu cartão cashless foi criado com sucesso.\n\n*ID do Cartão:* \`${card.qr_code_id}\`\n*Saldo Inicial:* ${formatCurrency(card.saldo_centavos)}\n\nAbaixo está o seu QR Code para pagamentos. Guarde-o com segurança!`;
+    }, { sendQrImage: true }); // Enable sending QR image
 }
 
 export async function notifyRecharge(cardId: string, rechargeAmountCents: number): Promise<NotifyResult> {
@@ -110,5 +120,5 @@ export async function notifySale(cardId: string, saleAmountCents: number, pdvNam
         return `Nova compra realizada no FestaPay! 🛍️\n\n*Local:* ${pdvName}\n*Valor:* -${formatCurrency(saleAmountCents)}\n\n*Saldo Restante:* ${formatCurrency(currentBalance)}\n\nObrigado!`;
     };
 
-    return baseNotificationFlow(cardId, messageBuilder, testNumber);
+    return baseNotificationFlow(cardId, messageBuilder, { testNumber });
 }
