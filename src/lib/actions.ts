@@ -5,15 +5,13 @@ import { generateRandomId } from './data';
 import { initializeApp, getApps, getApp, App, applicationDefault } from 'firebase-admin/app';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
-import type { Card } from './definitions';
-import { revalidatePath } from 'next/cache';
+import type { Card, Order } from './definitions';
 
 // Helper to ensure Firebase Admin is initialized only once
 function getAdminApp(): App {
   if (getApps().length > 0) {
     return getApp();
   }
-  // Use applicationDefault credentials for robust authentication in Google Cloud environments.
   return initializeApp({
     credential: applicationDefault(),
   });
@@ -198,6 +196,7 @@ const SaleSchema = z.object({
     pdv_nome: z.string().min(1, 'Nome do Ponto de Venda é obrigatório.'),
     items: z.array(SaleItemSchema).min(1, "O carrinho está vazio."),
     total_venda: z.coerce.number().positive('Valor da venda deve ser positivo.'),
+    observacoes: z.string().optional(),
 });
 
 export async function processSale(
@@ -214,7 +213,8 @@ export async function processSale(
             pdv_id: formData.get('pdv_id'),
             pdv_nome: formData.get('pdv_nome'),
             items: items,
-            total_venda: total_venda
+            total_venda: total_venda,
+            observacoes: formData.get('observacoes'),
         });
 
         if (!validatedFields.success) {
@@ -226,7 +226,7 @@ export async function processSale(
             };
         }
 
-        const { qr_code_id, pdv_id, pdv_nome, total_venda: valor_venda_centavos } = validatedFields.data;
+        const { qr_code_id, pdv_id, pdv_nome, total_venda: valor_venda_centavos, observacoes } = validatedFields.data;
 
         const cardsRef = db.collection('cards');
         const q = cardsRef.where('qr_code_id', '==', qr_code_id);
@@ -279,7 +279,8 @@ export async function processSale(
             created_at: Timestamp.now(),
             updated_at: Timestamp.now(),
             items: validatedFields.data.items,
-            order_number: `#${orderId.substring(0, 4).toUpperCase()}`
+            order_number: `#${orderId.substring(0, 4).toUpperCase()}`,
+            observacoes: observacoes ?? '',
         });
 
         await batch.commit();
@@ -389,7 +390,6 @@ export async function addMenuItem( prevState: ActionState | undefined, formData:
     const menuItemsCollection = db.collection('pdvs').doc(pdvId).collection('menuItems');
     await menuItemsCollection.add({ nome, preco_centavos });
 
-    revalidatePath('/pos');
     return { status: 'success', message: 'Item adicionado com sucesso!' };
   } catch (error) {
     return { status: 'error', message: 'Erro ao adicionar item.' };
@@ -415,7 +415,6 @@ export async function updateMenuItem(prevState: ActionState | undefined, formDat
     const itemRef = db.collection('pdvs').doc(pdvId).collection('menuItems').doc(itemId);
     await itemRef.update({ nome, preco_centavos });
 
-    revalidatePath('/pos');
     return { status: 'success', message: 'Item atualizado com sucesso!' };
   } catch (error) {
     return { status: 'error', message: 'Erro ao atualizar item.' };
@@ -431,7 +430,6 @@ export async function deleteMenuItem(pdvId: string, itemId: string): Promise<Act
     const itemRef = db.collection('pdvs').doc(pdvId).collection('menuItems').doc(itemId);
     await itemRef.delete();
 
-    revalidatePath('/pos');
     return { status: 'success', message: 'Item excluído com sucesso!' };
   } catch (error) {
     return { status: 'error', message: 'Erro ao excluir item.' };
@@ -444,7 +442,7 @@ const UpdateOrderStatusSchema = z.object({
   newStatus: z.enum(['PENDENTE', 'EM_PREPARO', 'PRONTO', 'ENTREGUE']),
 });
 
-export async function updateOrderStatus(orderId: string, newStatus: z.infer<typeof UpdateOrderStatusSchema>['newStatus']): Promise<ActionState> {
+export async function updateOrderStatus(orderId: string, newStatus: Order['status']): Promise<ActionState> {
     const validated = UpdateOrderStatusSchema.safeParse({ orderId, newStatus });
 
     if (!validated.success) {

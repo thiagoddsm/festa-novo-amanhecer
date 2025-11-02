@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useMemo, useTransition } from 'react';
 import { useFirestore } from '@/firebase';
-import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { type Order } from '@/lib/definitions';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -11,7 +11,9 @@ import { updateOrderStatus } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '../ui/skeleton';
 import { ScrollArea } from '../ui/scroll-area';
-import { Loader2 } from 'lucide-react';
+import { Loader2, StickyNote } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+
 
 type OrderStatus = 'PENDENTE' | 'EM_PREPARO' | 'PRONTO' | 'ENTREGUE';
 
@@ -62,9 +64,23 @@ const OrderCard = ({ order, onDragStart }: { order: Order, onDragStart: (e: Reac
         className="cursor-grab bg-card"
     >
         <CardHeader className="p-3">
-            <CardTitle className="flex justify-between items-center text-base">
-                {order.cliente_nome}
+            <CardTitle className="flex justify-between items-start text-base">
+                <span className="font-normal">{order.cliente_nome}</span>
+                <div className="flex items-center gap-2">
+                 {order.observacoes && (
+                     <TooltipProvider>
+                        <Tooltip>
+                            <TooltipTrigger>
+                                <StickyNote className="h-4 w-4 text-muted-foreground" />
+                            </TooltipTrigger>
+                            <TooltipContent>
+                                <p>{order.observacoes}</p>
+                            </TooltipContent>
+                        </Tooltip>
+                    </TooltipProvider>
+                 )}
                 <span className="font-bold text-lg text-primary">{order.order_number}</span>
+                </div>
             </CardTitle>
         </CardHeader>
         <CardContent className="p-3 pt-0 space-y-2">
@@ -91,22 +107,18 @@ export default function OrderKanban({ pdvId }: { pdvId: string }) {
         if (!firestore || !pdvId) return;
         
         const ordersRef = collection(firestore, 'orders');
-        const q = query(ordersRef, where('pdv_id', '==', pdvId));
+        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        
+        const q = query(ordersRef, 
+            where('pdv_id', '==', pdvId),
+            where('created_at', '>=', twentyFourHoursAgo)
+        );
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
-            const fetchedOrders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
-            
-            // Sort and filter on the client-side
-            const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-            
-            const activeOrders = fetchedOrders
-                .filter(order => 
-                    order.created_at.toDate() >= twentyFourHoursAgo &&
-                    order.status !== 'ENTREGUE'
-                )
+            const fetchedOrders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order))
                 .sort((a,b) => a.created_at.toMillis() - b.created_at.toMillis());
 
-            setOrders(activeOrders);
+            setOrders(fetchedOrders);
         }, (error) => {
             console.error("Error fetching orders:", error);
             toast({ variant: 'destructive', title: 'Erro ao buscar pedidos', description: 'Não foi possível carregar os pedidos em tempo real.' });
@@ -121,9 +133,7 @@ export default function OrderKanban({ pdvId }: { pdvId: string }) {
         };
         if (!orders) return initial;
         return orders.reduce((acc, order) => {
-            if (order.status !== 'ENTREGUE') { 
-               acc[order.status].push(order);
-            }
+            acc[order.status].push(order);
             return acc;
         }, initial);
     }, [orders]);
@@ -139,6 +149,7 @@ export default function OrderKanban({ pdvId }: { pdvId: string }) {
         if (!orderId) return;
 
         const originalOrders = orders;
+        
         // Optimistic UI update
         setOrders(prevOrders =>
             prevOrders!.map(o =>
@@ -156,7 +167,6 @@ export default function OrderKanban({ pdvId }: { pdvId: string }) {
                 });
                 setOrders(originalOrders); 
             }
-            // On success, the onSnapshot listener will update the UI automatically.
         });
     };
 
@@ -167,7 +177,7 @@ export default function OrderKanban({ pdvId }: { pdvId: string }) {
     if (orders === null) {
         return (
             <div className="flex gap-4 overflow-x-auto p-2">
-                {Object.keys(statusConfig).slice(0, -1).map(status => (
+                {Object.keys(statusConfig).map(status => (
                     <Card key={status} className="flex-1 flex flex-col min-w-[280px]">
                         <CardHeader className="p-4">
                              <Skeleton className="h-6 w-3/4" />
@@ -184,7 +194,7 @@ export default function OrderKanban({ pdvId }: { pdvId: string }) {
 
     return (
         <div className="flex gap-4 overflow-x-auto pb-4">
-            {(Object.keys(statusConfig) as OrderStatus[]).filter(s => s !== 'ENTREGUE').map(status => (
+            {(Object.keys(statusConfig) as OrderStatus[]).map(status => (
                 <KanbanColumn
                     key={status}
                     title={statusConfig[status].title}

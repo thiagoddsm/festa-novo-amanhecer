@@ -56,4 +56,5 @@ export type Order = {
     items: { id: string; name: string; price: number; quantity: number }[];
     order_number: string;
     pdv_nome: string;
+    observacoes?: string;
 }

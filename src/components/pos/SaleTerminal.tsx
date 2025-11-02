@@ -5,6 +5,7 @@ import { processSale } from '@/lib/actions';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/utils';
 import type { Pdv, MenuItem } from '@/lib/definitions';
@@ -56,6 +57,7 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv, onGoBack: ()
   const [menuItems, setMenuItems] = useState<MenuItem[] | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [qrCodeId, setQrCodeId] = useState('');
+  const [observacoes, setObservacoes] = useState('');
   const [isMenuSheetOpen, setIsMenuSheetOpen] = useState(false);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
 
@@ -90,6 +92,7 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv, onGoBack: ()
       formRef.current?.reset();
       setCart([]);
       setQrCodeId('');
+      setObservacoes('');
     }
 
     const timer = setTimeout(() => setConfirmation(null), 3000);
@@ -177,7 +180,7 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv, onGoBack: ()
                         </div>
                     </CardHeader>
                     <CardContent>
-                        <ScrollArea className="h-48">
+                        <ScrollArea className="h-40">
                             {cart.length === 0 ? (
                                 <p className="text-center text-muted-foreground py-10">Clique em um item do cardápio para adicionar.</p>
                             ): (
@@ -200,6 +203,13 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv, onGoBack: ()
                         <Separator className="my-4"/>
                         <form ref={formRef} action={formAction}>
                             <div className="space-y-4">
+                                <Textarea 
+                                    name="observacoes" 
+                                    placeholder="Observações do pedido (ex: sem cebola)"
+                                    value={observacoes}
+                                    onChange={(e) => setObservacoes(e.target.value)}
+                                    rows={2}
+                                />
                                 <div className="flex gap-2">
                                     <Input
                                         id="qr_code_id"
