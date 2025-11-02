@@ -6,6 +6,10 @@ import { getFirestore } from 'firebase-admin/firestore';
 import type { Card } from '../definitions';
 import { formatCurrency } from '@/lib/utils';
 import { sendWhatsappMessage, sendWhatsappImage } from '@/lib/whatsapp';
+import QRCode from 'react-qr-code';
+import ReactDOMServer from 'react-dom/server';
+import React from 'react';
+
 
 // --- Initialization ---
 
@@ -89,8 +93,16 @@ async function baseNotificationFlow(
 
         // Send QR Code Image if requested
         if (options?.sendQrImage) {
-            const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(card.qr_code_id)}`;
-            await sendWhatsappImage(phoneNumber, qrImageUrl, `Seu QR Code FestaPay`, apiKey);
+            // Render the QR Code component to an SVG string on the server
+            const qrCodeSVG = ReactDOMServer.renderToString(
+                React.createElement(QRCode, { value: card.qr_code_id, size: 256 })
+            );
+            
+            // Encode the SVG string to Base64 and create a Data URI
+            const qrCodeDataURI = `data:image/svg+xml;base64,${Buffer.from(qrCodeSVG).toString('base64')}`;
+            
+            // Send the Data URI
+            await sendWhatsappImage(phoneNumber, qrCodeDataURI, `Seu QR Code FestaPay`, apiKey);
         }
 
         return { success: true, message: `Notification sent to card ${cardId}.` };
