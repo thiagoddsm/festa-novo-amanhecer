@@ -1,10 +1,11 @@
+
 'use server';
 
 import { initializeApp, getApps, getApp, App, applicationDefault } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import type { Card } from '../definitions';
-import { formatCurrency } from '../utils';
-import { sendWhatsappMessage, sendWhatsappImage } from '../whatsapp';
+import { formatCurrency } from '@/lib/utils';
+import { sendWhatsappMessage, sendWhatsappImage } from '@/lib/whatsapp';
 
 // --- Initialization ---
 
@@ -26,7 +27,7 @@ type NotifyResult = {
  * Fetches card data and sends a pre-formatted message.
  * @param cardId The ID of the card document in Firestore.
  * @param messageBuilder A function that takes the card data and returns the message string.
- * @param testNumber An optional phone number to override the one on the card, for testing.
+ * @param options - Optional parameters for testing or sending images.
  * @returns A NotifyResult object.
  */
 async function baseNotificationFlow(
@@ -55,28 +56,33 @@ async function baseNotificationFlow(
         updated_at: new Date() as any,
     };
 
+    let card: Card;
+    let phoneNumber: string | undefined;
+
     if (cardId === 'test-card-id' && options?.testNumber) {
-        // Handle test case directly without hitting Firestore
-        const message = messageBuilder(testCardData);
-        await sendWhatsappMessage(options.testNumber, message, apiKey);
-        return { success: true, message: "Test message sent." };
+        card = testCardData;
+        phoneNumber = options.testNumber;
+    } else {
+        try {
+            const cardRef = db.collection('cards').doc(cardId);
+            const cardSnap = await cardRef.get();
+            if (!cardSnap.exists) {
+                throw new Error(`Card with ID ${cardId} not found.`);
+            }
+            card = cardSnap.data() as Card;
+            phoneNumber = options?.testNumber || card.telefone_cliente;
+        } catch (error) {
+             const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+             console.error(`Notification flow failed for card ${cardId}:`, errorMessage);
+             return { success: false, message: "Failed to fetch card data.", error: errorMessage };
+        }
+    }
+    
+    if (!phoneNumber) {
+        return { success: true, message: "No phone number available for this card. Skipping notification." };
     }
 
     try {
-        const cardRef = db.collection('cards').doc(cardId);
-        const cardSnap = await cardRef.get();
-
-        if (!cardSnap.exists) {
-            throw new Error(`Card with ID ${cardId} not found.`);
-        }
-
-        const card = cardSnap.data() as Card;
-        const phoneNumber = options?.testNumber || card.telefone_cliente;
-
-        if (!phoneNumber) {
-            return { success: true, message: "No phone number available for this card. Skipping notification." };
-        }
-
         // Send Text Message
         const message = messageBuilder(card);
         await sendWhatsappMessage(phoneNumber, message, apiKey);
@@ -88,8 +94,9 @@ async function baseNotificationFlow(
         }
 
         return { success: true, message: `Notification sent to card ${cardId}.` };
+
     } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+        const errorMessage = error instanceof Error ? error.message : "An unknown error occurred while sending.";
         console.error(`Notification flow failed for card ${cardId}:`, errorMessage);
         return { success: false, message: "Failed to send notification.", error: errorMessage };
     }

@@ -1,124 +1,75 @@
+
 'use server';
 
-import { initializeApp, getApps, getApp, App, applicationDefault } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
-import type { Card } from '../definitions';
-import { formatCurrency } from '../utils';
-import { sendWhatsappMessage, sendWhatsappImage } from '../whatsapp';
-
-// --- Initialization ---
-
-function getAdminApp(): App {
-  if (getApps().length > 0) return getApp();
-  return initializeApp({ credential: applicationDefault() });
-}
-const db = getFirestore(getAdminApp());
-
-// --- Flow Logic ---
-
-type NotifyResult = {
-    success: boolean;
+type WhatsAppResponse = {
+    status: string;
     message: string;
-    error?: string;
-};
+    data?: any;
+}
 
 /**
- * Fetches card data and sends a pre-formatted message.
- * @param cardId The ID of the card document in Firestore.
- * @param messageBuilder A function that takes the card data and returns the message string.
- * @param testNumber An optional phone number to override the one on the card, for testing.
- * @returns A NotifyResult object.
+ * Envia uma mensagem de texto para um número de WhatsApp usando a API api-wa.me.
+ * @param to - O número do destinatário no formato DDI+DDD+Número (ex: 5511999998888).
+ * @param text - O conteúdo da mensagem de texto.
+ * @param apiKey - A chave da API para autenticação.
+ * @returns Uma promessa que resolve com a resposta da API.
  */
-async function baseNotificationFlow(
-    cardId: string, 
-    messageBuilder: (card: Card) => string,
-    options?: {
-        testNumber?: string;
-        sendQrImage?: boolean;
-    }
-): Promise<NotifyResult> {
-    const apiKey = process.env.WHATSAPP_API_KEY;
-    if (!apiKey) {
-        const errorMsg = "WHATSAPP_API_KEY is not defined in environment variables.";
-        console.error(errorMsg);
-        return { success: false, message: "Configuration error.", error: errorMsg };
-    }
-
-    const testCardData: Card = { 
-        id: 'test-card-id', 
-        nome_cliente: 'Cliente Teste', 
-        telefone_cliente: options?.testNumber || '',
-        qr_code_id: 'qr-test-12345',
-        saldo_centavos: 5000,
-        status: 'ATIVO',
-        created_at: new Date() as any,
-        updated_at: new Date() as any,
-    };
-
-    if (cardId === 'test-card-id' && options?.testNumber) {
-        // Handle test case directly without hitting Firestore
-        const message = messageBuilder(testCardData);
-        await sendWhatsappMessage(options.testNumber, message, apiKey);
-        return { success: true, message: "Test message sent." };
-    }
+export async function sendWhatsappMessage(to: string, text: string, apiKey: string): Promise<WhatsAppResponse> {
+    const apiUrl = `https://us.api-wa.me/${apiKey}/message/text`;
 
     try {
-        const cardRef = db.collection('cards').doc(cardId);
-        const cardSnap = await cardRef.get();
+        const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ to, text }),
+        });
 
-        if (!cardSnap.exists) {
-            throw new Error(`Card with ID ${cardId} not found.`);
+        const result = await response.json();
+
+        if (!response.ok) {
+            throw new Error(result.message || `HTTP error! status: ${response.status}`);
         }
 
-        const card = cardSnap.data() as Card;
-        const phoneNumber = options?.testNumber || card.telefone_cliente;
-
-        if (!phoneNumber) {
-            return { success: true, message: "No phone number available for this card. Skipping notification." };
-        }
-
-        // Send Text Message
-        const message = messageBuilder(card);
-        await sendWhatsappMessage(phoneNumber, message, apiKey);
-
-        // Send QR Code Image if requested
-        if (options?.sendQrImage) {
-            const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(card.qr_code_id)}`;
-            await sendWhatsappImage(phoneNumber, qrImageUrl, `Seu QR Code FestaPay`, apiKey);
-        }
-
-        return { success: true, message: `Notification sent to card ${cardId}.` };
+        return result;
     } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
-        console.error(`Notification flow failed for card ${cardId}:`, errorMessage);
-        return { success: false, message: "Failed to send notification.", error: errorMessage };
+        console.error("Erro ao enviar mensagem de WhatsApp:", error);
+        const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido.';
+        return { status: 'error', message: errorMessage };
     }
 }
 
-// --- Specific Notification Triggers ---
+/**
+ * Envia uma imagem para um número de WhatsApp usando a API api-wa.me.
+ * @param to - O número do destinatário.
+ * @param imageUrl - A URL pública da imagem a ser enviada.
+ * @param caption - A legenda para a imagem.
+ * @param apiKey - A chave da API.
+ * @returns Uma promessa que resolve com a resposta da API.
+ */
+export async function sendWhatsappImage(to: string, imageUrl: string, caption: string, apiKey: string): Promise<WhatsAppResponse> {
+    const apiUrl = `https://us.api-wa.me/${apiKey}/message/image`;
 
-export async function notifyCardCreation(cardId: string): Promise<NotifyResult> {
-    return baseNotificationFlow(cardId, (card) => {
-        const clientName = card.nome_cliente ? `, ${card.nome_cliente}` : '';
-        return `Bem-vindo(a) ao FestaPay${clientName}! 🥳\n\nSeu cartão cashless foi criado com sucesso.\n\n*ID do Cartão:* \`${card.qr_code_id}\`\n*Saldo Inicial:* ${formatCurrency(card.saldo_centavos)}\n\nAbaixo está o seu QR Code para pagamentos. Guarde-o com segurança!`;
-    }, { sendQrImage: true }); // Enable sending QR image
-}
+    try {
+        const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ to, image: imageUrl, caption }),
+        });
 
-export async function notifyRecharge(cardId: string, rechargeAmountCents: number): Promise<NotifyResult> {
-    return baseNotificationFlow(cardId, (card) => {
-        return `Olá, ${card.nome_cliente || 'cliente'}!\n\nSua recarga foi efetuada com sucesso. ✅\n\n*Valor da Recarga:* ${formatCurrency(rechargeAmountCents)}\n*Novo Saldo:* ${formatCurrency(card.saldo_centavos)}`;
-    });
-}
+        const result = await response.json();
 
-export async function notifySale(cardId: string, saleAmountCents: number, pdvName: string, testNumber?: string): Promise<NotifyResult> {
-    const messageBuilder = (card: Card) => {
-         // In the test case, the passed amount is the sale amount, not the new balance
-         const currentBalance = cardId === 'test-card-id' 
-            ? card.saldo_centavos - saleAmountCents
-            : card.saldo_centavos;
+        if (!response.ok) {
+            throw new Error(result.message || `HTTP error! status: ${response.status}`);
+        }
 
-        return `Nova compra realizada no FestaPay! 🛍️\n\n*Local:* ${pdvName}\n*Valor:* -${formatCurrency(saleAmountCents)}\n\n*Saldo Restante:* ${formatCurrency(currentBalance)}\n\nObrigado!`;
-    };
-
-    return baseNotificationFlow(cardId, messageBuilder, { testNumber });
+        return result;
+    } catch (error) {
+        console.error("Erro ao enviar imagem de WhatsApp:", error);
+        const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido.';
+        return { status: 'error', message: errorMessage };
+    }
 }
