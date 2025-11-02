@@ -45,23 +45,26 @@ export default function CreateCardForm() {
   const [newCard, setNewCard] = useState<CardType | null>(null);
 
   const handlePrint = async (card: CardType) => {
+    // Open the window immediately on user action to avoid popup blockers
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro de Impressão',
+        description: 'Não foi possível abrir a janela de impressão. Verifique se os pop-ups estão bloqueados.',
+      });
+      return;
+    }
+
     try {
+      // Generate QR code data URL asynchronously
       const qrCodeDataUrl = await generateQrCodeDataUrl(card.qr_code_id, {
         errorCorrectionLevel: 'H',
         margin: 2,
         width: 128,
       });
 
-      const printWindow = window.open('', '_blank');
-      if (!printWindow) {
-        toast({
-          variant: 'destructive',
-          title: 'Erro de Impressão',
-          description: 'Não foi possível abrir a janela de impressão. Verifique se os pop-ups estão bloqueados.',
-        });
-        return;
-      }
-
+      // Now write the content to the opened window
       printWindow.document.write(`
         <html>
           <head>
@@ -70,7 +73,7 @@ export default function CreateCardForm() {
               @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
               @page { 
                 size: auto;
-                margin: 2mm; 
+                margin: 0mm; 
               }
               body { 
                 font-family: 'Inter', sans-serif;
@@ -81,6 +84,7 @@ export default function CreateCardForm() {
                 align-items: center; 
                 justify-content: center; 
                 text-align: center;
+                height: 100vh;
               }
               .content {
                 text-align: center;
@@ -119,6 +123,7 @@ export default function CreateCardForm() {
         </html>
       `);
       printWindow.document.close();
+
     } catch (err) {
        console.error("Failed to generate QR code for printing:", err);
        toast({
@@ -126,6 +131,7 @@ export default function CreateCardForm() {
          title: 'Erro de QR Code',
          description: 'Não foi possível gerar a imagem do QR code para impressão.',
        });
+       printWindow.close(); // Close the window on error
     }
   };
   
