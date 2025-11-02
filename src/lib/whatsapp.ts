@@ -1,19 +1,19 @@
-'use server';
+// This file is NOT a server module, it's a simple utility.
 
-// Função para enviar a mensagem via API do api-wa.me
-export async function sendWhatsappMessage(to: string, text: string) {
-    const apiKey = process.env.WHATSAPP_API_KEY;
-    
+/**
+ * Sends a message using the api-wa.me service.
+ * @param to The recipient's phone number.
+ * @param text The message content.
+ * @param apiKey The API key for the api-wa.me service.
+ */
+export async function sendWhatsappMessage(to: string, text: string, apiKey: string) {
     if (!apiKey) {
-        console.error('WHATSAPP_API_KEY is not defined in environment variables.');
-        return; // Silently fail in production if key is not set
+        throw new Error('WhatsApp API Key is not provided.');
     }
 
-    // Corrigido para o endpoint de produção da API, conforme documentação.
     const apiUrl = `https://us.api-wa.me/${apiKey}/message/text`;
 
     try {
-        // Limpa o número, removendo caracteres não numéricos.
         const cleanedNumber = to.replace(/\D/g, '');
         
         console.log(`Sending WhatsApp message to ${cleanedNumber}...`);
@@ -27,16 +27,23 @@ export async function sendWhatsappMessage(to: string, text: string) {
                 to: cleanedNumber,
                 text: text,
             }),
+            // Add a timeout to avoid long-running requests in serverless environments
+            signal: AbortSignal.timeout(10000) // 10 seconds
         });
 
-        const responseData = await response.json();
-
-        if (!response.ok || responseData.status === 'error') {
-            console.error(`Failed to send WhatsApp message to ${cleanedNumber}:`, responseData.message || 'Unknown error');
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ message: 'Unknown error structure' }));
+            console.error(`Failed to send WhatsApp message to ${cleanedNumber}. Status: ${response.status}`, errorData);
+            throw new Error(`API request failed with status ${response.status}: ${errorData.message || 'Unknown API error'}`);
         } else {
-            console.log(`WhatsApp message successfully sent to ${cleanedNumber}.`);
+             const responseData = await response.json();
+             console.log(`WhatsApp message successfully sent to ${cleanedNumber}. Response:`, responseData);
+             return responseData;
         }
+
     } catch (error) {
         console.error(`Exception when sending WhatsApp message to ${to}:`, error);
+        // Re-throw the error to be handled by the caller
+        throw error;
     }
 }

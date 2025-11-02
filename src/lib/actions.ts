@@ -6,8 +6,8 @@ import { initializeApp, getApps, getApp, App, applicationDefault } from 'firebas
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 import type { Card, Order } from './definitions';
-import { sendWhatsappMessage } from './whatsapp';
-import { formatCurrency } from './utils';
+import { notifyCardCreation, notifyRecharge, notifySale } from './flows/notify-flow';
+
 
 // Helper to ensure Firebase Admin is initialized only once
 function getAdminApp(): App {
@@ -43,8 +43,6 @@ export async function createCard(
   formData: FormData
 ): Promise<ActionState> {
   try {
-    const batch = db.batch();
-
     const validatedFields = CreateCardSchema.safeParse({
       saldo_inicial: formData.get('saldo_inicial'),
       nome_cliente: formData.get('nome_cliente'),
@@ -74,11 +72,14 @@ export async function createCard(
     };
 
     const cardDocRef = db.collection("cards").doc();
-    batch.set(cardDocRef, cardData);
+    
+    // We create the card first
+    await cardDocRef.set(cardData);
 
+    // Then, if there's an initial balance, we create the transaction
     if (saldo_centavos > 0) {
         const transactionRef = db.collection("transactions").doc();
-        batch.set(transactionRef, {
+        await transactionRef.set({
             cartao_id: cardDocRef.id,
             pdv_id: 'caixa_central', // Caixa Central
             tipo: 'RECARGA',
@@ -86,15 +87,9 @@ export async function createCard(
             created_at: Timestamp.now()
         });
     }
-    
-    await batch.commit();
 
-     // Send WhatsApp notification
-    if (cardData.telefone_cliente) {
-      const clientName = cardData.nome_cliente ? `, ${cardData.nome_cliente}` : '';
-      const message = `Bem-vindo(a) ao FestaPay${clientName}! 🥳\n\nSeu cartão cashless foi criado com sucesso.\n\n*Saldo Inicial:* ${formatCurrency(cardData.saldo_centavos)}\n\nUse o QR Code para consumir no evento. Aproveite!`;
-      await sendWhatsappMessage(cardData.telefone_cliente, message);
-    }
+     // Trigger notification flow (non-blocking)
+    notifyCardCreation(cardDocRef.id).catch(console.error);
 
     const returnData = {
       id: cardDocRef.id,
@@ -128,8 +123,6 @@ export async function rechargeCard(
   formData: FormData
 ): Promise<ActionState> {
   try {
-    const batch = db.batch();
-
     const validatedFields = RechargeSchema.safeParse({
       qr_code_id: formData.get('qr_code_id'),
       valor_recarga: formData.get('valor_recarga'),
@@ -164,6 +157,9 @@ export async function rechargeCard(
     const novo_saldo_centavos = card.saldo_centavos + valor_recarga_centavos;
 
     const cardDocRef = db.collection('cards').doc(cardDoc.id);
+    
+    const batch = db.batch();
+    
     batch.update(cardDocRef, {
         saldo_centavos: novo_saldo_centavos,
         updated_at: Timestamp.now()
@@ -180,12 +176,8 @@ export async function rechargeCard(
     
     await batch.commit();
 
-    // Send WhatsApp notification
-    if (card.telefone_cliente) {
-      const message = `Olá, ${card.nome_cliente || 'cliente'}!\n\nSua recarga foi efetuada com sucesso. ✅\n\n*Valor da Recarga:* ${formatCurrency(valor_recarga_centavos)}\n*Novo Saldo:* ${formatCurrency(novo_saldo_centavos)}`;
-      await sendWhatsappMessage(card.telefone_cliente, message);
-    }
-
+    // Trigger notification flow (non-blocking)
+    notifyRecharge(cardDoc.id, valor_recarga_centavos).catch(console.error);
 
     return {
       status: 'success',
@@ -220,7 +212,6 @@ export async function processSale(
     prevState: ActionState | undefined,
     formData: FormData
 ): Promise<ActionState> {
-    const batch = db.batch();
     try {
         const items = JSON.parse(formData.get('items') as string);
         const total_venda = parseFloat(formData.get('total_venda') as string);
@@ -264,6 +255,8 @@ export async function processSale(
         }
 
         const novo_saldo_centavos = card.saldo_centavos - valor_venda_centavos;
+        
+        const batch = db.batch();
 
         // 1. Update card balance
         const cardDocRef = db.collection('cards').doc(cardDoc.id);
@@ -300,11 +293,9 @@ export async function processSale(
 
         await batch.commit();
 
-        // Send WhatsApp notification
-        if (card.telefone_cliente) {
-            const message = `Nova compra realizada no FestaPay! 🛍️\n\n*Local:* ${pdv_nome}\n*Valor:* -${formatCurrency(valor_venda_centavos)}\n\n*Saldo Restante:* ${formatCurrency(novo_saldo_centavos)}\n\nObrigado!`;
-            await sendWhatsappMessage(card.telefone_cliente, message);
-        }
+        // Trigger notification flow (non-blocking)
+        notifySale(cardDoc.id, valor_venda_centavos, pdv_nome).catch(console.error);
+
 
         return {
             status: 'success',
@@ -507,12 +498,12 @@ export async function sendTestWhatsappMessage(
     
     const { telefone_destinatario } = validatedFields.data;
 
-    const message = `Olá! 👋\n\nEsta é uma mensagem de teste do sistema FestaPay.\n\nSe você recebeu esta mensagem, a integração com o WhatsApp está funcionando corretamente! ✅`;
-    await sendWhatsappMessage(telefone_destinatario, message);
+    // Direct call to the notification flow
+    const result = await notifySale('test-card-id', 1234, 'PDV de Teste', telefone_destinatario);
 
     return {
-      status: 'success',
-      message: 'Mensagem de teste enviada com sucesso!',
+      status: result.success ? 'success' : 'error',
+      message: result.success ? 'Mensagem de teste enviada com sucesso!' : result.error || 'Falha ao enviar mensagem de teste.',
     };
 
   } catch (error) {
