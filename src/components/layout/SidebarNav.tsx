@@ -31,7 +31,6 @@ export function SidebarNav() {
         <>
             <SidebarHeader>
                 <div className="flex items-center gap-2">
-                     <Image src="/icon.svg" alt="FestaPay Logo" width={32} height={32} />
                      <h2 className="text-lg font-semibold tracking-tight">FestaPay</h2>
                 </div>
             </SidebarHeader>

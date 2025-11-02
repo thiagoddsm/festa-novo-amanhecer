@@ -21,6 +21,7 @@ import { formatCurrency } from '@/lib/utils';
 import { QrCode, Loader2, User, Printer } from 'lucide-react';
 import type { Card as CardType } from '@/lib/definitions';
 import QRCode from 'react-qr-code';
+import Image from 'next/image';
 
 const initialState = {
   status: 'idle' as 'idle' |'success' | 'error',
@@ -44,7 +45,6 @@ const PrintableCard = React.forwardRef<HTMLDivElement, { card: CardType | null }
         <div ref={ref} className="print-only">
              <div className="printable-card">
                 <div className="flex justify-center items-center mb-2">
-                    <QrCode className="h-6 w-6 text-black" />
                     <h3 className='text-lg font-bold ml-1 text-black'>FestaPay</h3>
                 </div>
                 {card.nome_cliente && (

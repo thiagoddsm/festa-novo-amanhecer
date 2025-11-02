@@ -63,9 +63,6 @@ function LoginPageContent() {
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
       <Card className="w-full max-w-sm">
         <CardHeader className="text-center">
-          <div className="flex justify-center items-center mb-4">
-            <Image src="/icon.svg" alt="FestaPay Logo" width={48} height={48} />
-          </div>
           <CardTitle>Bem-vindo ao FestaPay</CardTitle>
           <CardDescription>Faça login com sua conta Google para continuar</CardDescription>
         </CardHeader>
