@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -11,11 +11,9 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { Camera, CameraOff, SwitchCamera } from 'lucide-react';
+import { Camera, CameraOff } from 'lucide-react';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
-// A stable alternative that might have different performance characteristics.
-// Keeping this as an optional import if direct camera access causes issues.
-// import { QrReader } from 'react-qr-reader';
+import { QrScanner } from '@yudiel/react-qr-scanner';
 
 interface QrScannerDialogProps {
   open: boolean;
@@ -25,34 +23,22 @@ interface QrScannerDialogProps {
 
 export default function QrScannerDialog({ open, onOpenChange, onScan }: QrScannerDialogProps) {
   const { toast } = useToast();
-  const [hasCameraPermission, setHasCameraPermission] = useState(true); // Assume true initially
-  const videoRef = useRef<HTMLVideoElement>(null);
 
-  // For this simplified version, we are not implementing a live scanner
-  // to avoid dependency issues. Instead, this component will guide the user
-  // to use their device's camera functionality if available.
-  // The hooks for a live scanner would go here.
-
-  useEffect(() => {
-    // This effect would handle camera initialization
-    // For now, it just checks for mediaDevices support.
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        setHasCameraPermission(false);
-    }
-  }, []);
-
-
-  const handleClose = () => {
-      onOpenChange(false);
-  }
-
-  // This is a placeholder for the scan result handling.
-  // In a real implementation, a library would call this.
   const handleResult = (result: any) => {
     if (result) {
-      onScan(result);
-      handleClose();
+      onScan(result.getText());
+      onOpenChange(false);
     }
+  };
+
+  const handleError = (error: any) => {
+    console.error(error);
+    toast({
+      variant: 'destructive',
+      title: 'Erro no Scanner',
+      description: error?.message || 'Não foi possível acessar a câmera.',
+    });
+    onOpenChange(false);
   };
 
   return (
@@ -67,21 +53,23 @@ export default function QrScannerDialog({ open, onOpenChange, onScan }: QrScanne
           </DialogDescription>
         </DialogHeader>
         
-        {/*
-            The QrReader component is commented out to avoid dependency conflicts.
-            A more stable solution would involve a different library or a custom implementation.
-        */}
         <div className="relative flex h-64 w-full items-center justify-center overflow-hidden rounded-md border bg-muted">
-            <video ref={videoRef} className="w-full aspect-video rounded-md hidden" autoPlay muted />
-             <div className='text-center p-4'>
-                <CameraOff className="h-12 w-12 mx-auto text-muted-foreground" />
-                <p className='mt-4 text-sm text-muted-foreground'>A funcionalidade de scanner ao vivo está temporariamente desabilitada para garantir a estabilidade.</p>
-                <p className='mt-2 text-sm text-muted-foreground'>Por favor, digite o código do QR code manualmente.</p>
-             </div>
+           {open && (
+             <QrScanner
+                onDecode={handleResult}
+                onError={handleError}
+                constraints={{
+                    facingMode: 'environment'
+                }}
+                styles={{
+                    container: { width: '100%', height: '100%', paddingTop: 0 }
+                }}
+             />
+           )}
         </div>
 
         <DialogFooter>
-          <Button variant="secondary" onClick={handleClose}>
+          <Button variant="secondary" onClick={() => onOpenChange(false)}>
             Fechar
           </Button>
         </DialogFooter>

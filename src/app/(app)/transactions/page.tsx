@@ -7,7 +7,7 @@ import { formatCurrency, formatDateTime } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { List, Package, User } from 'lucide-react';
+import { List, Package, User, CornerDownRight } from 'lucide-react';
 import { getPdvNameById } from '@/lib/actions';
 import { DataTable } from '@/components/ui/data-table';
 import { type ColumnDef } from '@tanstack/react-table';
@@ -151,6 +151,11 @@ const SubRowComponent = ({ row }: { row: { original: TransactionDetails } }) => 
                             {items.map((item, index) => (
                                 <li key={index}>
                                     {item.quantity}x {item.name} ({formatCurrency(item.price * item.quantity)})
+                                     {item.observation && (
+                                        <p className="text-xs text-blue-600 pl-4 flex items-center gap-1">
+                                            <CornerDownRight className="h-3 w-3" /> {item.observation}
+                                        </p>
+                                    )}
                                 </li>
                             ))}
                         </ul>
