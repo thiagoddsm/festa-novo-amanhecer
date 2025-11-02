@@ -20,8 +20,8 @@ import {
 import { formatCurrency } from '@/lib/utils';
 import { QrCode, Loader2, User, Printer } from 'lucide-react';
 import type { Card as CardType } from '@/lib/definitions';
-import QRCode from 'react-qr-code';
-import Image from 'next/image';
+import { toDataURL as generateQrCodeDataUrl } from 'qrcode';
+
 
 const initialState = {
   status: 'idle' as 'idle' |'success' | 'error',
@@ -44,80 +44,89 @@ export default function CreateCardForm() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [newCard, setNewCard] = useState<CardType | null>(null);
 
-  const handlePrint = (card: CardType) => {
-    const qrCodeSvg = document.createElement('div');
-    const reactDom = require('react-dom');
-    const qrComponent = React.createElement(QRCode, { value: card.qr_code_id, size: 100 });
-    reactDom.render(qrComponent, qrCodeSvg);
-    const qrCodeDataUrl = `data:image/svg+xml;base64,${btoa(qrCodeSvg.innerHTML)}`;
-
-    const printWindow = window.open('', '_blank', 'width=302,height=302');
-    if (!printWindow) {
-      toast({
-        variant: 'destructive',
-        title: 'Erro de Impressão',
-        description: 'Não foi possível abrir a janela de impressão. Verifique se os pop-ups estão bloqueados.',
+  const handlePrint = async (card: CardType) => {
+    try {
+      const qrCodeDataUrl = await generateQrCodeDataUrl(card.qr_code_id, {
+        errorCorrectionLevel: 'H',
+        margin: 2,
+        width: 128,
       });
-      return;
-    }
 
-    printWindow.document.write(`
-      <html>
-        <head>
-          <title>FestaPay - Comprovante</title>
-          <style>
-            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
-            body { 
-              font-family: 'Inter', sans-serif;
-              margin: 0; 
-              padding: 0;
-              display: flex; 
-              flex-direction: column;
-              align-items: center; 
-              justify-content: center; 
-              width: 98mm; /* Approx width of thermal paper */
-              box-sizing: border-box;
-            }
-            @page { 
-              size: auto;
-              margin: 2mm; 
-            }
-            .content {
-              text-align: center;
-            }
-            .qr-id {
-              font-family: monospace;
-              font-size: 8px;
-              margin-top: 2px;
-            }
-            .client-name {
-              font-size: 14px;
-              font-weight: 600;
-              margin-bottom: 4px;
-            }
-            .balance-label {
-               font-size: 12px;
-               font-weight: 500;
-               margin-top: 4px;
-            }
-            .balance-value {
-              font-size: 18px;
-              font-weight: 700;
-            }
-          </style>
-        </head>
-        <body onload="window.print(); window.close();">
-          <div class="content">
-            ${card.nome_cliente ? `<div class="client-name">${card.nome_cliente}</div>` : ''}
-            <img src="${qrCodeDataUrl}" />
-            <div class="qr-id">ID: ${card.qr_code_id}</div>
-            <div class="balance-label">Saldo Inicial</div>
-            <div class="balance-value">${formatCurrency(card.saldo_centavos ?? 0)}</div>
-          </div>
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        toast({
+          variant: 'destructive',
+          title: 'Erro de Impressão',
+          description: 'Não foi possível abrir a janela de impressão. Verifique se os pop-ups estão bloqueados.',
+        });
+        return;
+      }
+
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>FestaPay - Comprovante</title>
+            <style>
+              @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+              @page { 
+                size: auto;
+                margin: 2mm; 
+              }
+              body { 
+                font-family: 'Inter', sans-serif;
+                margin: 0; 
+                padding: 0;
+                display: flex; 
+                flex-direction: column;
+                align-items: center; 
+                justify-content: center; 
+                text-align: center;
+              }
+              .content {
+                text-align: center;
+                break-inside: avoid;
+              }
+              .qr-id {
+                font-family: monospace;
+                font-size: 10px;
+                margin-top: 4px;
+              }
+              .client-name {
+                font-size: 16px;
+                font-weight: 600;
+                margin-bottom: 6px;
+              }
+              .balance-label {
+                 font-size: 12px;
+                 font-weight: 500;
+                 margin-top: 6px;
+              }
+              .balance-value {
+                font-size: 20px;
+                font-weight: 700;
+              }
+            </style>
+          </head>
+          <body onload="window.print(); window.close();">
+            <div class="content">
+              ${card.nome_cliente ? `<div class="client-name">${card.nome_cliente}</div>` : ''}
+              <img src="${qrCodeDataUrl}" alt="QR Code" />
+              <div class="qr-id">${card.qr_code_id}</div>
+              <div class="balance-label">Saldo Inicial</div>
+              <div class="balance-value">${formatCurrency(card.saldo_centavos ?? 0)}</div>
+            </div>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+    } catch (err) {
+       console.error("Failed to generate QR code for printing:", err);
+       toast({
+         variant: 'destructive',
+         title: 'Erro de QR Code',
+         description: 'Não foi possível gerar a imagem do QR code para impressão.',
+       });
+    }
   };
   
   const resetForm = () => {
@@ -141,6 +150,7 @@ export default function CreateCardForm() {
       setDialogOpen(true);
       formRef.current?.reset();
       
+      // Delay to allow state to update before printing
       setTimeout(() => {
           handlePrint(cardData);
       }, 100);
