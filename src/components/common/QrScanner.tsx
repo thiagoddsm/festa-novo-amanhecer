@@ -29,7 +29,6 @@ export default function QrScannerDialog({ open, onOpenChange, onScan }: QrScanne
 
   const handleResult = (result: any) => {
     // The result object from `@yudiel/react-qr-scanner` has the text directly.
-    // The old library used a `getText()` method. This is the fix.
     if (result && result.text) {
       onScan(result.text);
       onOpenChange(false); // Close the dialog after a successful scan
