@@ -59,7 +59,6 @@ function ObservationDialog({ item, onSave }: { item: CartItem; onSave: (observat
 
      useEffect(() => {
         if (isOpen) {
-            // Parse existing observation when dialog opens
             const obs = item.observation || '';
             const freeTextMatch = obs.match(/OBS: (.*)/);
             setFreeText(freeTextMatch ? freeTextMatch[1] : '');
@@ -84,7 +83,7 @@ function ObservationDialog({ item, onSave }: { item: CartItem; onSave: (observat
     
     const handleCheckboxChange = (ingredient: string, checked: boolean) => {
         setRemovedIngredients(prev => 
-            checked ? prev.filter(i => i !== ingredient) : [...prev, ingredient]
+            checked ? [...prev, ingredient] : prev.filter(i => i !== ingredient)
         );
     }
 
@@ -99,7 +98,7 @@ function ObservationDialog({ item, onSave }: { item: CartItem; onSave: (observat
                 <AlertDialogHeader>
                     <AlertDialogTitle>Observação para: {item.name}</AlertDialogTitle>
                     <AlertDialogDescription>
-                        Remova ingredientes ou adicione instruções especiais.
+                        Marque os ingredientes para REMOVER ou adicione instruções.
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 <div className="py-4 space-y-4">
@@ -111,7 +110,7 @@ function ObservationDialog({ item, onSave }: { item: CartItem; onSave: (observat
                                     <div key={ing} className="flex items-center space-x-2">
                                         <Checkbox 
                                             id={`check-${item.id}-${ing}`} 
-                                            checked={!removedIngredients.includes(ing)}
+                                            checked={removedIngredients.includes(ing)}
                                             onCheckedChange={(checked) => handleCheckboxChange(ing, !!checked)}
                                         />
                                         <label
