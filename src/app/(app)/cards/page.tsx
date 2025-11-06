@@ -11,6 +11,7 @@ import { Users } from 'lucide-react';
 import { DataTable } from '@/components/ui/data-table';
 import { type ColumnDef } from '@tanstack/react-table';
 import RechargeDialog from '@/components/cards/RechargeDialog';
+import ReprintQrButton from '@/components/cards/ReprintQrButton';
 
 function useCollection<T>(path: string) {
   const [data, setData] = useState<T[] | null>(null);
@@ -76,7 +77,12 @@ const columns: ColumnDef<CardType>[] = [
         header: 'Ações',
         cell: ({ row }) => {
             const card = row.original;
-            return <RechargeDialog card={card} />
+            return (
+              <div className="flex gap-2">
+                <RechargeDialog card={card} />
+                <ReprintQrButton card={card} />
+              </div>
+            )
         }
     }
 ]
