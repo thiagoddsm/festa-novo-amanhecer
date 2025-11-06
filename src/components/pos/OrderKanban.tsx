@@ -12,9 +12,18 @@ import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '../ui/skeleton';
 import { ScrollArea } from '../ui/scroll-area';
 import { Loader2 } from 'lucide-react';
+import { DndProvider, useDrag, useDrop } from 'react-dnd';
+import { HTML5Backend } from 'react-dnd-html5-backend';
+import { TouchBackend } from 'react-dnd-touch-backend';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { cn } from '@/lib/utils';
 
 
 type OrderStatus = 'EM_PREPARO' | 'PRONTO' | 'ENTREGUE';
+
+const ItemTypes = {
+  ORDER: 'order',
+};
 
 const statusConfig: Record<OrderStatus, { title: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
     'EM_PREPARO': { title: 'Em Preparo', variant: 'secondary' },
@@ -22,44 +31,83 @@ const statusConfig: Record<OrderStatus, { title: string; variant: 'default' | 's
     'ENTREGUE': { title: 'Entregue', variant: 'outline' }
 };
 
-const KanbanColumn = ({ title, variant, orders, onDrop, onDragOver, onDragStart, status, isPending }: {
+const KanbanColumn = ({ title, variant, orders, status, isPending }: {
     title: string;
     variant: 'default' | 'secondary' | 'destructive' | 'outline';
     orders: Order[];
     status: OrderStatus;
-    onDrop: (e: React.DragEvent<HTMLDivElement>, status: OrderStatus) => void;
-    onDragOver: (e: React.DragEvent<HTMLDivElement>) => void;
-    onDragStart: (e: React.DragEvent<HTMLDivElement>, order: Order) => void;
     isPending: boolean;
-}) => (
-    <Card
-        className="flex-1 flex flex-col min-w-[280px]"
-        onDrop={(e) => onDrop(e, status)}
-        onDragOver={onDragOver}
-    >
-        <CardHeader className="p-4">
-            <CardTitle className="flex items-center justify-between">
-                <span className="text-lg">{title}</span>
-                <Badge variant={variant}>{orders.length}</Badge>
-            </CardTitle>
-        </CardHeader>
-        <ScrollArea className="flex-grow bg-muted/50 p-2">
-            <div className="space-y-3 p-2 h-full relative">
-                {isPending && <div className="absolute inset-0 bg-background/50 flex items-center justify-center"><Loader2 className="animate-spin" /></div>}
-                {orders.map(order => (
-                    <OrderCard key={order.id} order={order} onDragStart={onDragStart} />
-                ))}
-                {orders.length === 0 && <p className="text-sm text-center text-muted-foreground pt-10">Nenhum pedido aqui.</p>}
-            </div>
-        </ScrollArea>
-    </Card>
-);
+}) => {
+    const [{ isOver }, drop] = useDrop(() => ({
+        accept: ItemTypes.ORDER,
+        drop: () => ({ status }),
+        collect: monitor => ({
+            isOver: !!monitor.isOver(),
+        }),
+    }));
 
-const OrderCard = ({ order, onDragStart }: { order: Order, onDragStart: (e: React.DragEvent<HTMLDivElement>, order: Order) => void }) => (
+    return (
+        <Card
+            ref={drop}
+            className={cn(
+                "flex-1 flex flex-col min-w-[300px] transition-colors",
+                isOver ? 'bg-accent' : ''
+            )}
+        >
+            <CardHeader className="p-4">
+                <CardTitle className="flex items-center justify-between">
+                    <span className="text-lg">{title}</span>
+                    <Badge variant={variant}>{orders.length}</Badge>
+                </CardTitle>
+            </CardHeader>
+            <ScrollArea className="flex-grow bg-muted/50 p-2">
+                <div className="space-y-3 p-2 h-full relative">
+                    {isPending && <div className="absolute inset-0 bg-background/50 flex items-center justify-center"><Loader2 className="animate-spin" /></div>}
+                    {orders.map(order => (
+                        <OrderCard key={order.id} order={order} />
+                    ))}
+                    {orders.length === 0 && <p className="text-sm text-center text-muted-foreground pt-10">Nenhum pedido aqui.</p>}
+                </div>
+            </ScrollArea>
+        </Card>
+    );
+};
+
+const OrderCard = ({ order }: { order: Order }) => {
+    const [isPending, startTransition] = useTransition();
+    const { toast } = useToast();
+    
+    const [{ isDragging }, drag] = useDrag(() => ({
+        type: ItemTypes.ORDER,
+        item: { id: order.id, status: order.status },
+        end: (item, monitor) => {
+            const dropResult = monitor.getDropResult<{ status: OrderStatus }>();
+            if (item && dropResult && item.status !== dropResult.status) {
+                 startTransition(async () => {
+                    const result = await updateOrderStatus(item.id, dropResult.status);
+                    if (result.status === 'error') {
+                        toast({
+                            variant: 'destructive',
+                            title: 'Erro ao atualizar pedido',
+                            description: result.message
+                        });
+                    }
+                });
+            }
+        },
+        collect: monitor => ({
+            isDragging: !!monitor.isDragging(),
+        }),
+    }));
+    
+    return (
     <Card
-        draggable
-        onDragStart={(e) => onDragStart(e, order)}
-        className="cursor-grab bg-card"
+        ref={drag}
+        className={cn(
+            "cursor-grab bg-card active:cursor-grabbing",
+            isDragging ? 'opacity-50' : 'opacity-100',
+            isPending ? 'animate-pulse' : ''
+        )}
     >
         <CardHeader className="p-3">
             <CardTitle className="flex justify-between items-start text-base">
@@ -73,7 +121,7 @@ const OrderCard = ({ order, onDragStart }: { order: Order, onDragStart: (e: Reac
                     <li key={`${item.id}-${index}`}>
                         <span className='text-muted-foreground'>{item.quantity}x</span> {item.name}
                         {item.observation && (
-                            <p className="text-xs text-blue-600 pl-4">&hookrightarrow; {item.observation}</p>
+                            <p className="text-xs text-blue-600 pl-4 max-w-full break-words">&hookrightarrow; {item.observation}</p>
                         )}
                     </li>
                 ))}
@@ -83,14 +131,13 @@ const OrderCard = ({ order, onDragStart }: { order: Order, onDragStart: (e: Reac
             {format(order.created_at.toDate(), "HH:mm 'de' dd/MM", { locale: ptBR })}
         </CardFooter>
     </Card>
-);
+)};
 
 
-export default function OrderKanban({ pdvId }: { pdvId: string }) {
+function KanbanBoard({ pdvId }: { pdvId: string }) {
     const firestore = useFirestore();
     const { toast } = useToast();
     const [orders, setOrders] = useState<Order[] | null>(null);
-    const [isPending, startTransition] = useTransition();
 
     useEffect(() => {
         if (!firestore || !pdvId) return;
@@ -138,47 +185,11 @@ export default function OrderKanban({ pdvId }: { pdvId: string }) {
     }, [orders]);
 
 
-    const handleDragStart = (e: React.DragEvent<HTMLDivElement>, order: Order) => {
-        e.dataTransfer.setData('orderId', order.id);
-    };
-
-    const handleDrop = (e: React.DragEvent<HTMLDivElement>, newStatus: OrderStatus) => {
-        e.preventDefault();
-        const orderId = e.dataTransfer.getData('orderId');
-        if (!orderId) return;
-    
-        const originalOrders = orders;
-        
-        // Optimistic UI update
-        setOrders(prevOrders =>
-            prevOrders!.map(o =>
-                o.id === orderId ? { ...o, status: newStatus } : o
-            )
-        );
-    
-        startTransition(async () => {
-            const result = await updateOrderStatus(orderId, newStatus);
-            if (result.status === 'error') {
-                 toast({
-                    variant: 'destructive',
-                    title: 'Erro ao atualizar pedido',
-                    description: result.message
-                });
-                setOrders(originalOrders);
-            }
-            // On success, the real-time listener will update the state, so no need to do anything here.
-        });
-    };
-
-    const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-        e.preventDefault();
-    };
-
     if (orders === null) {
         return (
             <div className="flex gap-4 overflow-x-auto p-2">
                 {Object.keys(statusConfig).map(status => (
-                    <Card key={status} className="flex-1 flex flex-col min-w-[280px]">
+                    <Card key={status} className="flex-1 flex flex-col min-w-[300px]">
                         <CardHeader className="p-4">
                              <Skeleton className="h-6 w-3/4" />
                         </CardHeader>
@@ -194,19 +205,30 @@ export default function OrderKanban({ pdvId }: { pdvId: string }) {
 
     return (
         <div className="flex gap-4 overflow-x-auto pb-4">
-            {(Object.keys(statusConfig) as OrderStatus[]).map(status => (
-                <KanbanColumn
-                    key={status}
-                    title={statusConfig[status].title}
-                    variant={statusConfig[status].variant}
-                    orders={categorizedOrders[status]}
-                    status={status}
-                    onDrop={handleDrop}
-                    onDragOver={handleDragOver}
-                    onDragStart={handleDragStart}
-                    isPending={isPending}
-                />
-            ))}
+            {(Object.keys(statusConfig) as OrderStatus[]).map(status => {
+                if (status === 'ENTREGUE') return null; // Don't render the 'ENTREGUE' column
+                return (
+                    <KanbanColumn
+                        key={status}
+                        title={statusConfig[status].title}
+                        variant={statusConfig[status].variant}
+                        orders={categorizedOrders[status]}
+                        status={status}
+                        isPending={false}
+                    />
+                )
+            })}
         </div>
+    );
+}
+
+export default function OrderKanban({ pdvId }: { pdvId: string }) {
+    const isMobile = useIsMobile();
+    const backend = isMobile ? TouchBackend : HTML5Backend;
+
+    return (
+        <DndProvider backend={backend} options={{ enableMouseEvents: !isMobile }}>
+            <KanbanBoard pdvId={pdvId} />
+        </DndProvider>
     );
 }
