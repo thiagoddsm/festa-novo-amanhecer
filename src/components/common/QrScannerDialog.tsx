@@ -31,9 +31,9 @@ export default function QrScannerDialog({ open, onOpenChange, onScan }: QrScanne
   };
 
   const handleScanFailure = (error: string) => {
-     // Ignore "QR code not found" errors, which are frequent during scanning.
+     // Ignore "QR code not found" and "NotFoundException" errors, which are frequent and expected during scanning.
      // We only care about critical errors like camera permission issues.
-    if (!error.includes('No QR code found')) {
+    if (!error.includes('No QR code found') && !error.includes('NotFoundException')) {
         console.error(`QR Scan Error: ${error}`);
         setScanError("Não foi possível ler o QR code. Tente novamente ou verifique as permissões da câmera.");
     }
