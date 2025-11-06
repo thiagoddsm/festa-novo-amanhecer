@@ -58,7 +58,7 @@ export async function sendWhatsappImage(to: string, imageUrl: string, caption: s
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ to, image: imageUrl, caption }),
+            body: JSON.stringify({ to, url: imageUrl, caption }),
         });
 
         const result = await response.json();
