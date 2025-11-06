@@ -11,12 +11,13 @@ import { updateOrderStatus } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '../ui/skeleton';
 import { ScrollArea } from '../ui/scroll-area';
-import { Loader2 } from 'lucide-react';
+import { Loader2, ArrowRightCircle } from 'lucide-react';
 import { DndProvider, useDrag, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { TouchBackend } from 'react-dnd-touch-backend';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
+import { Button } from '../ui/button';
 
 
 type OrderStatus = 'EM_PREPARO' | 'PRONTO' | 'ENTREGUE';
@@ -77,22 +78,28 @@ const OrderCard = ({ order }: { order: Order }) => {
     const [isPending, startTransition] = useTransition();
     const { toast } = useToast();
     
+    const handleStatusUpdate = (newStatus: OrderStatus) => {
+        if (order.status === newStatus) return;
+        
+        startTransition(async () => {
+            const result = await updateOrderStatus(order.id, newStatus);
+            if (result.status === 'error') {
+                toast({
+                    variant: 'destructive',
+                    title: 'Erro ao atualizar pedido',
+                    description: result.message
+                });
+            }
+        });
+    };
+
     const [{ isDragging }, drag] = useDrag(() => ({
         type: ItemTypes.ORDER,
         item: { id: order.id, status: order.status },
         end: (item, monitor) => {
             const dropResult = monitor.getDropResult<{ status: OrderStatus }>();
-            if (item && dropResult && item.status !== dropResult.status) {
-                 startTransition(async () => {
-                    const result = await updateOrderStatus(item.id, dropResult.status);
-                    if (result.status === 'error') {
-                        toast({
-                            variant: 'destructive',
-                            title: 'Erro ao atualizar pedido',
-                            description: result.message
-                        });
-                    }
-                });
+            if (item && dropResult) {
+                handleStatusUpdate(dropResult.status);
             }
         },
         collect: monitor => ({
@@ -127,8 +134,19 @@ const OrderCard = ({ order }: { order: Order }) => {
                 ))}
             </ul>
         </CardContent>
-        <CardFooter className="p-3 text-xs text-muted-foreground justify-end">
-            {format(order.created_at.toDate(), "HH:mm 'de' dd/MM", { locale: ptBR })}
+        <CardFooter className="p-3 text-xs text-muted-foreground flex justify-between items-center">
+            <span>{format(order.created_at.toDate(), "HH:mm 'de' dd/MM", { locale: ptBR })}</span>
+            {order.status === 'EM_PREPARO' && (
+                <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => handleStatusUpdate('PRONTO')}
+                    disabled={isPending}
+                    className="h-auto px-2 py-1 text-xs"
+                >
+                    {isPending ? <Loader2 className="h-4 w-4 animate-spin"/> : <>Pronto <ArrowRightCircle className="ml-2 h-4 w-4"/></>}
+                </Button>
+            )}
         </CardFooter>
     </Card>
 )};
