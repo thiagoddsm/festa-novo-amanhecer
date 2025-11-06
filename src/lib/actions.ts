@@ -7,6 +7,7 @@ import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 import type { Card, Order } from './definitions';
 import { notifyCardCreation, notifyRecharge, notifySale, notifyCustomMessage } from './flows/notify-flow';
+import { notifyOrderReady } from './flows/notify-order-flow';
 
 
 // Helper to ensure Firebase Admin is initialized only once
@@ -473,6 +474,12 @@ export async function updateOrderStatus(orderId: string, newStatus: Order['statu
             status: validated.data.newStatus,
             updated_at: Timestamp.now(),
         });
+        
+        // If the order is ready, trigger a notification
+        if (validated.data.newStatus === 'PRONTO') {
+            notifyOrderReady(validated.data.orderId).catch(console.error);
+        }
+
         return { status: 'success', message: 'Status do pedido atualizado.' };
     } catch (error) {
         console.error("Error updating order status:", error);

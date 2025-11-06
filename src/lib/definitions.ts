@@ -43,6 +43,7 @@ export type Transaction = {
 export type TransactionDetails = Transaction & {
   card_qr_code_id?: string;
   pdv_nome?: string;
+  nome_cliente?: string;
 }
 
 export type Pdv = {
