@@ -6,91 +6,88 @@ import { Html5Qrcode, type QrCodeSuccessCallback, type QrCodeErrorCallback } fro
 interface QrScannerProps {
   onScanSuccess: (decodedText: string) => void;
   onScanFailure: (error: string) => void;
-  cameraId: string;
-  torchOn: boolean;
+  /**
+   * This prop is retained for potential future use but is not actively used
+   * in this simplified implementation.
+   */
+  cameraId?: string;
 }
 
-export function QrScanner({ onScanSuccess, onScanFailure, cameraId, torchOn }: QrScannerProps) {
-  const qrCodeRef = useRef<Html5Qrcode | null>(null);
-  const videoRef = useRef<HTMLDivElement>(null);
-  // This ref helps prevent multiple cleanup calls
-  const cleanupCalled = useRef(false);
+const qrboxFunction = (viewfinderWidth: number, viewfinderHeight: number) => {
+    const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+    const qrboxSize = Math.floor(minEdge * 0.8);
+    return {
+        width: qrboxSize,
+        height: qrboxSize,
+    };
+}
+
+
+export function QrScanner({ onScanSuccess, onScanFailure }: QrScannerProps) {
+  const qrCodeReaderId = "qr-reader";
+  const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
 
   useEffect(() => {
-    if (!videoRef.current || !cameraId) return;
+    // Ensure this runs only on the client
+    if (typeof window === 'undefined') {
+        return;
+    }
+      
+    // If an instance already exists, it might have been from a previous render.
+    // We make sure to clear it before starting a new one.
+    if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
+        html5QrCodeRef.current.clear().catch(err => {
+            console.error("Failed to clear previous scanner instance", err);
+        });
+    }
 
-    // Reset cleanup flag for this new effect run
-    cleanupCalled.current = false;
-    
-    const html5QrCode = new Html5Qrcode(videoRef.current.id, { verbose: false });
-    qrCodeRef.current = html5QrCode;
+    const html5QrCode = new Html5Qrcode(qrCodeReaderId, { verbose: false });
+    html5QrCodeRef.current = html5QrCode;
 
-    const successCallback: QrCodeSuccessCallback = (decodedText) => {
+    const successCallback: QrCodeSuccessCallback = (decodedText, decodedResult) => {
         onScanSuccess(decodedText);
+        // Stop scanning after a successful scan
+        if (html5QrCodeRef.current?.isScanning) {
+             html5QrCodeRef.current.stop().catch(err => console.error("Failed to stop scanner after success", err));
+        }
     };
 
-    const errorCallback: QrCodeErrorCallback = (error) => {
-      // Don't spam failures for non-found codes
+    const errorCallback: QrCodeErrorCallback = (errorMessage) => {
+        // We only pass "real" errors, not "QR code not found" messages.
+        if (!errorMessage.toLowerCase().includes('qr code not found')) {
+            onScanFailure(errorMessage);
+        }
     };
 
-    const config = {
-      fps: 10,
-      qrbox: { width: 250, height: 250 },
-      aspectRatio: 1.0,
+    // Configuration for the scanner
+    const config = { 
+        fps: 10, 
+        qrbox: qrboxFunction,
+        // Only decode QR codes, ignore other formats
+        formatsToSupport: [0], // 0 corresponds to QR_CODE
     };
     
+    // Start scanning
     html5QrCode.start(
-        cameraId,
+        { facingMode: "environment" }, // Prefer the rear camera
         config,
         successCallback,
         errorCallback
-    ).then(() => {
-        // Torch can be applied only after the camera starts
-        if (qrCodeRef.current && qrCodeRef.current.isScanning) {
-            const videoTrack = html5QrCode.getRunningTrack();
-            if (videoTrack) {
-                const capabilities = videoTrack.getCapabilities();
-                if (capabilities.torch) {
-                    videoTrack.applyConstraints({ advanced: [{ torch: torchOn }]})
-                        .catch(err => console.error("Erro ao aplicar a lanterna na inicialização", err));
-                }
-            }
-        }
-    }).catch(err => {
-        onScanFailure(err.message || 'Não foi possível iniciar a câmera.');
+    ).catch((err) => {
+        onScanFailure("Não foi possível iniciar o scanner. Verifique as permissões da câmera.");
     });
-
-    // Cleanup function to be called on unmount
-    const cleanup = () => {
-      if (cleanupCalled.current) return;
-      cleanupCalled.current = true;
-
-      const codeReader = qrCodeRef.current;
-      if (codeReader && codeReader.isScanning) {
-        codeReader.stop().catch(err => {
-          console.error("Falha ao parar o leitor de QR code.", err);
+    
+    // Cleanup function to stop the scanner on component unmount
+    return () => {
+      if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
+        html5QrCodeRef.current.stop().catch(err => {
+          // This error can happen if the component unmounts quickly.
+          // It's generally safe to ignore in this cleanup phase.
+          console.log("Scanner stopped.");
         });
       }
     };
+  }, [onScanSuccess, onScanFailure]);
 
-    return cleanup;
-
-  }, [cameraId, onScanSuccess, onScanFailure]);
-
-
-  // Separate effect to handle torch toggling while camera is running
-  useEffect(() => {
-     if (qrCodeRef.current && qrCodeRef.current.isScanning) {
-        const videoTrack = qrCodeRef.current.getRunningTrack();
-        if (videoTrack) {
-            const capabilities = videoTrack.getCapabilities();
-            if (capabilities.torch) {
-                videoTrack.applyConstraints({ advanced: [{ torch: torchOn }]})
-                    .catch(err => console.error("Erro ao alternar a lanterna", err));
-            }
-        }
-     }
-  }, [torchOn]);
-
-  return <div id="qr-reader-element" ref={videoRef} className="w-full h-full"></div>;
+  return <div id={qrCodeReaderId} className="w-full h-full"></div>;
 }
