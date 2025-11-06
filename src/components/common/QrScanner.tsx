@@ -1,80 +1,120 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
-import type { Html5QrcodeScanner, QrCodeSuccessCallback, QrCodeErrorCallback } from 'html5-qrcode';
+import { useEffect, useRef, useState } from 'react';
+import { Html5Qrcode, type QrCodeSuccessCallback, type QrCodeErrorCallback } from 'html5-qrcode';
+import { useToast } from '@/hooks/use-toast';
 
 interface QrScannerProps {
   onScanSuccess: (decodedText: string) => void;
   onScanFailure: (error: string) => void;
+  onTorchToggle?: (torchOn: boolean) => void;
+  torchOn?: boolean;
 }
 
-// This is the core scanner component that interacts with the camera
-export function QrScanner({ onScanSuccess, onScanFailure }: QrScannerProps) {
-  const scannerRef = useRef<Html5QrcodeScanner | null>(null);
+export function QrScanner({ onScanSuccess, onScanFailure, onTorchToggle, torchOn }: QrScannerProps) {
+  const qrCodeRef = useRef<Html5Qrcode | null>(null);
+  const videoRef = useRef<HTMLDivElement>(null);
+  const [isCameraStarted, setIsCameraStarted] = useState(false);
+  const { toast } = useToast();
+
+  // Function to apply torch constraint
+  const applyTorch = async (torch: boolean) => {
+    if (qrCodeRef.current && isCameraStarted) {
+      try {
+        const stream = await qrCodeRef.current.getRunningTrack();
+        if (stream) {
+          const videoTrack = stream.getVideoTracks()[0];
+          // Check if torch capability is supported
+          const capabilities = videoTrack.getCapabilities();
+          if ('torch' in capabilities) {
+            await videoTrack.applyConstraints({
+              advanced: [{ torch }],
+            });
+            onTorchToggle?.(torch);
+          } else {
+            console.warn('Torch/Flashlight not supported by this camera.');
+            toast({
+                variant: 'destructive',
+                title: 'Lanterna não suportada',
+                description: 'Este dispositivo não parece ter uma lanterna controlável.'
+            })
+          }
+        }
+      } catch (error) {
+        console.error('Failed to toggle torch', error);
+        onScanFailure('Falha ao controlar a lanterna.');
+      }
+    }
+  };
 
   useEffect(() => {
-    // Dynamically import the library only on the client-side
-    import('html5-qrcode').then(({ Html5QrcodeScanner }) => {
-      if (!scannerRef.current) {
-        const scanner = new Html5QrcodeScanner(
-          'qr-reader', // The ID of the div to render the scanner in
-          {
-            fps: 10,
-            qrbox: { width: 250, height: 250 },
-            rememberLastUsedCamera: true,
-            supportedScanTypes: [], // Use all available scan types
-          },
-          false // Verbose logging
-        );
-
-        const successCallback: QrCodeSuccessCallback = (decodedText, decodedResult) => {
-          // Wrap in a try-catch in case onScanSuccess throws an error
-          try {
-            onScanSuccess(decodedText);
-          } catch (e) {
-            console.error('Error in onScanSuccess callback:', e);
-          }
-          // Stop scanning after a success
-          if (scannerRef.current) {
-            scannerRef.current.clear().catch(err => console.error("Failed to clear scanner", err));
-          }
-        };
-
-        const errorCallback: QrCodeErrorCallback = (error) => {
-          // This callback is called frequently, so we only log/handle significant errors
-          // It's common for it to fire when no QR code is in view.
-          // onScanFailure(error);
-        };
-        
-        // Start scanning. It will request camera permissions.
-        try {
-          scanner.render(successCallback, errorCallback);
-        } catch (err: any) {
-          console.error("Error rendering scanner:", err);
-          onScanFailure(err.message || 'Failed to render scanner.');
+    if (torchOn !== undefined && qrCodeRef.current && isCameraStarted) {
+        // Find the currently active video track
+        const videoTrack = qrCodeRef.current.getRunningTrack()?.getVideoTracks()?.[0];
+        if (videoTrack) {
+            const capabilities = videoTrack.getCapabilities();
+             if ('torch' in capabilities) {
+                videoTrack.applyConstraints({ advanced: [{ torch: torchOn }] })
+                    .catch(err => console.error("Error applying torch constraint:", err));
+             }
         }
-          
-        scannerRef.current = scanner;
-      }
+    }
+  }, [torchOn, isCameraStarted]);
 
-      // Cleanup function to stop the scanner when the component unmounts
-      return () => {
-        if (scannerRef.current) {
-          scannerRef.current.clear().catch(err => {
-            console.error("Failed to clear scanner on unmount:", err);
-          });
-          scannerRef.current = null;
-        }
-      };
+  useEffect(() => {
+    if (!videoRef.current) return;
+
+    // Use the lower-level Html5Qrcode class
+    const html5QrCode = new Html5Qrcode('qr-reader-element', { verbose: false });
+    qrCodeRef.current = html5QrCode;
+
+    const successCallback: QrCodeSuccessCallback = (decodedText) => {
+      onScanSuccess(decodedText);
+    };
+
+    const errorCallback: QrCodeErrorCallback = (error) => {
+      // Don't spam failures
+    };
+
+    const config = {
+      fps: 10,
+      qrbox: { width: 250, height: 250 },
+      aspectRatio: 1.0,
+    };
+    
+    // Start scanning
+    html5QrCode.start(
+        { facingMode: 'environment' }, // Default to back camera
+        config,
+        successCallback,
+        errorCallback
+    ).then(() => {
+        setIsCameraStarted(true);
     }).catch(err => {
-        console.error("Failed to load html5-qrcode library", err);
-        onScanFailure('Failed to load scanning library.');
+        console.error("Camera start error:", err);
+        // Fallback for devices that don't support 'environment'
+        if (String(err).includes('OverconstrainedError')) {
+             html5QrCode.start(
+                { }, // Let the browser decide which camera
+                config,
+                successCallback,
+                errorCallback
+             ).then(() => setIsCameraStarted(true))
+             .catch(finalErr => onScanFailure(finalErr.message || 'Não foi possível iniciar a câmera.'));
+        } else {
+             onScanFailure(err.message || 'Não foi possível iniciar a câmera.');
+        }
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Run only once on component mount
 
-  return (
-    // This div is where the html5-qrcode library will mount the camera view
-    <div id="qr-reader" className="w-full"></div>
-  );
+    // Cleanup on unmount
+    return () => {
+      setIsCameraStarted(false);
+      if (qrCodeRef.current?.isScanning) {
+        qrCodeRef.current.stop().catch(err => console.error("Failed to stop QR scanner", err));
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return <div id="qr-reader-element" ref={videoRef} className="w-full"></div>;
 }

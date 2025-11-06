@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -11,9 +11,10 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { Camera, AlertCircle, Loader2 } from 'lucide-react';
+import { Camera, AlertCircle, Loader2, Flashlight } from 'lucide-react';
 import { QrScanner } from './QrScanner';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
+import { cn } from '@/lib/utils';
 
 
 interface QrScannerDialogProps {
@@ -25,6 +26,7 @@ interface QrScannerDialogProps {
 export default function QrScannerDialog({ open, onOpenChange, onScan }: QrScannerDialogProps) {
   const { toast } = useToast();
   const [scanError, setScanError] = useState<string | null>(null);
+  const [torchOn, setTorchOn] = useState(false);
   
   const handleScanSuccess = (decodedText: string) => {
     onScan(decodedText);
@@ -39,11 +41,12 @@ export default function QrScannerDialog({ open, onOpenChange, onScan }: QrScanne
     }
   };
 
-  // Reset error when dialog is opened
+  // Reset error and torch when dialog is opened/closed
   const handleOpenChange = (isOpen: boolean) => {
     if (isOpen) {
         setScanError(null);
     }
+    setTorchOn(false); // Always turn off torch when closing
     onOpenChange(isOpen);
   }
 
@@ -60,7 +63,13 @@ export default function QrScannerDialog({ open, onOpenChange, onScan }: QrScanne
         </DialogHeader>
         
         <div className="relative flex min-h-[300px] w-full items-center justify-center overflow-hidden rounded-md border bg-muted">
-           {open && !scanError && <QrScanner onScanSuccess={handleScanSuccess} onScanFailure={handleScanFailure} />}
+           {open && !scanError && (
+            <QrScanner 
+                onScanSuccess={handleScanSuccess} 
+                onScanFailure={handleScanFailure}
+                torchOn={torchOn}
+            />
+           )}
            {scanError && (
              <Alert variant="destructive" className="m-4">
                 <AlertCircle className="h-4 w-4" />
@@ -74,8 +83,17 @@ export default function QrScannerDialog({ open, onOpenChange, onScan }: QrScanne
            )}
         </div>
 
-        <DialogFooter>
-          <Button variant="secondary" onClick={() => onOpenChange(false)} className="w-full">
+        <DialogFooter className="sm:justify-between gap-2">
+          <Button 
+            variant="outline"
+            size="icon"
+            onClick={() => setTorchOn(prev => !prev)}
+            className={cn(torchOn && 'bg-yellow-300 hover:bg-yellow-400')}
+            title="Ligar/Desligar Lanterna"
+          >
+            <Flashlight className="h-5 w-5" />
+          </Button>
+          <Button variant="secondary" onClick={() => onOpenChange(false)} className="w-full sm:w-auto">
             Fechar
           </Button>
         </DialogFooter>
