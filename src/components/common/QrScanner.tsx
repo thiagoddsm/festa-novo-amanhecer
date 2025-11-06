@@ -1,56 +1,82 @@
+
 'use client';
 
 import { useEffect, useRef } from 'react';
 import type { Html5QrcodeScanner, QrCodeSuccessCallback, QrCodeErrorCallback } from 'html5-qrcode';
 
 interface QrScannerProps {
-  onScanSuccess: QrCodeSuccessCallback;
-  onScanFailure: QrCodeErrorCallback;
+  onScanSuccess: (decodedText: string) => void;
+  onScanFailure: (error: string) => void;
 }
 
+// This is the core scanner component that interacts with the camera
 export function QrScanner({ onScanSuccess, onScanFailure }: QrScannerProps) {
   const scannerRef = useRef<Html5QrcodeScanner | null>(null);
 
   useEffect(() => {
-    // Dynamically import the library
+    // Dynamically import the library only on the client-side
     import('html5-qrcode').then(({ Html5QrcodeScanner }) => {
-      // Check if a scanner instance already exists to avoid re-initialization
       if (!scannerRef.current) {
         const scanner = new Html5QrcodeScanner(
-          'qr-reader', // ID of the div element
+          'qr-reader', // The ID of the div to render the scanner in
           {
             fps: 10,
-            qrbox: (viewfinderWidth, viewfinderHeight) => {
-              const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
-              const qrboxSize = Math.floor(minEdge * 0.8);
-              return { width: qrboxSize, height: qrboxSize };
-            },
-            supportedScanTypes: [], // Use all supported scan types
+            qrbox: { width: 250, height: 250 },
+            rememberLastUsedCamera: true,
+            supportedScanTypes: [], // Use all available scan types
           },
-          false // verbose
+          false // Verbose logging
         );
 
-        scanner.render(onScanSuccess, onScanFailure);
+        const successCallback: QrCodeSuccessCallback = (decodedText, decodedResult) => {
+          // Wrap in a try-catch in case onScanSuccess throws an error
+          try {
+            onScanSuccess(decodedText);
+          } catch (e) {
+            console.error('Error in onScanSuccess callback:', e);
+          }
+          // Stop scanning after a success
+          if (scannerRef.current) {
+            scannerRef.current.clear().catch(err => console.error("Failed to clear scanner", err));
+          }
+        };
+
+        const errorCallback: QrCodeErrorCallback = (error) => {
+          // This callback is called frequently, so we only log/handle significant errors
+          // It's common for it to fire when no QR code is in view.
+           onScanFailure(error);
+        };
+        
+        // Start scanning. It will request camera permissions.
+        try {
+          scanner.render(successCallback, errorCallback);
+        } catch (err: any) {
+          console.error("Error rendering scanner:", err);
+          onScanFailure(err.message || 'Failed to render scanner.');
+        }
+          
         scannerRef.current = scanner;
       }
-    });
 
-    // Cleanup function to stop the scanner on component unmount
-    return () => {
-      if (scannerRef.current) {
-        try {
-          // The clear method stops the camera and cleans up the UI.
-          scannerRef.current.clear();
-        } catch (error) {
-          // This can happen if the component unmounts before the scanner is fully initialized or during a scan.
-          // We can safely ignore it to prevent crashing the app.
-          console.error("Failed to clear html5-qrcode scanner, but suppressing error:", error);
-        } finally {
+      // Cleanup function to stop the scanner when the component unmounts
+      return () => {
+        if (scannerRef.current) {
+          scannerRef.current.clear().catch(err => {
+            console.error("Failed to clear scanner on unmount:", err);
+          });
           scannerRef.current = null;
         }
-      }
-    };
-  }, [onScanSuccess, onScanFailure]);
+      };
+    }).catch(err => {
+        console.error("Failed to load html5-qrcode library", err);
+        onScanFailure('Failed to load scanning library.');
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run only once on component mount
 
-  return <div id="qr-reader" style={{ width: '100%', minHeight: '300px' }}></div>;
+  return (
+    // This div is where the html5-qrcode library will mount the camera view
+    <div id="qr-reader" className="w-full"></div>
+  );
 }
+
