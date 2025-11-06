@@ -46,7 +46,7 @@ type CartItem = {
 function SubmitButton({ disabled }: { disabled: boolean }) {
   const { pending } = useFormStatus();
   return (
-    <Button type="submit" disabled={pending || disabled} className="w-full h-16 text-lg">
+    <Button type="submit" disabled={pending || disabled} className="w-full h-14 text-base md:h-16 md:text-lg">
       {pending ? <Loader2 className="animate-spin" /> : 'Finalizar Venda'}
     </Button>
   );
@@ -262,17 +262,17 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv, onGoBack: ()
   return (
     <>
      <Tabs defaultValue="venda" className="w-full">
-        <div className="flex justify-between items-center mb-4">
+        <div className="flex justify-between items-center mb-2 md:mb-4">
             <TabsList>
-                <TabsTrigger value="venda">Terminal de Venda</TabsTrigger>
-                <TabsTrigger value="acompanhamento">Acompanhamento de Pedidos</TabsTrigger>
+                <TabsTrigger value="venda">Venda</TabsTrigger>
+                <TabsTrigger value="acompanhamento">Pedidos</TabsTrigger>
             </TabsList>
              <Button variant="ghost" size="sm" onClick={onGoBack}><ArrowLeft className="mr-2 h-4 w-4" /> Trocar PDV</Button>
         </div>
         <TabsContent value="venda">
-            <div className="flex flex-col lg:flex-row gap-4 items-start">
+            <div className="flex flex-col lg:flex-row gap-2 md:gap-4 items-start">
                 <Card className="flex-1 w-full lg:w-3/5">
-                <CardHeader>
+                <CardHeader className="p-4 md:p-6">
                     <div className="flex justify-between items-center">
                         <div className='flex items-center gap-2'>
                             <CardTitle>Cardápio</CardTitle>
@@ -283,12 +283,12 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv, onGoBack: ()
                     </div>
                     <CardDescription>Vendendo em: <span className='font-semibold text-primary'>{pdv.nome}</span></CardDescription>
                 </CardHeader>
-                <CardContent className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                    {menuItems === null && Array.from({length: 6}).map((_, i) => <Skeleton key={i} className="h-24 w-full" />)}
+                <CardContent className="p-2 md:p-3 grid grid-cols-2 md:grid-cols-3 gap-2 md:gap-3">
+                    {menuItems === null && Array.from({length: 6}).map((_, i) => <Skeleton key={i} className="h-20 md:h-24 w-full" />)}
                     {menuItems && menuItems.length === 0 && <p className='col-span-full text-center text-muted-foreground'>Nenhum item no cardápio para este PDV.</p>}
                     {menuItems && menuItems.map(item => (
-                    <Button key={item.id} variant="outline" className="h-24 flex-col justify-center" onClick={() => addToCart(item)}>
-                        <span className="text-base text-center">{item.nome}</span>
+                    <Button key={item.id} variant="outline" className="h-20 md:h-24 flex-col justify-center" onClick={() => addToCart(item)}>
+                        <span className="text-sm md:text-base text-center">{item.nome}</span>
                         <span className="text-sm font-bold">{formatCurrency(item.preco_centavos)}</span>
                     </Button>
                     ))}
@@ -296,7 +296,7 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv, onGoBack: ()
                 </Card>
 
                 <Card className="w-full lg:w-2/5">
-                    <CardHeader>
+                    <CardHeader className="p-4 md:p-6">
                         <div className="flex justify-between items-center">
                             <CardTitle className='flex items-center gap-2'><ShoppingCart /> Carrinho</CardTitle>
                             {cart.length > 0 && 
@@ -306,12 +306,12 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv, onGoBack: ()
                             }
                         </div>
                     </CardHeader>
-                    <CardContent>
-                        <ScrollArea className="h-60">
+                    <CardContent className="p-4 md:p-6 pt-0">
+                        <ScrollArea className="h-48 md:h-60">
                             {cart.length === 0 ? (
                                 <p className="text-center text-muted-foreground py-10">Clique em um item do cardápio para adicionar.</p>
                             ): (
-                                <div className="space-y-4">
+                                <div className="space-y-3">
                                 {cart.map((item) => {
                                     const uniqueId = `${item.id}-${item.observation}`;
                                     return (
@@ -331,9 +331,9 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv, onGoBack: ()
                                 </div>
                             )}
                         </ScrollArea>
-                        <Separator className="my-4"/>
+                        <Separator className="my-2 md:my-4"/>
                         <form ref={formRef} action={formAction}>
-                            <div className="space-y-4">
+                            <div className="space-y-3">
                                 <div className="flex gap-2">
                                     <Input
                                         id="qr_code_id"
@@ -342,10 +342,10 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv, onGoBack: ()
                                         required
                                         value={qrCodeId}
                                         onChange={(e) => setQrCodeId(e.target.value)}
-                                        className="h-12 text-center text-lg flex-grow"
+                                        className="h-12 text-center text-base md:text-lg flex-grow"
                                     />
                                     <Button type="button" variant="outline" size="icon" className="h-12 w-12" onClick={() => setIsScannerOpen(true)}>
-                                        <QrCode className="h-6 w-6" />
+                                        <QrCode className="h-5 w-5 md:h-6 md:w-6" />
                                     </Button>
                                 </div>
                                 <input type="hidden" name="pdv_id" value={pdv.id} />
@@ -356,7 +356,7 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv, onGoBack: ()
                             </div>
                         </form>
                     </CardContent>
-                    <CardFooter className='flex justify-between items-center text-2xl font-bold bg-muted/50 p-4 rounded-b-lg'>
+                    <CardFooter className='flex justify-between items-center text-xl md:text-2xl font-bold bg-muted/50 p-3 md:p-4 rounded-b-lg'>
                         <span>Total:</span>
                         <span>{formatCurrency(total)}</span>
                     </CardFooter>
