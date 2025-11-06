@@ -270,8 +270,8 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv, onGoBack: ()
              <Button variant="ghost" size="sm" onClick={onGoBack}><ArrowLeft className="mr-2 h-4 w-4" /> Trocar PDV</Button>
         </div>
         <TabsContent value="venda">
-            <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 items-start">
-                <Card className="lg:col-span-3">
+            <div className="flex flex-col lg:flex-row gap-4 items-start">
+                <Card className="flex-1 w-full lg:w-3/5">
                 <CardHeader>
                     <div className="flex justify-between items-center">
                         <div className='flex items-center gap-2'>
@@ -295,7 +295,7 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv, onGoBack: ()
                 </CardContent>
                 </Card>
 
-                <Card className="lg:col-span-2 sticky top-4">
+                <Card className="w-full lg:w-2/5">
                     <CardHeader>
                         <div className="flex justify-between items-center">
                             <CardTitle className='flex items-center gap-2'><ShoppingCart /> Carrinho</CardTitle>
