@@ -38,10 +38,15 @@ export function QrScanner({ onScanSuccess, onScanFailure }: QrScannerProps) {
     // Cleanup function to stop the scanner on component unmount
     return () => {
       if (scannerRef.current) {
-        scannerRef.current.clear().catch(error => {
-          console.error("Failed to clear html5-qrcode scanner.", error);
-        });
-        scannerRef.current = null;
+        // First, stop the scanning process. Then, clear the UI.
+        scannerRef.current.stop()
+            .then(() => {
+                scannerRef.current?.clear();
+                scannerRef.current = null;
+            })
+            .catch(error => {
+                console.error("Failed to stop or clear html5-qrcode scanner.", error);
+            });
       }
     };
   }, [onScanSuccess, onScanFailure]);
