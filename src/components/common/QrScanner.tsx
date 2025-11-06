@@ -38,15 +38,16 @@ export function QrScanner({ onScanSuccess, onScanFailure }: QrScannerProps) {
     // Cleanup function to stop the scanner on component unmount
     return () => {
       if (scannerRef.current) {
-        // First, stop the scanning process. Then, clear the UI.
-        scannerRef.current.stop()
-            .then(() => {
-                scannerRef.current?.clear();
-                scannerRef.current = null;
-            })
-            .catch(error => {
-                console.error("Failed to stop or clear html5-qrcode scanner.", error);
-            });
+        try {
+          // The clear method stops the camera and cleans up the UI.
+          scannerRef.current.clear();
+        } catch (error) {
+          // This can happen if the component unmounts before the scanner is fully initialized or during a scan.
+          // We can safely ignore it to prevent crashing the app.
+          console.error("Failed to clear html5-qrcode scanner, but suppressing error:", error);
+        } finally {
+          scannerRef.current = null;
+        }
       }
     };
   }, [onScanSuccess, onScanFailure]);
