@@ -89,7 +89,7 @@ export async function createCard(
         });
     }
 
-     // Trigger notification flow (non-blocking)
+     // Trigger notification flow (non-blocking), now with QR code image enabled.
     notifyCardCreation(cardDocRef.id).catch(console.error);
 
     const returnData = {

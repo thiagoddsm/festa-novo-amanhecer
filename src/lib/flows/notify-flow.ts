@@ -71,10 +71,14 @@ async function sendCardNotification(
     }
 
     const message = messageBuilder(card);
-    const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodeURIComponent(card.qr_code_id)}`;
+    let qrImageUrl: string | undefined;
 
+    if (options?.sendQrImage) {
+        qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodeURIComponent(card.qr_code_id)}`;
+    }
+    
     // This will be wrapped in a single call to the generic message flow
-    return await notifyCustomMessage(phoneNumber, message, options?.sendQrImage ? qrImageUrl : undefined);
+    return await notifyCustomMessage(phoneNumber, message, qrImageUrl);
 }
 
 /**
