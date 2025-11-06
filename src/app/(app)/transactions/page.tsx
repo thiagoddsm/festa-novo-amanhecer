@@ -5,12 +5,15 @@ import { collection, onSnapshot, doc, getDoc, Timestamp, query, orderBy } from '
 import type { Transaction, Card as CardType, Pdv } from '@/lib/definitions';
 import { formatCurrency, formatDateTime } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { List, Package, User, CornerDownRight } from 'lucide-react';
-import { getPdvNameById } from '@/lib/actions';
+import { List, Package, User, CornerDownRight, FileDown } from 'lucide-react';
 import { DataTable } from '@/components/ui/data-table';
-import { type ColumnDef } from '@tanstack/react-table';
+import { type ColumnDef, type Row } from '@tanstack/react-table';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+
 
 type TransactionDetails = Transaction & {
   card_qr_code_id?: string;
@@ -168,6 +171,44 @@ const SubRowComponent = ({ row }: { row: { original: TransactionDetails } }) => 
     );
 };
 
+const generatePDF = (filteredData: Row<TransactionDetails>[]) => {
+    const doc = new jsPDF();
+    const tableRows: any[] = [];
+    let totalValue = 0;
+
+    filteredData.forEach(row => {
+        const rowData = row.original;
+        tableRows.push([
+            rowData.pdv_nome,
+            rowData.card_qr_code_id,
+            rowData.tipo,
+            formatCurrency(rowData.valor_centavos),
+            formatTimestamp(rowData.created_at)
+        ]);
+        totalValue += rowData.valor_centavos;
+    });
+
+    const reportDate = formatDateTime(new Date());
+
+    doc.setFontSize(18);
+    doc.text('Relatório de Transações', 14, 22);
+    doc.setFontSize(11);
+    doc.text(`Gerado em: ${reportDate}`, 14, 30);
+
+    autoTable(doc, {
+        head: [['PDV', 'Cartão (QR)', 'Tipo', 'Valor', 'Data e Hora']],
+        body: tableRows,
+        startY: 35,
+    });
+    
+    const finalY = (doc as any).lastAutoTable.finalY;
+    doc.setFontSize(12);
+    doc.text(`Total de Transações: ${filteredData.length}`, 14, finalY + 10);
+    doc.text(`Valor Total: ${formatCurrency(totalValue)}`, 14, finalY + 17);
+
+
+    doc.save(`relatorio_transacoes_${Date.now()}.pdf`);
+};
 
 export default function TransactionsPage() {
   const { transactions: allTransactions, pdvs } = useTransactionDetails();
@@ -204,6 +245,7 @@ export default function TransactionsPage() {
             columns={columns}
             data={allTransactions || []}
             renderSubComponent={SubRowComponent}
+            onGeneratePdf={generatePDF}
             filterColumns={[
                 {
                     columnId: 'card_qr_code_id',

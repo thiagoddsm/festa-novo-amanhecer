@@ -26,7 +26,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { DataTableFacetedFilter } from "./data-table-faceted-filter"
-import { ChevronDown, ChevronRight } from "lucide-react"
+import { ChevronDown, ChevronRight, FileDown } from "lucide-react"
 
 interface FilterConfig {
     columnId: string;
@@ -39,13 +39,15 @@ interface DataTableProps<TData, TValue> {
   data: TData[];
   filterColumns?: FilterConfig[];
   renderSubComponent?: (props: { row: Row<TData> }) => React.ReactElement;
+  onGeneratePdf?: (data: Row<TData>[]) => void;
 }
 
 export function DataTable<TData, TValue>({
   columns,
   data,
   filterColumns = [],
-  renderSubComponent
+  renderSubComponent,
+  onGeneratePdf
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([])
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
@@ -92,34 +94,46 @@ export function DataTable<TData, TValue>({
 
   return (
     <div>
-        <div className="flex items-center py-4 gap-2 flex-wrap">
-            {filterColumns.map(filterConfig => {
-                const column = table.getColumn(filterConfig.columnId);
-                if (!column) return null;
+        <div className="flex items-center justify-between py-4">
+            <div className="flex items-center gap-2 flex-wrap">
+                {filterColumns.map(filterConfig => {
+                    const column = table.getColumn(filterConfig.columnId);
+                    if (!column) return null;
 
-                if (filterConfig.options) {
+                    if (filterConfig.options) {
+                        return (
+                            <DataTableFacetedFilter
+                                key={filterConfig.columnId}
+                                column={column}
+                                title={filterConfig.placeholder.replace('Filtrar ', '').replace('...', '')}
+                                options={filterConfig.options}
+                            />
+                        )
+                    }
+                    
                     return (
-                        <DataTableFacetedFilter
+                        <Input
                             key={filterConfig.columnId}
-                            column={column}
-                            title={filterConfig.placeholder.replace('Filtrar ', '').replace('...', '')}
-                            options={filterConfig.options}
+                            placeholder={filterConfig.placeholder}
+                            value={(column.getFilterValue() as string) ?? ""}
+                            onChange={(event) =>
+                            column.setFilterValue(event.target.value)
+                            }
+                            className="max-w-sm h-8"
                         />
                     )
-                }
-                
-                return (
-                    <Input
-                        key={filterConfig.columnId}
-                        placeholder={filterConfig.placeholder}
-                        value={(column.getFilterValue() as string) ?? ""}
-                        onChange={(event) =>
-                        column.setFilterValue(event.target.value)
-                        }
-                        className="max-w-sm h-8"
-                    />
-                )
-            })}
+                })}
+            </div>
+             {onGeneratePdf && (
+                <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onGeneratePdf(table.getFilteredRowModel().rows)}
+                >
+                    <FileDown className="mr-2 h-4 w-4" />
+                    Gerar Relatório PDF
+                </Button>
+            )}
       </div>
       <div className="rounded-md border">
         <Table>
