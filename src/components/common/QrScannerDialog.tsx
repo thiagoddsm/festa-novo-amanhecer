@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -11,11 +11,9 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { Camera, AlertCircle, Loader2, Video } from 'lucide-react';
+import { Camera, AlertCircle } from 'lucide-react';
 import { QrScanner } from './QrScanner';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Html5Qrcode } from 'html5-qrcode';
 
 interface QrScannerDialogProps {
   open: boolean;
@@ -26,37 +24,6 @@ interface QrScannerDialogProps {
 export default function QrScannerDialog({ open, onOpenChange, onScan }: QrScannerDialogProps) {
   const { toast } = useToast();
   const [scanError, setScanError] = useState<string | null>(null);
-  const [cameras, setCameras] = useState<{ id: string; label: string }[]>([]);
-  const [selectedCameraId, setSelectedCameraId] = useState<string | undefined>(undefined);
-  const [permissionGranted, setPermissionGranted] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    if (open) {
-      // Reset state when dialog opens
-      setIsLoading(true);
-      setScanError(null);
-      setPermissionGranted(false);
-
-      Html5Qrcode.getCameras()
-        .then(devices => {
-          if (devices && devices.length) {
-            setCameras(devices);
-            // Default to the first back-facing camera, or just the first camera
-            const backCamera = devices.find(d => d.label.toLowerCase().includes('back'));
-            setSelectedCameraId(backCamera?.id || devices[0].id);
-          }
-          setPermissionGranted(true);
-        })
-        .catch(err => {
-          setScanError("Permissão da câmera negada ou nenhuma câmera encontrada. Por favor, verifique as configurações do seu navegador.");
-          setPermissionGranted(false);
-        })
-        .finally(() => {
-          setIsLoading(false);
-        });
-    }
-  }, [open]);
 
   const handleScanSuccess = (decodedText: string) => {
     onScan(decodedText);
@@ -64,9 +31,18 @@ export default function QrScannerDialog({ open, onOpenChange, onScan }: QrScanne
   };
 
   const handleScanFailure = (error: string) => {
-    // We get a lot of "QR code not found" messages which are normal, so we don't treat them as errors.
-    // We can log them for debugging if needed but won't show them to the user.
+     // Ignore "QR code not found" errors, which are frequent during scanning.
+     // We only care about critical errors like camera permission issues.
+    if (!error.includes('No QR code found')) {
+        console.error(`QR Scan Error: ${error}`);
+        setScanError("Não foi possível ler o QR code. Tente novamente ou verifique as permissões da câmera.");
+    }
   };
+
+  // Reset error when dialog opens
+  if (open && scanError) {
+      setScanError(null);
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -80,48 +56,20 @@ export default function QrScannerDialog({ open, onOpenChange, onScan }: QrScanne
           </DialogDescription>
         </DialogHeader>
 
-        <div className="relative flex min-h-[300px] w-full items-center justify-center overflow-hidden rounded-md border bg-muted">
-          {isLoading && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-muted-foreground">
-              <Loader2 className="animate-spin h-6 w-6" />
-              <p>Solicitando permissão da câmera...</p>
-            </div>
-          )}
-
-          {scanError && (
-            <Alert variant="destructive" className="m-4">
-              <AlertCircle className="h-4 w-4" />
-              <AlertTitle>Erro no Scanner</AlertTitle>
-              <AlertDescription>{scanError}</AlertDescription>
-            </Alert>
-          )}
-
-          {permissionGranted && selectedCameraId && !scanError && (
-             <QrScanner
-                cameraId={selectedCameraId}
-                onScanSuccess={handleScanSuccess}
-                onScanFailure={handleScanFailure}
-            />
-          )}
+        <div className="relative overflow-hidden rounded-md border">
+            {scanError ? (
+                 <Alert variant="destructive" className="m-4">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertTitle>Erro no Scanner</AlertTitle>
+                    <AlertDescription>{scanError}</AlertDescription>
+                </Alert>
+            ) : (
+                <QrScanner
+                    onScanSuccess={handleScanSuccess}
+                    onScanFailure={handleScanFailure}
+                />
+            )}
         </div>
-
-        {cameras.length > 1 && (
-            <div className="space-y-2">
-                <Label>Selecionar Câmera</Label>
-                <Select value={selectedCameraId} onValueChange={setSelectedCameraId}>
-                    <SelectTrigger>
-                        <SelectValue placeholder="Selecione uma câmera" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {cameras.map(camera => (
-                            <SelectItem key={camera.id} value={camera.id}>
-                                {camera.label}
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
-            </div>
-        )}
 
         <DialogFooter>
           <Button variant="secondary" onClick={() => onOpenChange(false)} className="w-full">
