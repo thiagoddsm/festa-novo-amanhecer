@@ -12,7 +12,7 @@ import { useFirestore } from '@/firebase';
 import { collection, onSnapshot, query, orderBy, limit, Timestamp } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
-import WhatsappTester from '@/components/dashboard/WhatsappTester';
+import BulkNotifier from '@/components/dashboard/BulkNotifier';
 
 function useCollection<T>(path: string) {
   const [data, setData] = useState<T[] | null>(null);
@@ -171,7 +171,7 @@ export default function DashboardPage() {
             )}
             </CardContent>
         </Card>
-        <WhatsappTester />
+        <BulkNotifier />
       </div>
     </div>
   );

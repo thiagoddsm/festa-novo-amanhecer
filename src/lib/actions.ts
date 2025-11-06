@@ -6,7 +6,7 @@ import { initializeApp, getApps, getApp, App, applicationDefault } from 'firebas
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 import type { Card, Order } from './definitions';
-import { notifyCardCreation, notifyRecharge, notifySale } from './flows/notify-flow';
+import { notifyCardCreation, notifyRecharge, notifySale, notifyCustomMessage } from './flows/notify-flow';
 
 
 // Helper to ensure Firebase Admin is initialized only once
@@ -481,40 +481,61 @@ export async function updateOrderStatus(orderId: string, newStatus: Order['statu
 }
 
 
-// --- Whatsapp Test ---
-const TestWhatsappSchema = z.object({
-  telefone_destinatario: z.string().min(10, 'Número de telefone inválido.'),
+// --- Bulk Whatsapp ---
+const BulkNotificationSchema = z.object({
+  message: z.string().min(1, 'A mensagem não pode estar vazia.'),
 });
 
-export async function sendTestWhatsappMessage(
+export async function sendBulkNotification(
   prevState: ActionState | undefined,
   formData: FormData
 ): Promise<ActionState> {
+  const validatedFields = BulkNotificationSchema.safeParse({
+    message: formData.get('message'),
+  });
+
+  if (!validatedFields.success) {
+    return { status: 'error', message: 'Mensagem inválida.' };
+  }
+  
+  const { message } = validatedFields.data;
+
   try {
-    const validatedFields = TestWhatsappSchema.safeParse({
-      telefone_destinatario: formData.get('telefone_destinatario'),
+    const cardsSnapshot = await db.collection('cards').get();
+    if (cardsSnapshot.empty) {
+      return { status: 'error', message: 'Nenhum cartão cadastrado para notificar.' };
+    }
+
+    const phoneNumbers = new Set<string>();
+    cardsSnapshot.forEach(doc => {
+      const card = doc.data() as Card;
+      if (card.telefone_cliente) {
+        phoneNumbers.add(card.telefone_cliente);
+      }
     });
 
-    if (!validatedFields.success) {
-      return {
-        status: 'error',
-        message: 'Número de telefone inválido.',
-      };
+    if (phoneNumbers.size === 0) {
+        return { status: 'error', message: 'Nenhum número de telefone encontrado nos cartões cadastrados.' };
     }
     
-    const { telefone_destinatario } = validatedFields.data;
+    // Non-blocking notifications
+    let successCount = 0;
+    const promises = Array.from(phoneNumbers).map(number => 
+        notifyCustomMessage(number, message)
+            .then(() => successCount++)
+            .catch(e => console.error(`Failed to send to ${number}:`, e))
+    );
 
-    // Direct call to the notification flow
-    const result = await notifySale('test-card-id', 1234, 'PDV de Teste', telefone_destinatario);
+    await Promise.allSettled(promises);
 
-    return {
-      status: result.success ? 'success' : 'error',
-      message: result.success ? 'Mensagem de teste enviada com sucesso!' : result.error || 'Falha ao enviar mensagem de teste.',
+    return { 
+        status: 'success', 
+        message: `Notificações enviadas. ${successCount} de ${phoneNumbers.size} tiveram sucesso.` 
     };
 
   } catch (error) {
     console.error(error);
     const errorMessage = error instanceof Error ? error.message : 'Ocorreu um erro desconhecido.';
-    return { status: 'error', message: `Erro ao enviar mensagem: ${errorMessage}` };
+    return { status: 'error', message: `Erro ao enviar notificações: ${errorMessage}` };
   }
 }

@@ -2,10 +2,10 @@
 
 import { useActionState, useEffect, useRef } from 'react';
 import { useFormStatus } from 'react-dom';
-import { sendTestWhatsappMessage } from '@/lib/actions';
+import { sendBulkNotification } from '@/lib/actions';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, MessageSquare, Send } from 'lucide-react';
@@ -22,13 +22,13 @@ function SubmitButton() {
   return (
     <Button type="submit" disabled={pending}>
       {pending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
-      Enviar Teste
+      Enviar para Todos
     </Button>
   );
 }
 
-export default function WhatsappTester() {
-  const [state, formAction] = useActionState(sendTestWhatsappMessage, initialState);
+export default function BulkNotifier() {
+  const [state, formAction] = useActionState(sendBulkNotification, initialState);
   const { toast } = useToast();
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -39,6 +39,7 @@ export default function WhatsappTester() {
       title: state.status === 'success' ? 'Sucesso!' : 'Erro!',
       description: state.message,
       variant: state.status === 'success' ? 'default' : 'destructive',
+      duration: state.status === 'success' ? 9000 : 5000,
     });
 
     if (state.status === 'success') {
@@ -51,21 +52,22 @@ export default function WhatsappTester() {
       <CardHeader>
         <CardTitle className='flex items-center gap-2'>
             <MessageSquare />
-            Testar Notificações
+            Notificar Participantes
         </CardTitle>
         <CardDescription>
-          Envie uma mensagem de teste para verificar se a integração com o WhatsApp está funcionando.
+          Envie uma mensagem via WhatsApp para todos os participantes com cartões cadastrados.
         </CardDescription>
       </CardHeader>
       <CardContent>
         <form ref={formRef} action={formAction} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="telefone_destinatario">Número do WhatsApp</Label>
-            <Input
-              id="telefone_destinatario"
-              name="telefone_destinatario"
-              placeholder="Ex: 5511999998888"
+            <Label htmlFor="message">Mensagem</Label>
+            <Textarea
+              id="message"
+              name="message"
+              placeholder="Digite sua mensagem aqui. Ela será enviada para todos os participantes."
               required
+              rows={5}
             />
           </div>
           <SubmitButton />
