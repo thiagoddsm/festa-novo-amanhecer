@@ -17,55 +17,41 @@ export function QrScanner({ onScanSuccess, onScanFailure, onTorchToggle, torchOn
   const [isCameraStarted, setIsCameraStarted] = useState(false);
   const { toast } = useToast();
 
-  // Function to apply torch constraint
-  const applyTorch = async (torch: boolean) => {
-    if (qrCodeRef.current && isCameraStarted) {
-      try {
-        const stream = await qrCodeRef.current.getRunningTrack();
-        if (stream) {
-          const videoTrack = stream.getVideoTracks()[0];
-          // Check if torch capability is supported
-          const capabilities = videoTrack.getCapabilities();
-          if ('torch' in capabilities) {
-            await videoTrack.applyConstraints({
-              advanced: [{ torch }],
-            });
-            onTorchToggle?.(torch);
-          } else {
-            console.warn('Torch/Flashlight not supported by this camera.');
-            toast({
-                variant: 'destructive',
-                title: 'Lanterna não suportada',
-                description: 'Este dispositivo não parece ter uma lanterna controlável.'
-            })
-          }
-        }
-      } catch (error) {
-        console.error('Failed to toggle torch', error);
-        onScanFailure('Falha ao controlar a lanterna.');
-      }
-    }
-  };
-
   useEffect(() => {
-    if (torchOn !== undefined && qrCodeRef.current && isCameraStarted) {
-        // Find the currently active video track
-        const videoTrack = qrCodeRef.current.getRunningTrack()?.getVideoTracks()?.[0];
-        if (videoTrack) {
-            const capabilities = videoTrack.getCapabilities();
-             if ('torch' in capabilities) {
-                videoTrack.applyConstraints({ advanced: [{ torch: torchOn }] })
-                    .catch(err => console.error("Error applying torch constraint:", err));
-             }
+    if (torchOn !== undefined && qrCodeRef.current && isCameraStarted && videoRef.current) {
+        // Access the video stream directly from the video element
+        const videoElement = videoRef.current.querySelector('video');
+        if (videoElement && videoElement.srcObject) {
+            const stream = videoElement.srcObject as MediaStream;
+            const videoTrack = stream.getVideoTracks()?.[0];
+            
+            if (videoTrack) {
+                const capabilities = videoTrack.getCapabilities();
+                if ('torch' in capabilities) {
+                    videoTrack.applyConstraints({ advanced: [{ torch: torchOn }] })
+                        .then(() => onTorchToggle?.(torchOn))
+                        .catch(err => {
+                            console.error("Error applying torch constraint:", err);
+                             toast({
+                                variant: 'destructive',
+                                title: 'Erro na Lanterna',
+                                description: 'Não foi possível controlar a lanterna.'
+                            })
+                        });
+                } else {
+                     console.warn('Torch/Flashlight not supported by this camera.');
+                }
+            }
         }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [torchOn, isCameraStarted]);
 
   useEffect(() => {
     if (!videoRef.current) return;
 
     // Use the lower-level Html5Qrcode class
-    const html5QrCode = new Html5Qrcode('qr-reader-element', { verbose: false });
+    const html5QrCode = new Html5Qrcode(videoRef.current.id, { verbose: false });
     qrCodeRef.current = html5QrCode;
 
     const successCallback: QrCodeSuccessCallback = (decodedText) => {
