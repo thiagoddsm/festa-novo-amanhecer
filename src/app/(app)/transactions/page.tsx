@@ -13,6 +13,9 @@ import { DataTable } from '@/components/ui/data-table';
 import { type ColumnDef, type Row } from '@tanstack/react-table';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { useAuth } from '@/hooks/use-auth-context';
+import { deleteTransactions } from '@/lib/actions';
+import { useToast } from '@/hooks/use-toast';
 
 
 type TransactionDetails = Transaction & {
@@ -211,8 +214,10 @@ const generatePDF = (filteredData: Row<TransactionDetails>[]) => {
 };
 
 export default function TransactionsPage() {
+  const { user } = useAuth();
   const { transactions: allTransactions, pdvs } = useTransactionDetails();
   const [isLoading, setIsLoading] = useState(true);
+  const { toast } = useToast();
 
   useEffect(() => {
     if (allTransactions !== null) {
@@ -221,6 +226,16 @@ export default function TransactionsPage() {
   }, [allTransactions]);
 
   const pdvOptions = pdvs.map(pdv => ({ value: pdv.nome, label: pdv.nome }));
+  
+  const handleDeleteSelected = async (selectedData: TransactionDetails[]) => {
+    const transactionIds = selectedData.map(t => t.id);
+    const result = await deleteTransactions(transactionIds);
+     toast({
+        title: result.status === 'success' ? 'Sucesso!' : 'Erro!',
+        description: result.message,
+        variant: result.status === 'success' ? 'default' : 'destructive'
+    });
+  }
 
   return (
     <Card>
@@ -246,6 +261,7 @@ export default function TransactionsPage() {
             data={allTransactions || []}
             renderSubComponent={SubRowComponent}
             onGeneratePdf={generatePDF}
+            onDeleteSelected={user?.role === 'ADMIN' ? handleDeleteSelected : undefined}
             filterColumns={[
                 {
                     columnId: 'card_qr_code_id',

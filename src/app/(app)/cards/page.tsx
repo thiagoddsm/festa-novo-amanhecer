@@ -12,6 +12,9 @@ import { DataTable } from '@/components/ui/data-table';
 import { type ColumnDef } from '@tanstack/react-table';
 import RechargeDialog from '@/components/cards/RechargeDialog';
 import ReprintQrButton from '@/components/cards/ReprintQrButton';
+import { deleteCards } from '@/lib/actions';
+import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/use-auth-context';
 
 function useCollection<T>(path: string) {
   const [data, setData] = useState<T[] | null>(null);
@@ -88,14 +91,26 @@ const columns: ColumnDef<CardType>[] = [
 ]
 
 export default function CardsPage() {
+  const { user } = useAuth();
   const allCards = useCollection<CardType>('cards');
   const [isLoading, setIsLoading] = useState(true);
+  const { toast } = useToast();
 
   useEffect(() => {
     if (allCards !== null) {
       setIsLoading(false);
     }
   }, [allCards]);
+
+  const handleDeleteSelected = async (selectedData: CardType[]) => {
+    const cardIds = selectedData.map(card => card.id);
+    const result = await deleteCards(cardIds);
+    toast({
+        title: result.status === 'success' ? 'Sucesso!' : 'Erro!',
+        description: result.message,
+        variant: result.status === 'success' ? 'default' : 'destructive'
+    });
+  }
 
   return (
     <Card>
@@ -142,6 +157,7 @@ export default function CardsPage() {
                     ]
                 }
             ]}
+            onDeleteSelected={user?.role === 'ADMIN' ? handleDeleteSelected : undefined}
            />
         )}
       </CardContent>

@@ -13,6 +13,7 @@ import {
   ColumnFiltersState,
   useReactTable,
   Row,
+  RowSelectionState,
 } from "@tanstack/react-table"
 
 import {
@@ -26,7 +27,9 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { DataTableFacetedFilter } from "./data-table-faceted-filter"
-import { ChevronDown, ChevronRight, FileDown } from "lucide-react"
+import { ChevronDown, ChevronRight, FileDown, Trash2 } from "lucide-react"
+import { Checkbox } from "./checkbox";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "./alert-dialog";
 
 interface FilterConfig {
     columnId: string;
@@ -40,6 +43,7 @@ interface DataTableProps<TData, TValue> {
   filterColumns?: FilterConfig[];
   renderSubComponent?: (props: { row: Row<TData> }) => React.ReactElement;
   onGeneratePdf?: (data: Row<TData>[]) => void;
+  onDeleteSelected?: (selectedData: TData[]) => Promise<void>;
 }
 
 export function DataTable<TData, TValue>({
@@ -47,15 +51,42 @@ export function DataTable<TData, TValue>({
   data,
   filterColumns = [],
   renderSubComponent,
-  onGeneratePdf
+  onGeneratePdf,
+  onDeleteSelected,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([])
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
+  const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({});
 
   const tableColumns = React.useMemo(() => {
-    if (!renderSubComponent) return columns;
-    return [
-        {
+    const actionColumns: ColumnDef<TData, TValue>[] = [];
+    if(onDeleteSelected) {
+        actionColumns.push({
+            id: 'select',
+            header: ({ table }) => (
+              <Checkbox
+                checked={
+                  table.getIsAllPageRowsSelected() ||
+                  (table.getIsSomePageRowsSelected() && "indeterminate")
+                }
+                onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+                aria-label="Select all"
+              />
+            ),
+            cell: ({ row }) => (
+              <Checkbox
+                checked={row.getIsSelected()}
+                onCheckedChange={(value) => row.toggleSelected(!!value)}
+                aria-label="Select row"
+              />
+            ),
+            enableSorting: false,
+            enableHiding: false,
+        });
+    }
+
+    if (renderSubComponent) {
+        actionColumns.push({
             id: 'expander',
             header: () => null,
             cell: ({ row }) => {
@@ -70,10 +101,10 @@ export function DataTable<TData, TValue>({
                 </Button>
             ) : null
             },
-        },
-        ...columns
-    ]
-  }, [columns, renderSubComponent]);
+        });
+    }
+    return [...actionColumns, ...columns];
+  }, [columns, renderSubComponent, onDeleteSelected]);
 
   const table = useReactTable({
     data,
@@ -85,12 +116,25 @@ export function DataTable<TData, TValue>({
     onColumnFiltersChange: setColumnFilters,
     getFilteredRowModel: getFilteredRowModel(),
     getExpandedRowModel: getExpandedRowModel(),
+    onRowSelectionChange: setRowSelection,
     getRowCanExpand: () => !!renderSubComponent,
     state: {
       sorting,
       columnFilters,
+      rowSelection,
     },
   })
+
+  const numSelected = table.getFilteredSelectedRowModel().rows.length;
+
+  const handleDelete = () => {
+    if (onDeleteSelected) {
+        const selectedData = table.getFilteredSelectedRowModel().rows.map(row => row.original);
+        onDeleteSelected(selectedData).then(() => {
+            table.resetRowSelection();
+        });
+    }
+  }
 
   return (
     <div>
@@ -124,16 +168,40 @@ export function DataTable<TData, TValue>({
                     )
                 })}
             </div>
-             {onGeneratePdf && (
-                <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => onGeneratePdf(table.getFilteredRowModel().rows)}
-                >
-                    <FileDown className="mr-2 h-4 w-4" />
-                    Gerar Relatório PDF
-                </Button>
-            )}
+            <div className="flex items-center gap-2">
+                {numSelected > 0 && onDeleteSelected && (
+                     <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                            <Button variant="destructive" size="sm">
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Excluir ({numSelected})
+                            </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                            <AlertDialogHeader>
+                            <AlertDialogTitle>Você tem certeza absoluta?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                Essa ação não pode ser desfeita. Isso excluirá permanentemente os {numSelected} item(ns) selecionados.
+                            </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction onClick={handleDelete}>Continuar</AlertDialogAction>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
+                )}
+                 {onGeneratePdf && (
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => onGeneratePdf(table.getFilteredRowModel().rows)}
+                    >
+                        <FileDown className="mr-2 h-4 w-4" />
+                        Gerar Relatório PDF
+                    </Button>
+                )}
+            </div>
       </div>
       <div className="rounded-md border">
         <Table>
@@ -142,7 +210,7 @@ export function DataTable<TData, TValue>({
               <TableRow key={headerGroup.id}>
                 {headerGroup.headers.map((header) => {
                   return (
-                    <TableHead key={header.id} style={{ width: header.id === 'expander' ? '1%' : 'auto' }}>
+                    <TableHead key={header.id} style={{ width: header.id === 'expander' ? '1%' : header.id === 'select' ? '1%' : 'auto' }}>
                       {header.isPlaceholder
                         ? null
                         : flexRender(

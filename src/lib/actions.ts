@@ -546,3 +546,41 @@ export async function sendBulkNotification(
     return { status: 'error', message: `Erro ao enviar notificações: ${errorMessage}` };
   }
 }
+
+
+// --- Bulk Deletion ---
+export async function deleteCards(cardIds: string[]): Promise<ActionState> {
+    if (!cardIds || cardIds.length === 0) {
+        return { status: 'error', message: 'Nenhum cartão selecionado.' };
+    }
+    try {
+        const batch = db.batch();
+        cardIds.forEach(id => {
+            const docRef = db.collection('cards').doc(id);
+            batch.delete(docRef);
+        });
+        await batch.commit();
+        return { status: 'success', message: `${cardIds.length} cartão(ões) excluído(s) com sucesso.` };
+    } catch (error) {
+        console.error("Error deleting cards:", error);
+        return { status: 'error', message: 'Erro ao excluir cartões.' };
+    }
+}
+
+export async function deleteTransactions(transactionIds: string[]): Promise<ActionState> {
+    if (!transactionIds || transactionIds.length === 0) {
+        return { status: 'error', message: 'Nenhuma transação selecionada.' };
+    }
+    try {
+        const batch = db.batch();
+        transactionIds.forEach(id => {
+            const docRef = db.collection('transactions').doc(id);
+            batch.delete(docRef);
+        });
+        await batch.commit();
+        return { status: 'success', message: `${transactionIds.length} transação(ões) excluída(s) com sucesso.` };
+    } catch (error) {
+        console.error("Error deleting transactions:", error);
+        return { status: 'error', message: 'Erro ao excluir transações.' };
+    }
+}
