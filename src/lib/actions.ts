@@ -571,16 +571,33 @@ export async function deleteTransactions(transactionIds: string[]): Promise<Acti
     if (!transactionIds || transactionIds.length === 0) {
         return { status: 'error', message: 'Nenhuma transação selecionada.' };
     }
+
     try {
         const batch = db.batch();
+        
+        // Find associated orders to delete them as well
+        const ordersRef = db.collection('orders');
+        const ordersQuery = ordersRef.where('transaction_id', 'in', transactionIds);
+        const ordersSnapshot = await ordersQuery.get();
+
+        ordersSnapshot.forEach(doc => {
+            batch.delete(doc.ref);
+        });
+        
+        // Delete the transactions themselves
         transactionIds.forEach(id => {
             const docRef = db.collection('transactions').doc(id);
             batch.delete(docRef);
         });
+
         await batch.commit();
-        return { status: 'success', message: `${transactionIds.length} transação(ões) excluída(s) com sucesso.` };
+        return { 
+            status: 'success', 
+            message: `${transactionIds.length} transação(ões) e ${ordersSnapshot.size} pedido(s) associado(s) foram excluído(s) com sucesso.` 
+        };
     } catch (error) {
         console.error("Error deleting transactions:", error);
-        return { status: 'error', message: 'Erro ao excluir transações.' };
+        return { status: 'error', message: 'Erro ao excluir transações e pedidos associados.' };
     }
 }
+ 
