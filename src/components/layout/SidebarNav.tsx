@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, ShoppingCart, WalletCards, Users, List, UserCog } from "lucide-react";
+import { LayoutDashboard, ShoppingCart, WalletCards, Users, List, UserCog, BookUser } from "lucide-react";
 import { SidebarHeader, SidebarMenu, SidebarMenuItem, SidebarMenuButton } from "@/components/ui/sidebar";
 import { useAuth } from "@/hooks/use-auth-context";
 import { Logo } from "./Logo";
@@ -13,6 +13,7 @@ const allNavItems = [
     { href: '/transactions', icon: List, label: 'Transações', roles: ['ADMIN', 'CAIXA'] },
     { href: '/cashier', icon: WalletCards, label: 'Caixa', roles: ['ADMIN', 'CAIXA'] },
     { href: '/pos', icon: ShoppingCart, label: 'PDV', roles: ['ADMIN', 'PDV'] },
+    { href: '/manual', icon: BookUser, label: 'Manual', roles: ['ADMIN', 'CAIXA', 'PDV'] },
     { href: '/admin/users', icon: UserCog, label: 'Usuários', roles: ['ADMIN'] },
 ]
 

@@ -19,6 +19,8 @@ const getTitleFromPathname = (pathname: string): string => {
             return 'Histórico de Transações';
         case '/admin/users':
             return 'Gerenciar Usuários';
+        case '/manual':
+            return 'Manual de Operações';
         default:
             return 'FestaPay';
     }
