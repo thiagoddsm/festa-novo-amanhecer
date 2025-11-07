@@ -21,6 +21,7 @@ import { formatCurrency } from '@/lib/utils';
 import { QrCode, Loader2, User, Printer } from 'lucide-react';
 import type { Card as CardType } from '@/lib/definitions';
 import { toDataURL as generateQrCodeDataUrl } from 'qrcode';
+import { useAuth } from '@/hooks/use-auth-context';
 
 
 const initialState = {
@@ -38,6 +39,7 @@ function SubmitButton() {
 }
 
 export default function CreateCardForm() {
+  const { user } = useAuth();
   const [state, formAction] = useActionState(createCard, initialState);
   const { toast } = useToast();
   const formRef = useRef<HTMLFormElement>(null);
@@ -174,6 +176,7 @@ export default function CreateCardForm() {
         </CardHeader>
         <CardContent>
           <form ref={formRef} action={formAction} className="space-y-4">
+            <input type="hidden" name="usuario_responsavel" value={user?.name || 'Sistema'} />
             <div className="space-y-2">
               <Label htmlFor="nome_cliente">Nome do Cliente (Opcional)</Label>
               <Input

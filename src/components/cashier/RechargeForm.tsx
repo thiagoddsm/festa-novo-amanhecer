@@ -11,6 +11,7 @@ import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/utils';
 import { Loader2, QrCode } from 'lucide-react';
 import QrScannerDialog from '../common/QrScannerDialog';
+import { useAuth } from '@/hooks/use-auth-context';
 
 const initialState = {
   status: 'success' as 'success' | 'error',
@@ -27,6 +28,7 @@ function SubmitButton() {
 }
 
 export default function RechargeForm() {
+  const { user } = useAuth();
   const [state, formAction] = useActionState(rechargeCard, initialState);
   const { toast } = useToast();
   const formRef = useRef<HTMLFormElement>(null);
@@ -69,6 +71,7 @@ export default function RechargeForm() {
       </CardHeader>
       <CardContent>
         <form ref={formRef} action={formAction} className="space-y-4">
+          <input type="hidden" name="usuario_responsavel" value={user?.name || 'Sistema'} />
           <div className="space-y-2">
             <Label htmlFor="qr_code_id">QR Code ID</Label>
             <div className="flex gap-2">

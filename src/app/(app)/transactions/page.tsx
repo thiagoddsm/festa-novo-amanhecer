@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { List, Package, User, CornerDownRight, FileDown } from 'lucide-react';
+import { List, Package, User, CornerDownRight, FileDown, UserCog } from 'lucide-react';
 import { DataTable } from '@/components/ui/data-table';
 import { type ColumnDef, type Row } from '@tanstack/react-table';
 import jsPDF from 'jspdf';
@@ -135,6 +135,11 @@ const columns: ColumnDef<TransactionDetails>[] = [
         cell: ({ row }) => <div className="text-right">{formatCurrency(row.getValue('valor_centavos'))}</div>
     },
     {
+        accessorKey: 'usuario_responsavel',
+        header: 'Usuário Responsável',
+        cell: ({ row }) => <div className="flex items-center gap-2"><UserCog className="h-4 w-4 text-muted-foreground" /> {row.original.usuario_responsavel || 'N/A'}</div>
+    },
+    {
         accessorKey: 'created_at',
         header: 'Data e Hora',
         cell: ({ row }) => formatTimestamp(row.getValue('created_at')),
@@ -185,6 +190,7 @@ const generatePDF = (filteredData: Row<TransactionDetails>[]) => {
             rowData.pdv_nome,
             rowData.card_qr_code_id,
             rowData.tipo,
+            rowData.usuario_responsavel || 'N/A',
             formatCurrency(rowData.valor_centavos),
             formatTimestamp(rowData.created_at)
         ]);
@@ -199,7 +205,7 @@ const generatePDF = (filteredData: Row<TransactionDetails>[]) => {
     doc.text(`Gerado em: ${reportDate}`, 14, 30);
 
     autoTable(doc, {
-        head: [['PDV', 'Cartão (QR)', 'Tipo', 'Valor', 'Data e Hora']],
+        head: [['PDV', 'Cartão (QR)', 'Tipo', 'Responsável', 'Valor', 'Data e Hora']],
         body: tableRows,
         startY: 35,
     });
@@ -266,6 +272,10 @@ export default function TransactionsPage() {
                 {
                     columnId: 'card_qr_code_id',
                     placeholder: 'Buscar por QR Code...'
+                },
+                {
+                    columnId: 'usuario_responsavel',
+                    placeholder: 'Buscar por usuário...'
                 },
                 {
                     columnId: 'pdv_nome',

@@ -38,6 +38,7 @@ export type Transaction = {
   valor_centavos: number;
   created_at: Timestamp;
   items?: OrderItem[];
+  usuario_responsavel?: string; // Nome do usuário que realizou a ação
 };
 
 export type TransactionDetails = Transaction & {

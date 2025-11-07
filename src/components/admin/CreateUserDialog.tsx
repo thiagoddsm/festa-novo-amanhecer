@@ -32,7 +32,7 @@ const initialState = { status: 'idle' as 'idle' | 'success' | 'error', message: 
 
 export default function CreateUserDialog() {
   const [open, setOpen] = useState(false);
-  const [state, formAction] = useActionState(createUser, initialState);
+  const [state, formAction, isPending] = useActionState(createUser, initialState);
   const { toast } = useToast();
   const [pdvs, setPdvs] = useState<Pdv[]>([]);
   const firestore = useFirestore();
@@ -62,8 +62,17 @@ export default function CreateUserDialog() {
       toast({ variant: 'destructive', title: 'Erro!', description: state.message });
     }
   }, [state, toast, form]);
+  
+  const onSubmit = (data: UserFormValues) => {
+    const formData = new FormData();
+    Object.entries(data).forEach(([key, value]) => {
+        if (value) {
+            formData.append(key, value);
+        }
+    });
+    formAction(formData);
+  };
 
-  const { isSubmitting } = form.formState;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -81,7 +90,7 @@ export default function CreateUserDialog() {
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
-          <form action={formAction} className="space-y-4">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <FormField control={form.control} name="name" render={({ field }) => (
                 <FormItem>
                     <FormLabel>Nome Completo</FormLabel>
@@ -139,8 +148,8 @@ export default function CreateUserDialog() {
               <DialogClose asChild>
                 <Button type="button" variant="secondary">Cancelar</Button>
               </DialogClose>
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? <Loader2 className="animate-spin" /> : 'Criar Usuário'}
+              <Button type="submit" disabled={isPending}>
+                {isPending ? <Loader2 className="animate-spin" /> : 'Criar Usuário'}
               </Button>
             </DialogFooter>
           </form>

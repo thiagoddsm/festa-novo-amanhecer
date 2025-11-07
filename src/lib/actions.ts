@@ -37,6 +37,7 @@ const CreateCardSchema = z.object({
   saldo_inicial: z.coerce.number().min(0, 'Valor deve ser positivo.'),
   nome_cliente: z.string().optional(),
   telefone_cliente: z.string().min(1, 'O telefone é obrigatório.'),
+  usuario_responsavel: z.string().min(1, 'Usuário responsável é obrigatório.'),
 });
 
 export async function createCard(
@@ -48,6 +49,7 @@ export async function createCard(
       saldo_inicial: formData.get('saldo_inicial'),
       nome_cliente: formData.get('nome_cliente'),
       telefone_cliente: formData.get('telefone_cliente'),
+      usuario_responsavel: formData.get('usuario_responsavel'),
     });
 
     if (!validatedFields.success) {
@@ -58,7 +60,7 @@ export async function createCard(
       };
     }
 
-    const { saldo_inicial, nome_cliente, telefone_cliente } = validatedFields.data;
+    const { saldo_inicial, nome_cliente, telefone_cliente, usuario_responsavel } = validatedFields.data;
     const saldo_centavos = saldo_inicial * 100;
     const qr_code_id = `festa-2025-${generateRandomId().slice(0, 18)}`;
 
@@ -85,7 +87,8 @@ export async function createCard(
             pdv_id: 'caixa_central', // Caixa Central
             tipo: 'RECARGA',
             valor_centavos: saldo_centavos,
-            created_at: Timestamp.now()
+            created_at: Timestamp.now(),
+            usuario_responsavel: usuario_responsavel,
         });
     }
 
@@ -117,6 +120,7 @@ export async function createCard(
 const RechargeSchema = z.object({
   qr_code_id: z.string().min(1, 'QR Code ID é obrigatório.'),
   valor_recarga: z.coerce.number().positive('Valor da recarga deve ser positivo.'),
+  usuario_responsavel: z.string().min(1, 'Usuário responsável é obrigatório.'),
 });
 
 export async function rechargeCard(
@@ -127,6 +131,7 @@ export async function rechargeCard(
     const validatedFields = RechargeSchema.safeParse({
       qr_code_id: formData.get('qr_code_id'),
       valor_recarga: formData.get('valor_recarga'),
+      usuario_responsavel: formData.get('usuario_responsavel'),
     });
 
     if (!validatedFields.success) {
@@ -137,7 +142,7 @@ export async function rechargeCard(
       };
     }
 
-    const { qr_code_id, valor_recarga } = validatedFields.data;
+    const { qr_code_id, valor_recarga, usuario_responsavel } = validatedFields.data;
     
     const cardsRef = db.collection('cards');
     const q = cardsRef.where('qr_code_id', '==', qr_code_id);
@@ -172,7 +177,8 @@ export async function rechargeCard(
       pdv_id: 'caixa_central', // Caixa Central
       tipo: 'RECARGA',
       valor_centavos: valor_recarga_centavos,
-      created_at: Timestamp.now()
+      created_at: Timestamp.now(),
+      usuario_responsavel: usuario_responsavel,
     });
     
     await batch.commit();
@@ -208,6 +214,7 @@ const SaleSchema = z.object({
     pdv_nome: z.string().min(1, 'Nome do Ponto de Venda é obrigatório.'),
     items: z.array(SaleItemSchema).min(1, "O carrinho está vazio."),
     total_venda: z.coerce.number().positive('Valor da venda deve ser positivo.'),
+    usuario_responsavel: z.string().min(1, 'Usuário responsável é obrigatório.'),
 });
 
 export async function processSale(
@@ -224,6 +231,7 @@ export async function processSale(
             pdv_nome: formData.get('pdv_nome'),
             items: items,
             total_venda: total_venda,
+            usuario_responsavel: formData.get('usuario_responsavel'),
         });
 
         if (!validatedFields.success) {
@@ -235,7 +243,7 @@ export async function processSale(
             };
         }
 
-        const { qr_code_id, pdv_id, pdv_nome, total_venda: valor_venda_centavos } = validatedFields.data;
+        const { qr_code_id, pdv_id, pdv_nome, total_venda: valor_venda_centavos, usuario_responsavel } = validatedFields.data;
 
         const cardsRef = db.collection('cards');
         const q = cardsRef.where('qr_code_id', '==', qr_code_id);
@@ -275,7 +283,8 @@ export async function processSale(
           tipo: 'VENDA',
           valor_centavos: valor_venda_centavos,
           created_at: Timestamp.now(),
-          items: validatedFields.data.items // This now includes observations
+          items: validatedFields.data.items, // This now includes observations
+          usuario_responsavel: usuario_responsavel,
         });
 
         // 3. Create order record
@@ -601,3 +610,50 @@ export async function deleteTransactions(transactionIds: string[]): Promise<Acti
     }
 }
  
+export async function createUser(prevState: ActionState | undefined, formData: FormData): Promise<ActionState> {
+    const UserSchema = z.object({
+        email: z.string().email('Email inválido.'),
+        password: z.string().min(6, 'A senha deve ter pelo menos 6 caracteres.'),
+        name: z.string().min(1, 'O nome é obrigatório.'),
+        role: z.enum(['ADMIN', 'CAIXA', 'PDV'], { required_error: 'A função é obrigatória.' }),
+        pdvId: z.string().optional(),
+    }).refine(data => data.role !== 'PDV' || !!data.pdvId, {
+        message: "PDV é obrigatório para a função PDV",
+        path: ["pdvId"],
+    });
+
+    const validatedFields = UserSchema.safeParse(Object.fromEntries(formData.entries()));
+
+    if (!validatedFields.success) {
+        return { status: 'error', message: 'Dados inválidos.', data: validatedFields.error.flatten().fieldErrors };
+    }
+
+    const { email, password, name, role, pdvId } = validatedFields.data;
+
+    try {
+        const userRecord = await auth.createUser({
+            email,
+            password,
+            displayName: name,
+        });
+
+        await auth.setCustomUserClaims(userRecord.uid, { role });
+
+        const userProfile = {
+            name,
+            email,
+            role,
+            pdvId: role === 'PDV' ? pdvId : null,
+        };
+
+        await db.collection('users').doc(userRecord.uid).set(userProfile);
+
+        return { status: 'success', message: 'Usuário criado com sucesso!' };
+
+    } catch (error: any) {
+        if (error.code === 'auth/email-already-exists') {
+            return { status: 'error', message: 'Este email já está em uso.' };
+        }
+        return { status: 'error', message: 'Erro ao criar usuário.' };
+    }
+}

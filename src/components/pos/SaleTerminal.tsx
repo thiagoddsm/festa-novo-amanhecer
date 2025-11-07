@@ -24,6 +24,7 @@ import OrderKanban from './OrderKanban';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Label } from '../ui/label';
 import { Checkbox } from '../ui/checkbox';
+import { useAuth } from '@/hooks/use-auth-context';
 
 const initialState: {
     status: 'idle' | 'success' | 'error';
@@ -144,6 +145,7 @@ function ObservationDialog({ item, onSave }: { item: CartItem; onSave: (observat
 }
 
 export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv, onGoBack: () => void }) {
+  const { user } = useAuth();
   const { toast } = useToast();
   const firestore = useFirestore();
 
@@ -352,6 +354,7 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv, onGoBack: ()
                                 <input type="hidden" name="pdv_nome" value={pdv.nome} />
                                 <input type="hidden" name="items" value={JSON.stringify(cart)} />
                                 <input type="hidden" name="total_venda" value={total} />
+                                <input type="hidden" name="usuario_responsavel" value={user?.name || 'Sistema'} />
                                 <SubmitButton disabled={cart.length === 0 || !qrCodeId} />
                             </div>
                         </form>
