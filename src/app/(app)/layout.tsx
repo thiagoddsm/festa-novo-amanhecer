@@ -25,8 +25,9 @@ function AppContent({ children }: { children: React.ReactNode }) {
             return;
         }
 
-        // If user is PDV and not on POS page, redirect them.
-        if (user.role === 'PDV' && pathname !== '/pos') {
+        // If user is PDV and not on an allowed page, redirect them.
+        const allowedPdvPaths = ['/pos', '/manual'];
+        if (user.role === 'PDV' && !allowedPdvPaths.includes(pathname)) {
             router.replace('/pos');
         } else if (user.role !== 'PDV' && pathname === '/pos' && user.role !== 'ADMIN') {
             // If user is NOT PDV (and not ADMIN) and tries to access POS, redirect them away.
@@ -39,8 +40,9 @@ function AppContent({ children }: { children: React.ReactNode }) {
         return <FullPageLoader />;
     }
     
+    const allowedPdvPaths = ['/pos', '/manual'];
     // If user role requires a redirect, show loader while redirecting
-    if ((user.role === 'PDV' && pathname !== '/pos') || (user.role !== 'PDV' && user.role !== 'ADMIN' && pathname === '/pos')) {
+    if ((user.role === 'PDV' && !allowedPdvPaths.includes(pathname)) || (user.role !== 'PDV' && user.role !== 'ADMIN' && pathname === '/pos')) {
         return <FullPageLoader />;
     }
     
@@ -77,11 +79,9 @@ function AppContent({ children }: { children: React.ReactNode }) {
     // Once the user object is available, render the app layout for ADMIN/CAIXA/PDV.
     return (
         <SidebarProvider>
-            { user.role !== 'PDV' && (
-                <Sidebar>
-                    <SidebarNav />
-                </Sidebar>
-            )}
+            <Sidebar>
+                <SidebarNav />
+            </Sidebar>
             <SidebarInset>
                 <Header />
                 <MainContent>{children}</MainContent>
