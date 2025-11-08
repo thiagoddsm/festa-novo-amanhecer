@@ -370,9 +370,9 @@ export async function processSale(
 // --- Transaction Reversal ---
 export async function reverseTransaction(transactionId: string, responsibleUser: string): Promise<ActionState> {
     try {
-        const txRef = db.collection('transactions').doc(transactionId);
         const reversalResult = await db.runTransaction(async (t) => {
             // --- 1. READ PHASE ---
+            const txRef = db.collection('transactions').doc(transactionId);
             const txDoc = await t.get(txRef);
             if (!txDoc.exists) {
                 throw new Error("Transação original não encontrada.");
@@ -426,7 +426,7 @@ export async function reverseTransaction(transactionId: string, responsibleUser:
             }
 
             const reversalTxRef = db.collection('transactions').doc();
-            const reversalData: Omit<Transaction, 'id'> = {
+             const reversalData: Partial<Transaction> = {
                 cartao_id: originalTx.cartao_id,
                 pdv_id: originalTx.pdv_id,
                 tipo: 'REEMBOLSO',
@@ -582,12 +582,12 @@ export async function transferBalance(prevState: ActionState | undefined, formDa
                 usuario_responsavel,
             });
 
-            return { newOriginBalance, newDestBalance };
+            return { newOriginBalance, newDestBalance, amountTransferred: valor_centavos };
         });
 
         return {
             status: 'success',
-            message: `Transferência de ${formatCurrency(valor_centavos)} realizada com sucesso!`,
+            message: 'Transferência realizada com sucesso!',
             data: result
         };
 

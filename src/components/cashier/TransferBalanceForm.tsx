@@ -12,6 +12,7 @@ import { Loader2, QrCode, ArrowRightLeft } from 'lucide-react';
 import QrScannerDialog from '../common/QrScannerDialog';
 import { useAuth } from '@/hooks/use-auth-context';
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
+import { formatCurrency } from '@/lib/utils';
 
 const initialState = {
   status: 'idle' as 'idle' | 'success' | 'error',
@@ -50,9 +51,10 @@ export default function TransferBalanceForm() {
         description: state.message,
       });
     } else if (state.status === 'success') {
+      const amount = state.data?.amountTransferred ?? 0;
       toast({
         title: 'Sucesso!',
-        description: state.message,
+        description: `Transferência de ${formatCurrency(amount)} realizada com sucesso!`,
       });
       formRef.current?.reset();
       setOriginQr('');
@@ -144,11 +146,13 @@ export default function TransferBalanceForm() {
             <SubmitButton />
           </form>
         </CardContent>
-         {state.status === 'success' && (
+         {state.status === 'success' && state.data?.amountTransferred && (
             <CardFooter>
                  <Alert>
                     <AlertTitle>Transferência Concluída</AlertTitle>
-                    <AlertDescription>{state.message}</AlertDescription>
+                    <AlertDescription>
+                        O valor de {formatCurrency(state.data.amountTransferred)} foi transferido.
+                    </AlertDescription>
                 </Alert>
             </CardFooter>
         )}
