@@ -13,29 +13,23 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 
 const RoleAndPdvManager = ({ user, pdvs }: { user: UserProfile; pdvs: Pdv[] }) => {
-  const [currentRole, setCurrentRole] = useState(user.role);
-  const [currentPdvId, setCurrentPdvId] = useState(user.pdvId);
   const [isUpdating, setIsUpdating] = useState(false);
   const firestore = useFirestore();
   const { toast } = useToast();
 
   const handleUpdate = async (field: 'role' | 'pdvId', value: string | null) => {
-    if ((field === 'role' && value === currentRole) || (field === 'pdvId' && value === currentPdvId)) return;
-    
     setIsUpdating(true);
     const userRef = doc(firestore, 'users', user.id);
-    let updateData: { role: string; pdvId?: string | null } | { pdvId: string | null } = { role: '', pdvId: null };
+    let updateData: any = {};
 
     if (field === 'role') {
-        updateData = { role: value as string };
+        updateData.role = value;
         // If role is changed from PDV to something else, clear the pdvId
-        if (currentRole === 'PDV' && value !== 'PDV') {
+        if (user.role === 'PDV' && value !== 'PDV') {
             updateData.pdvId = null;
         }
-        setCurrentRole(value as UserProfile['role']);
     } else if (field === 'pdvId') {
-        updateData = { pdvId: value };
-        setCurrentPdvId(value || undefined);
+        updateData.pdvId = value;
     }
     
     try {
@@ -51,9 +45,6 @@ const RoleAndPdvManager = ({ user, pdvs }: { user: UserProfile; pdvs: Pdv[] }) =
         title: 'Erro!',
         description: 'Não foi possível atualizar os dados do usuário.'
       });
-      // Revert state on error
-      if (field === 'role') setCurrentRole(currentRole);
-      if (field === 'pdvId') setCurrentPdvId(currentPdvId);
     } finally {
       setIsUpdating(false);
     }
@@ -66,7 +57,7 @@ const RoleAndPdvManager = ({ user, pdvs }: { user: UserProfile; pdvs: Pdv[] }) =
 
   return (
     <div className="flex flex-col gap-2">
-       <Select onValueChange={(value) => handleUpdate('role', value)} defaultValue={currentRole} disabled={isUpdating}>
+       <Select onValueChange={(value) => handleUpdate('role', value)} defaultValue={user.role} disabled={isUpdating}>
         <SelectTrigger>
           <SelectValue placeholder="Selecione a função" />
         </SelectTrigger>
@@ -78,8 +69,8 @@ const RoleAndPdvManager = ({ user, pdvs }: { user: UserProfile; pdvs: Pdv[] }) =
         </SelectContent>
       </Select>
       
-      {currentRole === 'PDV' && (
-        <Select onValueChange={(value) => handleUpdate('pdvId', value)} defaultValue={currentPdvId} disabled={isUpdating || pdvs.length === 0}>
+      {user.role === 'PDV' && (
+        <Select onValueChange={(value) => handleUpdate('pdvId', value)} defaultValue={user.pdvId} disabled={isUpdating || pdvs.length === 0}>
           <SelectTrigger>
             <SelectValue placeholder="Selecione um PDV" />
           </SelectTrigger>
@@ -144,6 +135,9 @@ export default function UsersPage() {
          const user = row.original;
          return <RoleAndPdvManager user={user} pdvs={pdvs || []} />;
       },
+       filterFn: (row, id, value) => {
+            return value.includes(row.getValue(id))
+       },
     },
   ];
 
@@ -169,7 +163,24 @@ export default function UsersPage() {
           {isLoading ? (
             <Skeleton className="h-96 w-full" />
           ) : (
-            <DataTable columns={columns} data={users || []} />
+            <DataTable
+              columns={columns}
+              data={users || []}
+              filterColumns={[
+                { columnId: 'name', placeholder: 'Buscar por nome...' },
+                { columnId: 'email', placeholder: 'Buscar por email...' },
+                {
+                  columnId: 'role',
+                  placeholder: 'Filtrar por função...',
+                  options: [
+                    { value: 'ADMIN', label: 'Administrador' },
+                    { value: 'CAIXA', label: 'Caixa' },
+                    { value: 'PDV', label: 'Ponto de Venda' },
+                    { value: 'VISITANTE', label: 'Visitante' },
+                  ],
+                },
+              ]}
+            />
           )}
         </CardContent>
       </Card>
