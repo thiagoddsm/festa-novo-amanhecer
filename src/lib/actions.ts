@@ -421,7 +421,7 @@ export async function reverseTransaction(transactionId: string, responsibleUser:
                 created_at: Timestamp.now(),
                 usuario_responsavel: responsibleUser,
                 reversed_tx_id: transactionId,
-                items: originalTx.items,
+                items: originalTx.items || [],
             });
 
             // If it was a sale, find and cancel the associated order
