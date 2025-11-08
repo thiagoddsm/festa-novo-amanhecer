@@ -7,7 +7,7 @@ import { formatCurrency, formatDateTime } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { List, Package, User, CornerDownRight, UserCog, Undo2, Loader2 } from 'lucide-react';
+import { List, Package, User, CornerDownRight, UserCog, Undo2, Loader2, ArrowRightLeft } from 'lucide-react';
 import { DataTable } from '@/components/ui/data-table';
 import { type ColumnDef, type Row } from '@tanstack/react-table';
 import jsPDF from 'jspdf';
@@ -77,6 +77,8 @@ const getTipoVariant = (tipo: string) => {
       case 'VENDA': return 'destructive';
       case 'RECARGA': return 'secondary';
       case 'REEMBOLSO': return 'outline';
+      case 'TRANSFER_IN': return 'default';
+      case 'TRANSFER_OUT': return 'secondary';
       default: return 'default';
     }
   };
@@ -101,8 +103,8 @@ const getTipoVariant = (tipo: string) => {
         });
     }
     
-    // Disable if transaction is already a refund
-    if (transaction.tipo === 'REEMBOLSO' || !user || user.role !== 'ADMIN') {
+    // Disable if transaction is a refund or transfer
+    if (transaction.tipo === 'REEMBOLSO' || transaction.tipo === 'TRANSFER_IN' || transaction.tipo === 'TRANSFER_OUT' || !user || user.role !== 'ADMIN') {
         return null;
     }
 
@@ -149,7 +151,7 @@ const getColumns = (user: any): ColumnDef<TransactionDetails>[] => [
         header: 'Tipo',
         cell: ({ row }) => {
             const tipo: string = row.getValue('tipo');
-            return <Badge variant={getTipoVariant(tipo)}>{tipo}</Badge>
+            return <Badge variant={getTipoVariant(tipo)}>{tipo.replace('_', ' ')}</Badge>
         },
         filterFn: (row, id, value) => {
             return value.includes(row.getValue(id))
@@ -158,7 +160,12 @@ const getColumns = (user: any): ColumnDef<TransactionDetails>[] => [
     {
         accessorKey: 'valor_centavos',
         header: 'Valor',
-        cell: ({ row }) => <div className="text-right">{formatCurrency(row.getValue('valor_centavos'))}</div>
+        cell: ({ row }) => {
+          const tipo: string = row.original.tipo;
+          const valor: number = row.getValue('valor_centavos');
+          const isDebit = tipo === 'VENDA' || tipo === 'TRANSFER_OUT';
+          return <div className={`text-right ${isDebit ? 'text-destructive' : ''}`}>{isDebit ? '-' : '+'}{formatCurrency(valor)}</div>
+        }
     },
     {
         accessorKey: 'usuario_responsavel',
@@ -202,7 +209,7 @@ const SubRowComponent = ({ row }: { row: { original: TransactionDetails } }) => 
                             ))}
                         </ul>
                      ) : (
-                        <p className="text-sm text-muted-foreground">Nenhum item registrado (Recarga ou Reembolso).</p>
+                        <p className="text-sm text-muted-foreground">Nenhum item registrado (Recarga, Reembolso ou Transferência).</p>
                      )}
                 </div>
             </div>
@@ -322,6 +329,8 @@ export default function TransactionsPage() {
                         {value: 'VENDA', label: 'Venda'},
                         {value: 'RECARGA', label: 'Recarga'},
                         {value: 'REEMBOLSO', label: 'Reembolso'},
+                        {value: 'TRANSFER_IN', label: 'Transferência (Entrada)'},
+                        {value: 'TRANSFER_OUT', label: 'Transferência (Saída)'},
                     ]
                 }
             ]}

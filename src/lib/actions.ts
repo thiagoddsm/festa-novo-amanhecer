@@ -502,6 +502,99 @@ export async function getCardBalance(
     }
 }
 
+
+// --- Balance Transfer ---
+const TransferBalanceSchema = z.object({
+    origin_qr_code_id: z.string().min(1, 'ID do cartão de origem é obrigatório.'),
+    destination_qr_code_id: z.string().min(1, 'ID do cartão de destino é obrigatório.'),
+    valor_transferencia: z.coerce.number().positive('O valor deve ser positivo.'),
+    usuario_responsavel: z.string().min(1, 'Usuário responsável é obrigatório.'),
+}).refine(data => data.origin_qr_code_id !== data.destination_qr_code_id, {
+    message: 'O cartão de origem e destino não podem ser os mesmos.',
+    path: ['destination_qr_code_id'],
+});
+
+export async function transferBalance(prevState: ActionState | undefined, formData: FormData): Promise<ActionState> {
+    try {
+        const validatedFields = TransferBalanceSchema.safeParse(Object.fromEntries(formData.entries()));
+
+        if (!validatedFields.success) {
+            return {
+                status: 'error',
+                message: 'Dados inválidos.',
+                data: validatedFields.error.flatten().fieldErrors,
+            };
+        }
+
+        const { origin_qr_code_id, destination_qr_code_id, valor_transferencia, usuario_responsavel } = validatedFields.data;
+        const valor_centavos = valor_transferencia * 100;
+
+        const result = await db.runTransaction(async (t) => {
+            // Get origin card
+            const originCardsQuery = db.collection('cards').where('qr_code_id', '==', origin_qr_code_id).limit(1);
+            const originSnapshot = await t.get(originCardsQuery);
+            if (originSnapshot.empty) throw new Error('Cartão de origem não encontrado.');
+            const originCardDoc = originSnapshot.docs[0];
+            const originCard = originCardDoc.data() as Card;
+
+            // Get destination card
+            const destCardsQuery = db.collection('cards').where('qr_code_id', '==', destination_qr_code_id).limit(1);
+            const destSnapshot = await t.get(destCardsQuery);
+            if (destSnapshot.empty) throw new Error('Cartão de destino não encontrado.');
+            const destCardDoc = destSnapshot.docs[0];
+            const destCard = destCardDoc.data() as Card;
+
+            // Check if origin has enough balance
+            if (originCard.saldo_centavos < valor_centavos) {
+                throw new Error('Saldo insuficiente no cartão de origem.');
+            }
+
+            // Update balances
+            const newOriginBalance = originCard.saldo_centavos - valor_centavos;
+            const newDestBalance = destCard.saldo_centavos + valor_centavos;
+
+            t.update(originCardDoc.ref, { saldo_centavos: newOriginBalance, updated_at: Timestamp.now() });
+            t.update(destCardDoc.ref, { saldo_centavos: newDestBalance, updated_at: Timestamp.now() });
+
+            // Create transaction for origin
+            const originTxRef = db.collection('transactions').doc();
+            t.set(originTxRef, {
+                cartao_id: originCardDoc.id,
+                pdv_id: 'caixa_central',
+                tipo: 'TRANSFER_OUT',
+                valor_centavos: valor_centavos,
+                created_at: Timestamp.now(),
+                usuario_responsavel,
+            });
+
+            // Create transaction for destination
+            const destTxRef = db.collection('transactions').doc();
+            t.set(destTxRef, {
+                cartao_id: destCardDoc.id,
+                pdv_id: 'caixa_central',
+                tipo: 'TRANSFER_IN',
+                valor_centavos: valor_centavos,
+                created_at: Timestamp.now(),
+                usuario_responsavel,
+            });
+
+            return { newOriginBalance, newDestBalance };
+        });
+
+        return {
+            status: 'success',
+            message: `Transferência de ${formatCurrency(valor_centavos)} realizada com sucesso!`,
+            data: result
+        };
+
+    } catch (error) {
+        console.error(error);
+        const errorMessage = error instanceof Error ? error.message : 'Ocorreu um erro desconhecido.';
+        return { status: 'error', message: `Erro na transferência: ${errorMessage}` };
+    }
+}
+
+
 // --- PDV / Menu ---
 export async function getPdvNameById(pdvId: string): Promise<string> {
     if (pdvId === 'caixa_central') return 'Caixa Central';

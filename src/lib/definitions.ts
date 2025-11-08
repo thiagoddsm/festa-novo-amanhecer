@@ -34,7 +34,7 @@ export type Transaction = {
   id: string; // Firestore doc id
   cartao_id: string; // Firestore document ID of the card
   pdv_id: string;
-  tipo: 'RECARGA' | 'VENDA' | 'REEMBOLSO';
+  tipo: 'RECARGA' | 'VENDA' | 'REEMBOLSO' | 'TRANSFER_IN' | 'TRANSFER_OUT';
   valor_centavos: number;
   created_at: Timestamp;
   items?: OrderItem[];
