@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useTransition } from 'react';
 import { useFirestore } from '@/firebase';
 import { collection, Timestamp, query, orderBy } from 'firebase/firestore';
 import type { Transaction, Card as CardType, Pdv } from '@/lib/definitions';
@@ -7,16 +7,18 @@ import { formatCurrency, formatDateTime } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { List, Package, User, CornerDownRight, UserCog } from 'lucide-react';
+import { List, Package, User, CornerDownRight, UserCog, Undo2, Loader2 } from 'lucide-react';
 import { DataTable } from '@/components/ui/data-table';
 import { type ColumnDef, type Row } from '@tanstack/react-table';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useAuth } from '@/hooks/use-auth-context';
-import { deleteTransactions } from '@/lib/actions';
+import { deleteTransactions, reverseTransaction } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 import { useCollection } from '@/firebase/firestore/use-collection';
 import { useMemoFirebase } from '@/firebase/provider';
+import { Button } from '@/components/ui/button';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 
 
 type TransactionDetails = Transaction & {
@@ -84,7 +86,52 @@ const getTipoVariant = (tipo: string) => {
     return formatDateTime(date);
   }
 
-const columns: ColumnDef<TransactionDetails>[] = [
+  function ReversalButton({ transaction, user }: { transaction: TransactionDetails, user: any }) {
+    const [isPending, startTransition] = useTransition();
+    const { toast } = useToast();
+
+    const handleReversal = () => {
+        startTransition(async () => {
+            const result = await reverseTransaction(transaction.id, user?.name || 'Admin');
+            toast({
+                title: result.status === 'success' ? 'Sucesso!' : 'Erro!',
+                description: result.message,
+                variant: result.status === 'success' ? 'default' : 'destructive'
+            });
+        });
+    }
+    
+    // Disable if transaction is already a refund
+    if (transaction.tipo === 'REEMBOLSO' || !user || user.role !== 'ADMIN') {
+        return null;
+    }
+
+    return (
+        <AlertDialog>
+            <AlertDialogTrigger asChild>
+                <Button variant="ghost" size="sm" className="h-8" disabled={isPending}>
+                    {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Undo2 className="h-4 w-4 mr-2" />}
+                    Estornar
+                </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Confirmar Estorno</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        Você está prestes a estornar esta transação de {formatCurrency(transaction.valor_centavos)}. 
+                        Esta ação é irreversível. O saldo do cartão será ajustado.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleReversal}>Confirmar Estorno</AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+    );
+}
+
+const getColumns = (user: any): ColumnDef<TransactionDetails>[] => [
     {
         accessorKey: 'pdv_nome',
         header: 'PDV',
@@ -122,7 +169,12 @@ const columns: ColumnDef<TransactionDetails>[] = [
         accessorKey: 'created_at',
         header: 'Data e Hora',
         cell: ({ row }) => formatTimestamp(row.getValue('created_at')),
-    }
+    },
+    {
+        id: 'actions',
+        header: 'Ações',
+        cell: ({ row }) => <ReversalButton transaction={row.original} user={user} />,
+    },
 ]
 
 const SubRowComponent = ({ row }: { row: { original: TransactionDetails } }) => {
@@ -202,6 +254,8 @@ export default function TransactionsPage() {
   const { user } = useAuth();
   const { transactions: allTransactions, pdvs, isLoading } = useTransactionDetails();
   const { toast } = useToast();
+  
+  const columns = useMemo(() => getColumns(user), [user]);
 
   const pdvOptions = useMemo(() => {
     const options = pdvs.map(pdv => ({ value: pdv.nome, label: pdv.nome }));

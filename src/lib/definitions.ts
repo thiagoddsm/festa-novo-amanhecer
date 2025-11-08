@@ -39,6 +39,7 @@ export type Transaction = {
   created_at: Timestamp;
   items?: OrderItem[];
   usuario_responsavel?: string; // Nome do usuário que realizou a ação
+  reversed_tx_id?: string; // ID of the transaction that was reversed
 };
 
 export type TransactionDetails = Transaction & {
@@ -64,7 +65,7 @@ export type Order = {
     pdv_id: string;
     transaction_id: string;
     cliente_nome: string;
-    status: 'PENDENTE' | 'EM_PREPARO' | 'PRONTO' | 'ENTREGUE';
+    status: 'PENDENTE' | 'EM_PREPARO' | 'PRONTO' | 'ENTREGUE' | 'CANCELADO';
     created_at: Timestamp;
     updated_at: Timestamp;
     items: OrderItem[];

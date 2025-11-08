@@ -15,6 +15,7 @@ import ReprintQrButton from '@/components/cards/ReprintQrButton';
 import { deleteCards } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth-context';
+import EditCardDialog from '@/components/cards/EditCardDialog';
 
 function useCollection<T>(path: string) {
   const [data, setData] = useState<T[] | null>(null);
@@ -84,6 +85,7 @@ const columns: ColumnDef<CardType>[] = [
               <div className="flex gap-2">
                 <RechargeDialog card={card} />
                 <ReprintQrButton card={card} />
+                <EditCardDialog card={card} />
               </div>
             )
         }

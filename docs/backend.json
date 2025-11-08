@@ -74,6 +74,10 @@
           "type": "string",
           "description": "The timestamp when the transaction occurred.",
           "format": "date-time"
+        },
+        "reversedTxId": {
+            "type": "string",
+            "description": "If this is a reversal transaction, this field stores the ID of the transaction being reversed."
         }
       },
       "required": [
@@ -130,7 +134,7 @@
         },
         "status": {
           "type": "string",
-          "enum": ["PENDENTE", "EM_PREPARO", "PRONTO", "ENTREGUE"],
+          "enum": ["PENDENTE", "EM_PREPARO", "PRONTO", "ENTREGUE", "CANCELADO"],
           "description": "The current status of the order."
         },
         "createdAt": {

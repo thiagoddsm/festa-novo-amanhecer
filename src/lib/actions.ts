@@ -5,7 +5,7 @@ import { generateRandomId } from './data';
 import { initializeApp, getApps, getApp, App, applicationDefault } from 'firebase-admin/app';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
-import type { Card, Order } from './definitions';
+import type { Card, Order, Transaction } from './definitions';
 import { notifyCardCreation, notifyRecharge, notifySale, notifyCustomMessage } from './flows/notify-flow';
 import { notifyOrderReady } from './flows/notify-order-flow';
 
@@ -115,6 +115,51 @@ export async function createCard(
     return { status: 'error', message: `Erro ao criar cartão: ${errorMessage}` };
   }
 }
+
+// --- Card Details Update ---
+const UpdateCardDetailsSchema = z.object({
+    cardId: z.string().min(1, 'ID do cartão é obrigatório.'),
+    nome_cliente: z.string().optional(),
+    telefone_cliente: z.string().min(1, 'O telefone é obrigatório.'),
+});
+
+export async function updateCardDetails(
+    prevState: ActionState | undefined,
+    formData: FormData
+): Promise<ActionState> {
+    try {
+        const validatedFields = UpdateCardDetailsSchema.safeParse({
+            cardId: formData.get('cardId'),
+            nome_cliente: formData.get('nome_cliente'),
+            telefone_cliente: formData.get('telefone_cliente'),
+        });
+
+        if (!validatedFields.success) {
+            return {
+                status: 'error',
+                message: 'Dados inválidos.',
+                data: validatedFields.error.flatten().fieldErrors,
+            };
+        }
+
+        const { cardId, nome_cliente, telefone_cliente } = validatedFields.data;
+
+        const cardRef = db.collection('cards').doc(cardId);
+        await cardRef.update({
+            nome_cliente: nome_cliente ?? '',
+            telefone_cliente: telefone_cliente,
+            updated_at: Timestamp.now(),
+        });
+        
+        return { status: 'success', message: 'Dados do cartão atualizados.' };
+
+    } catch (error) {
+        console.error(error);
+        const errorMessage = error instanceof Error ? error.message : 'Ocorreu um erro desconhecido.';
+        return { status: 'error', message: `Erro ao atualizar cartão: ${errorMessage}` };
+    }
+}
+
 
 // --- Recharge ---
 const RechargeSchema = z.object({
@@ -321,6 +366,86 @@ export async function processSale(
     }
 }
 
+// --- Transaction Reversal ---
+export async function reverseTransaction(transactionId: string, responsibleUser: string): Promise<ActionState> {
+    try {
+        const txRef = db.collection('transactions').doc(transactionId);
+        const reversalResult = await db.runTransaction(async (t) => {
+            const txDoc = await t.get(txRef);
+            if (!txDoc.exists) {
+                throw new Error("Transação original não encontrada.");
+            }
+
+            const originalTx = txDoc.data() as Transaction;
+            if (originalTx.tipo === 'REEMBOLSO') {
+                throw new Error("Não é possível estornar um estorno.");
+            }
+
+            // Check if already reversed
+            const reversalsQuery = db.collection('transactions').where('reversed_tx_id', '==', transactionId);
+            const reversalsSnapshot = await t.get(reversalsQuery);
+            if (!reversalsSnapshot.empty) {
+                throw new Error("Esta transação já foi estornada.");
+            }
+
+            const cardRef = db.collection('cards').doc(originalTx.cartao_id);
+            const cardDoc = await t.get(cardRef);
+            if (!cardDoc.exists) {
+                throw new Error("Cartão associado não encontrado.");
+            }
+            const cardData = cardDoc.data() as Card;
+
+            let newBalance;
+            // If original was a SALE, add money back. If it was a RECHARGE, take money away.
+            if (originalTx.tipo === 'VENDA') {
+                newBalance = cardData.saldo_centavos + originalTx.valor_centavos;
+            } else if (originalTx.tipo === 'RECARGA') {
+                newBalance = cardData.saldo_centavos - originalTx.valor_centavos;
+                 if (newBalance < 0) {
+                    throw new Error("Estornar esta recarga resultaria em saldo negativo.");
+                }
+            } else {
+                 throw new Error(`Tipo de transação '${originalTx.tipo}' não suporta estorno.`);
+            }
+
+            // Update card balance
+            t.update(cardRef, { saldo_centavos: newBalance, updated_at: Timestamp.now() });
+
+            // Create reversal transaction
+            const reversalTxRef = db.collection('transactions').doc();
+            t.set(reversalTxRef, {
+                cartao_id: originalTx.cartao_id,
+                pdv_id: originalTx.pdv_id,
+                tipo: 'REEMBOLSO',
+                valor_centavos: originalTx.valor_centavos,
+                created_at: Timestamp.now(),
+                usuario_responsavel: responsibleUser,
+                reversed_tx_id: transactionId,
+                items: originalTx.items,
+            });
+
+            // If it was a sale, find and cancel the associated order
+            if (originalTx.tipo === 'VENDA') {
+                const ordersQuery = db.collection('orders').where('transaction_id', '==', transactionId);
+                const ordersSnapshot = await t.get(ordersQuery);
+                if (!ordersSnapshot.empty) {
+                    const orderDoc = ordersSnapshot.docs[0];
+                    t.update(orderDoc.ref, { status: 'CANCELADO', updated_at: Timestamp.now() });
+                }
+            }
+
+            return { newBalance };
+        });
+
+        return { status: 'success', message: 'Transação estornada com sucesso!', data: { novo_saldo_centavos: reversalResult.newBalance } };
+
+    } catch (error) {
+        console.error(error);
+        const errorMessage = error instanceof Error ? error.message : 'Ocorreu um erro desconhecido.';
+        return { status: 'error', message: `Erro ao estornar: ${errorMessage}` };
+    }
+}
+
 
 // --- Check Balance ---
 const CheckBalanceSchema = z.object({
@@ -467,7 +592,7 @@ export async function deleteMenuItem(pdvId: string, itemId: string): Promise<Act
 // --- Order Status ---
 const UpdateOrderStatusSchema = z.object({
   orderId: z.string(),
-  newStatus: z.enum(['PENDENTE', 'EM_PREPARO', 'PRONTO', 'ENTREGUE']),
+  newStatus: z.enum(['PENDENTE', 'EM_PREPARO', 'PRONTO', 'ENTREGUE', 'CANCELADO']),
 });
 
 export async function updateOrderStatus(orderId: string, newStatus: Order['status']): Promise<ActionState> {
