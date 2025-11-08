@@ -5,9 +5,10 @@ import { generateRandomId } from './data';
 import { initializeApp, getApps, getApp, App, applicationDefault } from 'firebase-admin/app';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
-import type { Card, Order, Transaction } from './definitions';
+import type { Card, Order, Transaction, OrderItem } from './definitions';
 import { notifyCardCreation, notifyRecharge, notifySale, notifyCustomMessage } from './flows/notify-flow';
 import { notifyOrderReady } from './flows/notify-order-flow';
+import { formatCurrency } from './utils';
 
 
 // Helper to ensure Firebase Admin is initialized only once
@@ -413,7 +414,9 @@ export async function reverseTransaction(transactionId: string, responsibleUser:
 
             // Create reversal transaction
             const reversalTxRef = db.collection('transactions').doc();
-            t.set(reversalTxRef, {
+            
+            // Build the data object for the new reversal transaction safely
+            const reversalData: Omit<Transaction, 'id'> = {
                 cartao_id: originalTx.cartao_id,
                 pdv_id: originalTx.pdv_id,
                 tipo: 'REEMBOLSO',
@@ -421,8 +424,10 @@ export async function reverseTransaction(transactionId: string, responsibleUser:
                 created_at: Timestamp.now(),
                 usuario_responsavel: responsibleUser,
                 reversed_tx_id: transactionId,
-                items: originalTx.items || [],
-            });
+                items: originalTx.items || [], // Ensure items is always an array
+            };
+
+            t.set(reversalTxRef, reversalData);
 
             // If it was a sale, find and cancel the associated order
             if (originalTx.tipo === 'VENDA') {
