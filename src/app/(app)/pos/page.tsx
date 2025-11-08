@@ -33,18 +33,26 @@ export default function PosPage() {
   }, [firestore]);
 
   useEffect(() => {
-    if (pdvs === null || !user) {
-        // Still waiting for data
-        return;
+    // Wait for both user and pdvs data to be loaded
+    if (!user || pdvs === null) {
+      setIsLoading(true);
+      return;
     }
 
+    let pdvToSelect = null;
     if (user.role === 'PDV' && user.pdvId) {
-        const assignedPdv = pdvs.find(p => p.id === user.pdvId);
-        if (assignedPdv) {
-            setSelectedPdv(assignedPdv);
-        }
+      const assignedPdv = pdvs.find(p => p.id === user.pdvId);
+      if (assignedPdv) {
+        pdvToSelect = assignedPdv;
+      }
     }
-    // For ADMIN or PDV without assigned pdvId, we let them choose.
+    
+    // If a PDV was found for the user, select it.
+    if (pdvToSelect) {
+        setSelectedPdv(pdvToSelect);
+    }
+    
+    // Loading is finished once we have user/pdv data and have checked for an assigned pdv.
     setIsLoading(false);
 
   }, [user, pdvs]);
@@ -65,10 +73,11 @@ export default function PosPage() {
     return <FullPageLoader />
   }
 
+  // If a PDV is selected (either by role assignment or by admin choice), show the terminal.
   if (selectedPdv) {
     return <SaleTerminal pdv={selectedPdv} onGoBack={handleGoBack} />;
   }
   
-  // Only show selector if no PDV is selected (for ADMINS or unassigned PDVs)
+  // Otherwise, show the selector (for ADMINS or unassigned PDVs).
   return <PdvSelector pdvs={pdvs} onPdvSelect={handlePdvSelect} />;
 }
