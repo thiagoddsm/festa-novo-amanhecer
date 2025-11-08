@@ -1,39 +1,19 @@
 'use client'
-import { getPdvNameById } from '@/lib/actions';
 import { formatCurrency, formatDateTime } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { DollarSign, CreditCard, ShoppingBag, TrendingUp, Users } from 'lucide-react';
+import { DollarSign, CreditCard, TrendingUp, Users } from 'lucide-react';
 import StatCard from '@/components/dashboard/StatCard';
 import { useState, useEffect, useMemo } from 'react';
-import type { Card as CardType, Pdv, Transaction, TransactionDetails } from '@/lib/definitions';
+import type { Card as CardType, Pdv, Transaction } from '@/lib/definitions';
 import { useFirestore } from '@/firebase';
-import { collection, onSnapshot, query, orderBy, limit, Timestamp } from 'firebase/firestore';
+import { collection, onSnapshot, Timestamp } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
 import BulkNotifier from '@/components/dashboard/BulkNotifier';
-
-function useCollection<T>(path: string) {
-  const [data, setData] = useState<T[] | null>(null);
-  const firestore = useFirestore();
-
-  useEffect(() => {
-    if (!firestore) return;
-
-    const collRef = collection(firestore, path);
-    // Note: This basic implementation doesn't include query parameters.
-    // For more complex scenarios, you might need to pass queries to the hook.
-    const unsubscribe = onSnapshot(collRef, (snapshot) => {
-      const allDocs = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as T));
-      setData(allDocs);
-    });
-
-    return () => unsubscribe();
-  }, [firestore, path]);
-
-  return data;
-}
+import { useCollection } from '@/firebase/firestore/use-collection';
+import { useMemoFirebase } from '@/firebase/provider';
 
 const formatTimestamp = (ts: Timestamp | Date) => {
   if (ts instanceof Timestamp) {
@@ -43,39 +23,35 @@ const formatTimestamp = (ts: Timestamp | Date) => {
 }
 
 export default function DashboardPage() {
-  // Fetch data in real-time from Firestore
-  const allCards = useCollection<CardType>('cards');
-  const allTransactions = useCollection<Transaction>('transactions');
-  
-  const [isLoading, setIsLoading] = useState(true);
-  const [pdvNames, setPdvNames] = useState<Record<string, string>>({});
+  const firestore = useFirestore();
 
-   const recentTransactions = useMemo(() => {
+  const cardsQuery = useMemoFirebase(() => collection(firestore, 'cards'), [firestore]);
+  const transactionsQuery = useMemoFirebase(() => collection(firestore, 'transactions'), [firestore]);
+  const pdvsQuery = useMemoFirebase(() => collection(firestore, 'pdvs'), [firestore]);
+  
+  const { data: allCards, isLoading: loadingCards } = useCollection<CardType>(cardsQuery);
+  const { data: allTransactions, isLoading: loadingTransactions } = useCollection<Transaction>(transactionsQuery);
+  const { data: allPdvs, isLoading: loadingPdvs } = useCollection<Pdv>(pdvsQuery);
+  
+  const isLoading = loadingCards || loadingTransactions || loadingPdvs;
+
+  const pdvNameMap = useMemo(() => {
+    if (!allPdvs) return new Map<string, string>();
+    const map = new Map<string, string>();
+    allPdvs.forEach(pdv => map.set(pdv.id, pdv.nome));
+    map.set('caixa_central', 'Caixa Central');
+    return map;
+  }, [allPdvs]);
+
+  const recentTransactions = useMemo(() => {
     if (!allTransactions) return [];
     
-    // Sort transactions by date and take the last 10
     return [...allTransactions]
       .sort((a, b) => formatTimestamp(b.created_at).getTime() - formatTimestamp(a.created_at).getTime())
       .slice(0, 10);
       
   }, [allTransactions]);
 
-  useEffect(() => {
-    // Fetch PDV names for recent transactions
-    recentTransactions.forEach(async (tx) => {
-        if (tx.pdv_id && !pdvNames[tx.pdv_id]) {
-          try {
-              const name = await getPdvNameById(tx.pdv_id.toString());
-              setPdvNames(prev => ({...prev, [tx.pdv_id]: name}));
-          } catch(e){
-              // console.error("Could not fetch pdv name for id: ", tx.pdv_id);
-          }
-        }
-    })
-  }, [recentTransactions, pdvNames]);
-
-
-  // Memoize calculations to prevent re-running on every render
   const report = useMemo(() => {
     if (!allTransactions) return null;
 
@@ -96,14 +72,6 @@ export default function DashboardPage() {
       ticketMedio: total_vendido_centavos / (totalVendasUn || 1),
     };
   }, [allTransactions]);
-
-  useEffect(() => {
-    if (allCards !== null && allTransactions !== null) {
-      setIsLoading(false);
-    } else {
-      setIsLoading(true);
-    }
-  }, [allCards, allTransactions])
 
   const activeCardsStat = { title: 'Cartões Ativos', value: allCards?.length ?? 0, icon: Users };
 
@@ -153,7 +121,7 @@ export default function DashboardPage() {
                     {recentTransactions.length > 0 ? recentTransactions.map((tx) => {
                     return (
                         <TableRow key={tx.id}>
-                        <TableCell>{pdvNames[tx.pdv_id] || 'Carregando...'}</TableCell>
+                        <TableCell>{pdvNameMap.get(tx.pdv_id) || 'Desconhecido'}</TableCell>
                         <TableCell>
                             <Badge variant={tx.tipo === 'VENDA' ? 'destructive' : 'secondary'}>{tx.tipo}</Badge>
                         </TableCell>

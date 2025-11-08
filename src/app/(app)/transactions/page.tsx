@@ -1,14 +1,13 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useFirestore } from '@/firebase';
-import { collection, onSnapshot, doc, getDoc, Timestamp, query, orderBy } from 'firebase/firestore';
+import { collection, Timestamp, query, orderBy } from 'firebase/firestore';
 import type { Transaction, Card as CardType, Pdv } from '@/lib/definitions';
 import { formatCurrency, formatDateTime } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { List, Package, User, CornerDownRight, FileDown, UserCog } from 'lucide-react';
+import { List, Package, User, CornerDownRight, UserCog } from 'lucide-react';
 import { DataTable } from '@/components/ui/data-table';
 import { type ColumnDef, type Row } from '@tanstack/react-table';
 import jsPDF from 'jspdf';
@@ -16,6 +15,8 @@ import autoTable from 'jspdf-autotable';
 import { useAuth } from '@/hooks/use-auth-context';
 import { deleteTransactions } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
+import { useCollection } from '@/firebase/firestore/use-collection';
+import { useMemoFirebase } from '@/firebase/provider';
 
 
 type TransactionDetails = Transaction & {
@@ -24,71 +25,49 @@ type TransactionDetails = Transaction & {
   nome_cliente?: string;
 };
 
-// A simple cache to avoid re-fetching details
-const cardCache = new Map<string, CardType>();
-const pdvCache = new Map<string, string>();
-const pdvListCache: Pdv[] = [];
-
-
 function useTransactionDetails() {
-  const [transactions, setTransactions] = useState<TransactionDetails[] | null>(null);
-  const [pdvs, setPdvs] = useState<Pdv[]>([]);
   const firestore = useFirestore();
 
-  useEffect(() => {
-    if (!firestore) return;
+  const transactionsQuery = useMemoFirebase(() => query(collection(firestore, 'transactions'), orderBy('created_at', 'desc')), [firestore]);
+  const cardsQuery = useMemoFirebase(() => collection(firestore, 'cards'), [firestore]);
+  const pdvsQuery = useMemoFirebase(() => collection(firestore, 'pdvs'), [firestore]);
 
-     const pdvCollRef = collection(firestore, 'pdvs');
-     const unsubPdvs = onSnapshot(pdvCollRef, (snapshot) => {
-         const allPdvs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Pdv));
-         pdvListCache.length = 0;
-         Array.prototype.push.apply(pdvListCache, allPdvs);
-         allPdvs.forEach(pdv => pdvCache.set(pdv.id, pdv.nome));
-         setPdvs(allPdvs);
-     });
+  const { data: transactions, isLoading: loadingTxs } = useCollection<Transaction>(transactionsQuery);
+  const { data: cards, isLoading: loadingCards } = useCollection<CardType>(cardsQuery);
+  const { data: pdvs, isLoading: loadingPdvs } = useCollection<Pdv>(pdvsQuery);
 
+  const cardMap = useMemo(() => {
+    const map = new Map<string, CardType>();
+    cards?.forEach(card => map.set(card.id, card));
+    return map;
+  }, [cards]);
 
-    const transCollRef = collection(firestore, 'transactions');
-    const q = query(transCollRef, orderBy('created_at', 'desc'));
-    const unsubTrans = onSnapshot(q, async (snapshot) => {
-      const allTransDocs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Transaction));
+  const pdvMap = useMemo(() => {
+    const map = new Map<string, string>();
+    pdvs?.forEach(pdv => map.set(pdv.id, pdv.nome));
+    map.set('caixa_central', 'Caixa Central');
+    return map;
+  }, [pdvs]);
 
-      // Enrich transactions with details
-      const enrichedTransactions = await Promise.all(
-        allTransDocs.map(async (trans) => {
-          const details: TransactionDetails = { ...trans };
-          
-          details.pdv_nome = pdvCache.get(trans.pdv_id.toString()) || `PDV ID: ${trans.pdv_id}`;
+  const enrichedTransactions = useMemo(() => {
+    if (!transactions || !cards || !pdvs) return null;
 
-          if (trans.cartao_id) {
-            let cardData = cardCache.get(trans.cartao_id);
-            if (!cardData) {
-              const cardRef = doc(firestore, 'cards', trans.cartao_id);
-              const cardSnap = await getDoc(cardRef);
-              if (cardSnap.exists()) {
-                cardData = cardSnap.data() as CardType;
-                cardCache.set(trans.cartao_id, cardData);
-              }
-            }
-            details.card_qr_code_id = cardData?.qr_code_id || 'Desconhecido';
-            details.nome_cliente = cardData?.nome_cliente || 'N/A';
-          }
-          
-          return details;
-        })
-      );
-      
-
-      setTransactions(enrichedTransactions);
+    return transactions.map((trans) => {
+      const card = trans.cartao_id ? cardMap.get(trans.cartao_id) : undefined;
+      return {
+        ...trans,
+        pdv_nome: pdvMap.get(trans.pdv_id) || `PDV ID: ${trans.pdv_id}`,
+        card_qr_code_id: card?.qr_code_id || 'Desconhecido',
+        nome_cliente: card?.nome_cliente || 'N/A',
+      };
     });
+  }, [transactions, cards, pdvs, cardMap, pdvMap]);
 
-    return () => {
-        unsubPdvs();
-        unsubTrans();
-    }
-  }, [firestore]);
-
-  return {transactions, pdvs};
+  return {
+    transactions: enrichedTransactions,
+    pdvs: pdvs || [],
+    isLoading: loadingTxs || loadingCards || loadingPdvs,
+  };
 }
 
 const getTipoVariant = (tipo: string) => {
@@ -221,17 +200,17 @@ const generatePDF = (filteredData: Row<TransactionDetails>[]) => {
 
 export default function TransactionsPage() {
   const { user } = useAuth();
-  const { transactions: allTransactions, pdvs } = useTransactionDetails();
-  const [isLoading, setIsLoading] = useState(true);
+  const { transactions: allTransactions, pdvs, isLoading } = useTransactionDetails();
   const { toast } = useToast();
 
-  useEffect(() => {
-    if (allTransactions !== null) {
-      setIsLoading(false);
+  const pdvOptions = useMemo(() => {
+    const options = pdvs.map(pdv => ({ value: pdv.nome, label: pdv.nome }));
+    // Add Caixa Central if not already present
+    if (!options.some(opt => opt.value === 'Caixa Central')) {
+      options.push({ value: 'Caixa Central', label: 'Caixa Central' });
     }
-  }, [allTransactions]);
-
-  const pdvOptions = pdvs.map(pdv => ({ value: pdv.nome, label: pdv.nome }));
+    return options;
+  }, [pdvs]);
   
   const handleDeleteSelected = async (selectedData: TransactionDetails[]) => {
     const transactionIds = selectedData.map(t => t.id);
