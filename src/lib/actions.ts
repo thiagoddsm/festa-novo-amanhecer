@@ -372,22 +372,12 @@ export async function reverseTransaction(transactionId: string, responsibleUser:
     try {
         const txRef = db.collection('transactions').doc(transactionId);
         const reversalResult = await db.runTransaction(async (t) => {
+            // --- 1. READ PHASE ---
             const txDoc = await t.get(txRef);
             if (!txDoc.exists) {
                 throw new Error("Transação original não encontrada.");
             }
-
             const originalTx = txDoc.data() as Transaction;
-            if (originalTx.tipo === 'REEMBOLSO') {
-                throw new Error("Não é possível estornar um estorno.");
-            }
-
-            // Check if already reversed
-            const reversalsQuery = db.collection('transactions').where('reversed_tx_id', '==', transactionId);
-            const reversalsSnapshot = await t.get(reversalsQuery);
-            if (!reversalsSnapshot.empty) {
-                throw new Error("Esta transação já foi estornada.");
-            }
 
             const cardRef = db.collection('cards').doc(originalTx.cartao_id);
             const cardDoc = await t.get(cardRef);
@@ -396,26 +386,46 @@ export async function reverseTransaction(transactionId: string, responsibleUser:
             }
             const cardData = cardDoc.data() as Card;
 
+            const reversalsQuery = db.collection('transactions').where('reversed_tx_id', '==', transactionId);
+            const reversalsSnapshot = await t.get(reversalsQuery);
+            
+            let orderToCancelRef: FirebaseFirestore.DocumentReference | null = null;
+            if (originalTx.tipo === 'VENDA') {
+                const ordersQuery = db.collection('orders').where('transaction_id', '==', transactionId).limit(1);
+                const ordersSnapshot = await t.get(ordersQuery);
+                if (!ordersSnapshot.empty) {
+                    orderToCancelRef = ordersSnapshot.docs[0].ref;
+                }
+            }
+            
+            // --- 2. VALIDATION PHASE ---
+            if (originalTx.tipo === 'REEMBOLSO') {
+                throw new Error("Não é possível estornar um estorno.");
+            }
+            if (!reversalsSnapshot.empty) {
+                throw new Error("Esta transação já foi estornada.");
+            }
+
             let newBalance;
-            // If original was a SALE, add money back. If it was a RECHARGE, take money away.
             if (originalTx.tipo === 'VENDA') {
                 newBalance = cardData.saldo_centavos + originalTx.valor_centavos;
             } else if (originalTx.tipo === 'RECARGA') {
                 newBalance = cardData.saldo_centavos - originalTx.valor_centavos;
-                 if (newBalance < 0) {
+                if (newBalance < 0) {
                     throw new Error("Estornar esta recarga resultaria em saldo negativo.");
                 }
             } else {
                  throw new Error(`Tipo de transação '${originalTx.tipo}' não suporta estorno.`);
             }
 
-            // Update card balance
+            // --- 3. WRITE PHASE ---
             t.update(cardRef, { saldo_centavos: newBalance, updated_at: Timestamp.now() });
 
-            // Create reversal transaction
+            if (orderToCancelRef) {
+                t.update(orderToCancelRef, { status: 'CANCELADO', updated_at: Timestamp.now() });
+            }
+
             const reversalTxRef = db.collection('transactions').doc();
-            
-            // Build the data object for the new reversal transaction safely
             const reversalData: Omit<Transaction, 'id'> = {
                 cartao_id: originalTx.cartao_id,
                 pdv_id: originalTx.pdv_id,
@@ -424,20 +434,9 @@ export async function reverseTransaction(transactionId: string, responsibleUser:
                 created_at: Timestamp.now(),
                 usuario_responsavel: responsibleUser,
                 reversed_tx_id: transactionId,
-                items: originalTx.items || [], // Ensure items is always an array
+                items: originalTx.items || [],
             };
-
             t.set(reversalTxRef, reversalData);
-
-            // If it was a sale, find and cancel the associated order
-            if (originalTx.tipo === 'VENDA') {
-                const ordersQuery = db.collection('orders').where('transaction_id', '==', transactionId);
-                const ordersSnapshot = await t.get(ordersQuery);
-                if (!ordersSnapshot.empty) {
-                    const orderDoc = ordersSnapshot.docs[0];
-                    t.update(orderDoc.ref, { status: 'CANCELADO', updated_at: Timestamp.now() });
-                }
-            }
 
             return { newBalance };
         });
