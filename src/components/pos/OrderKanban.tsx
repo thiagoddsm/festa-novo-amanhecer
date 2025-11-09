@@ -180,11 +180,10 @@ function KanbanBoard({ pdvId }: { pdvId: string }) {
         
         const ordersRef = collection(firestore, 'orders');
         
-        // Listen for orders from the last 24 hours
-        const twentyFourHoursAgo = Timestamp.fromDate(new Date(Date.now() - 24 * 60 * 60 * 1000));
+        // This query requires a composite index on (pdv_id, status)
         const q = query(ordersRef, 
             where('pdv_id', '==', pdvId),
-            where('created_at', '>=', twentyFourHoursAgo)
+            where('status', 'in', ['PENDENTE', 'EM_PREPARO', 'PRONTO', 'ENTREGUE'])
         );
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -240,13 +239,13 @@ function KanbanBoard({ pdvId }: { pdvId: string }) {
         if (!orders) return initial;
 
         return orders.reduce((acc, order) => {
-            if (order.status === 'CANCELADO' || order.status === 'ARQUIVADO') return acc;
+            // No need to check for CANCELADO/ARQUIVADO due to the query filter
             
             // Treat PENDENTE as EM_PREPARO for display purposes
             if (order.status === 'PENDENTE' || order.status === 'EM_PREPARO') {
                  acc['EM_PREPARO'].push(order);
-            } else if (acc[order.status]) {
-                acc[order.status].push(order);
+            } else if (acc[order.status as OrderStatus]) { // Type assertion
+                acc[order.status as OrderStatus].push(order);
             }
             return acc;
         }, initial);
@@ -300,5 +299,3 @@ export default function OrderKanban({ pdvId }: { pdvId: string }) {
         </DndProvider>
     );
 }
-
-    
