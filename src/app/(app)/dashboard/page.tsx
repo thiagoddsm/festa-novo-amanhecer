@@ -15,12 +15,21 @@ import BulkNotifier from '@/components/dashboard/BulkNotifier';
 import { useCollection } from '@/firebase/firestore/use-collection';
 import { useMemoFirebase } from '@/firebase/provider';
 
-const formatTimestamp = (ts: Timestamp | Date) => {
+const formatTimestamp = (ts: unknown): Date => {
   if (ts instanceof Timestamp) {
     return ts.toDate();
   }
-  return ts;
+  // Handle cases where the timestamp might already be a Date object or an ISO string
+  if (ts instanceof Date) {
+    return ts;
+  }
+  if (typeof ts === 'string') {
+    return new Date(ts);
+  }
+  // Fallback for any other unexpected type
+  return new Date();
 }
+
 
 export default function DashboardPage() {
   const firestore = useFirestore();

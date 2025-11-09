@@ -18,6 +18,7 @@ import { TouchBackend } from 'react-dnd-touch-backend';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import { Button } from '../ui/button';
+import { formatDateTime } from '@/lib/utils';
 
 
 type OrderStatus = 'EM_PREPARO' | 'PRONTO' | 'ENTREGUE';
@@ -73,6 +74,19 @@ const KanbanColumn = ({ title, variant, orders, status, isPending }: {
         </Card>
     );
 };
+
+const formatTimestamp = (ts: unknown): Date => {
+  if (ts instanceof Timestamp) {
+    return ts.toDate();
+  }
+  if (ts instanceof Date) {
+    return ts;
+  }
+  if (typeof ts === 'string') {
+    return new Date(ts);
+  }
+  return new Date();
+}
 
 const OrderCard = ({ order }: { order: Order }) => {
     const [isPending, startTransition] = useTransition();
@@ -141,7 +155,7 @@ const OrderCard = ({ order }: { order: Order }) => {
             </ul>
         </CardContent>
         <CardFooter className="p-3 text-xs text-muted-foreground flex justify-between items-center">
-            <span>{format(order.created_at.toDate(), "HH:mm 'de' dd/MM", { locale: ptBR })}</span>
+            <span>{formatDateTime(formatTimestamp(order.created_at))}</span>
             {next && (
                 <Button
                     size="sm"
@@ -199,8 +213,9 @@ function KanbanBoard({ pdvId }: { pdvId: string }) {
             let hasUpdates = false;
 
             orders.forEach(order => {
-                if (order.status === 'ENTREGUE' && order.updated_at.toDate() < fiveMinutesAgo) {
-                    const orderRef = collection(firestore, 'orders').doc(order.id);
+                const orderUpdatedAt = formatTimestamp(order.updated_at);
+                if (order.status === 'ENTREGUE' && orderUpdatedAt < fiveMinutesAgo) {
+                    const orderRef = doc(firestore, 'orders', order.id);
                     batch.update(orderRef, { status: 'ARQUIVADO' });
                     hasUpdates = true;
                 }

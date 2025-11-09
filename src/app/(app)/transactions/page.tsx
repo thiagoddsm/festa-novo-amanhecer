@@ -83,9 +83,17 @@ const getTipoVariant = (tipo: string) => {
     }
   };
 
-  const formatTimestamp = (ts: Timestamp | Date) => {
-    const date = ts instanceof Timestamp ? ts.toDate() : ts;
-    return formatDateTime(date);
+  const formatTimestamp = (ts: unknown): Date => {
+    if (ts instanceof Timestamp) {
+      return ts.toDate();
+    }
+    if (ts instanceof Date) {
+      return ts;
+    }
+    if (typeof ts === 'string') {
+      return new Date(ts);
+    }
+    return new Date();
   }
 
   function ReversalButton({ transaction, user }: { transaction: TransactionDetails, user: any }) {
@@ -175,7 +183,7 @@ const getColumns = (user: any): ColumnDef<TransactionDetails>[] => [
     {
         accessorKey: 'created_at',
         header: 'Data e Hora',
-        cell: ({ row }) => formatTimestamp(row.getValue('created_at')),
+        cell: ({ row }) => formatDateTime(formatTimestamp(row.getValue('created_at'))),
     },
     {
         id: 'actions',
@@ -230,7 +238,7 @@ const generatePDF = (filteredData: Row<TransactionDetails>[]) => {
             rowData.tipo,
             rowData.usuario_responsavel || 'N/A',
             formatCurrency(rowData.valor_centavos),
-            formatTimestamp(rowData.created_at)
+            formatDateTime(formatTimestamp(rowData.created_at))
         ]);
         totalValue += rowData.valor_centavos;
     });
