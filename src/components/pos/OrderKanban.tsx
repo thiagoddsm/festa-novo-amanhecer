@@ -1,12 +1,10 @@
 'use client';
 import { useState, useEffect, useMemo, useTransition } from 'react';
 import { useFirestore } from '@/firebase';
-import { collection, query, where, onSnapshot, orderBy, writeBatch, Timestamp } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, writeBatch, Timestamp, doc } from 'firebase/firestore';
 import { type Order, type OrderItem } from '@/lib/definitions';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
 import { updateOrderStatus } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '../ui/skeleton';
@@ -190,9 +188,13 @@ function KanbanBoard({ pdvId }: { pdvId: string }) {
         );
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
-            const fetchedOrders = snapshot.docs
-              .map(doc => ({ id: doc.id, ...doc.data() } as Order))
-              .sort((a,b) => a.created_at.toMillis() - b.created_at.toMillis());
+            const fetchedOrders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
+            // Sort client-side after fetching
+            fetchedOrders.sort((a, b) => {
+                const dateA = formatTimestamp(a.created_at);
+                const dateB = formatTimestamp(b.created_at);
+                return dateA.getTime() - dateB.getTime();
+            });
 
             setOrders(fetchedOrders);
         }, (error) => {
@@ -298,3 +300,5 @@ export default function OrderKanban({ pdvId }: { pdvId: string }) {
         </DndProvider>
     );
 }
+
+    

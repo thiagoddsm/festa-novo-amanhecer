@@ -155,6 +155,10 @@ const getColumns = (user: any): ColumnDef<TransactionDetails>[] => [
         cell: ({ row }) => <div className="font-mono text-xs">{row.getValue('card_qr_code_id')}</div>
     },
     {
+      accessorKey: 'nome_cliente',
+      header: 'Cliente',
+    },
+    {
         accessorKey: 'tipo',
         header: 'Tipo',
         cell: ({ row }) => {
@@ -352,3 +356,5 @@ export default function TransactionsPage() {
     </Card>
   );
 }
+
+    
