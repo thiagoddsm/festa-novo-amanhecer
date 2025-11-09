@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useMemo, useTransition } from 'react';
 import { useFirestore } from '@/firebase';
-import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, orderBy, writeBatch, Timestamp } from 'firebase/firestore';
 import { type Order, type OrderItem } from '@/lib/definitions';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -92,6 +92,12 @@ const OrderCard = ({ order }: { order: Order }) => {
             }
         });
     };
+    
+    const nextStatus: Record<string, OrderStatus> = {
+        'EM_PREPARO': 'PRONTO',
+        'PRONTO': 'ENTREGUE',
+    }
+    const next = nextStatus[order.status];
 
     const [{ isDragging }, drag] = useDrag(() => ({
         type: ItemTypes.ORDER,
@@ -136,15 +142,15 @@ const OrderCard = ({ order }: { order: Order }) => {
         </CardContent>
         <CardFooter className="p-3 text-xs text-muted-foreground flex justify-between items-center">
             <span>{format(order.created_at.toDate(), "HH:mm 'de' dd/MM", { locale: ptBR })}</span>
-            {order.status === 'EM_PREPARO' && (
+            {next && (
                 <Button
                     size="sm"
                     variant="ghost"
-                    onClick={() => handleStatusUpdate('PRONTO')}
+                    onClick={() => handleStatusUpdate(next)}
                     disabled={isPending}
                     className="h-auto px-2 py-1 text-xs"
                 >
-                    {isPending ? <Loader2 className="h-4 w-4 animate-spin"/> : <>Pronto <ArrowRightCircle className="ml-2 h-4 w-4"/></>}
+                    {isPending ? <Loader2 className="h-4 w-4 animate-spin"/> : <>{statusConfig[next].title.split(' ')[0]} <ArrowRightCircle className="ml-2 h-4 w-4"/></>}
                 </Button>
             )}
         </CardFooter>
@@ -162,16 +168,16 @@ function KanbanBoard({ pdvId }: { pdvId: string }) {
         
         const ordersRef = collection(firestore, 'orders');
         
+        // Listen for orders from the last 24 hours
+        const twentyFourHoursAgo = Timestamp.fromDate(new Date(Date.now() - 24 * 60 * 60 * 1000));
         const q = query(ordersRef, 
-            where('pdv_id', '==', pdvId)
+            where('pdv_id', '==', pdvId),
+            where('created_at', '>=', twentyFourHoursAgo)
         );
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
-            const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-            
             const fetchedOrders = snapshot.docs
               .map(doc => ({ id: doc.id, ...doc.data() } as Order))
-              .filter(order => order.created_at.toDate() >= twentyFourHoursAgo && order.status !== 'ENTREGUE')
               .sort((a,b) => a.created_at.toMillis() - b.created_at.toMillis());
 
             setOrders(fetchedOrders);
@@ -182,6 +188,32 @@ function KanbanBoard({ pdvId }: { pdvId: string }) {
 
         return () => unsubscribe();
     }, [firestore, pdvId, toast]);
+    
+    // Automatically archive delivered orders after 5 minutes
+    useEffect(() => {
+        if (!firestore || !orders) return;
+        
+        const interval = setInterval(() => {
+            const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+            const batch = writeBatch(firestore);
+            let hasUpdates = false;
+
+            orders.forEach(order => {
+                if (order.status === 'ENTREGUE' && order.updated_at.toDate() < fiveMinutesAgo) {
+                    const orderRef = collection(firestore, 'orders').doc(order.id);
+                    batch.update(orderRef, { status: 'ARQUIVADO' });
+                    hasUpdates = true;
+                }
+            });
+
+            if (hasUpdates) {
+                batch.commit().catch(err => console.error("Failed to archive old orders:", err));
+            }
+        }, 60 * 1000); // Run every minute
+
+        return () => clearInterval(interval);
+
+    }, [firestore, orders]);
 
     const categorizedOrders = useMemo(() => {
         const initial: Record<OrderStatus, Order[]> = {
@@ -191,6 +223,8 @@ function KanbanBoard({ pdvId }: { pdvId: string }) {
         if (!orders) return initial;
 
         return orders.reduce((acc, order) => {
+            if (order.status === 'CANCELADO' || order.status === 'ARQUIVADO') return acc;
+            
             // Treat PENDENTE as EM_PREPARO for display purposes
             if (order.status === 'PENDENTE' || order.status === 'EM_PREPARO') {
                  acc['EM_PREPARO'].push(order);
@@ -224,7 +258,6 @@ function KanbanBoard({ pdvId }: { pdvId: string }) {
     return (
         <div className="flex gap-4 overflow-x-auto pb-4">
             {(Object.keys(statusConfig) as OrderStatus[]).map(status => {
-                if (status === 'ENTREGUE') return null; // Don't render the 'ENTREGUE' column
                 return (
                     <KanbanColumn
                         key={status}

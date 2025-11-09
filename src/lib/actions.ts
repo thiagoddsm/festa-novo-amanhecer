@@ -6,7 +6,7 @@ import { initializeApp, getApps, getApp, App, applicationDefault } from 'firebas
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 import type { Card, Order, Transaction, OrderItem } from './definitions';
-import { notifyCardCreation, notifyRecharge, notifySale, notifyCustomMessage } from './flows/notify-flow';
+import { notifyCardCreation, notifyRecharge, notifySale, notifyCustomMessage, notifyReversal } from './flows/notify-flow';
 import { notifyOrderReady } from './flows/notify-order-flow';
 import { formatCurrency } from './utils';
 
@@ -438,8 +438,11 @@ export async function reverseTransaction(transactionId: string, responsibleUser:
             };
             t.set(reversalTxRef, reversalData);
 
-            return { newBalance };
+            return { newBalance, cardId: cardData.id, reversalAmount: originalTx.valor_centavos };
         });
+
+        // Trigger notification flow (non-blocking)
+        notifyReversal(reversalResult.cardId, reversalResult.reversalAmount).catch(console.error);
 
         return { status: 'success', message: 'Transação estornada com sucesso!', data: { novo_saldo_centavos: reversalResult.newBalance } };
 
@@ -587,7 +590,7 @@ export async function transferBalance(prevState: ActionState | undefined, formDa
 
         return {
             status: 'success',
-            message: 'Transferência realizada com sucesso!',
+            message: `Transferência de ${formatCurrency(result.amountTransferred)} realizada!`,
             data: result
         };
 
@@ -689,7 +692,7 @@ export async function deleteMenuItem(pdvId: string, itemId: string): Promise<Act
 // --- Order Status ---
 const UpdateOrderStatusSchema = z.object({
   orderId: z.string(),
-  newStatus: z.enum(['PENDENTE', 'EM_PREPARO', 'PRONTO', 'ENTREGUE', 'CANCELADO']),
+  newStatus: z.enum(['PENDENTE', 'EM_PREPARO', 'PRONTO', 'ENTREGUE', 'CANCELADO', 'ARQUIVADO']),
 });
 
 export async function updateOrderStatus(orderId: string, newStatus: Order['status']): Promise<ActionState> {

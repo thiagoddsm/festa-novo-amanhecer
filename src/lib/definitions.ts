@@ -65,7 +65,7 @@ export type Order = {
     pdv_id: string;
     transaction_id: string;
     cliente_nome: string;
-    status: 'PENDENTE' | 'EM_PREPARO' | 'PRONTO' | 'ENTREGUE' | 'CANCELADO';
+    status: 'PENDENTE' | 'EM_PREPARO' | 'PRONTO' | 'ENTREGUE' | 'CANCELADO' | 'ARQUIVADO';
     created_at: Timestamp;
     updated_at: Timestamp;
     items: OrderItem[];

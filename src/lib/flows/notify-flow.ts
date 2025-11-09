@@ -141,3 +141,9 @@ export async function notifySale(cardId: string, saleAmountCents: number, pdvNam
 
     return sendCardNotification(cardId, messageBuilder, { testNumber });
 }
+
+export async function notifyReversal(cardId: string, reversalAmountCents: number): Promise<NotifyResult> {
+    return sendCardNotification(cardId, (card) => {
+        return `Atenção, ${card.nome_cliente || 'cliente'}!\n\nUma transação foi estornada e seu saldo foi ajustado.\n\n*Valor do Estorno:* ${formatCurrency(reversalAmountCents)}\n*Novo Saldo:* ${formatCurrency(card.saldo_centavos)}\n\nEm caso de dúvidas, procure o caixa central.`;
+    });
+}

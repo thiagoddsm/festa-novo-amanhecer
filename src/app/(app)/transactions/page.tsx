@@ -318,6 +318,10 @@ export default function TransactionsPage() {
                     placeholder: 'Buscar por usuário...'
                 },
                 {
+                    columnId: 'nome_cliente',
+                    placeholder: 'Buscar por cliente...'
+                },
+                {
                     columnId: 'pdv_nome',
                     placeholder: 'Filtrar PDV...',
                     options: pdvOptions
