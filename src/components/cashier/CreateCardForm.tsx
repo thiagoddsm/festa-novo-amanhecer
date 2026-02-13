@@ -21,7 +21,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { formatCurrency } from '@/lib/utils';
-import { Loader2 } from 'lucide-react';
+import { Loader2, QrCode } from 'lucide-react';
 import type { Card as CardType } from '@/lib/definitions';
 import { toDataURL as generateQrCodeDataUrl } from 'qrcode';
 
