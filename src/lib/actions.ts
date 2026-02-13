@@ -22,10 +22,6 @@ function getAdminApp(): App {
   });
 }
 
-const adminApp = getAdminApp();
-const db = getFirestore(adminApp);
-const auth = getAuth(adminApp);
-
 
 export type ActionState = {
   status: 'idle' | 'success' | 'error';
@@ -45,6 +41,7 @@ export async function createCard(
   prevState: ActionState | undefined,
   formData: FormData
 ): Promise<ActionState> {
+  const db = getFirestore(getAdminApp());
   try {
     const validatedFields = CreateCardSchema.safeParse({
       saldo_inicial: formData.get('saldo_inicial'),
@@ -128,6 +125,7 @@ export async function updateCardDetails(
     prevState: ActionState | undefined,
     formData: FormData
 ): Promise<ActionState> {
+    const db = getFirestore(getAdminApp());
     try {
         const validatedFields = UpdateCardDetailsSchema.safeParse({
             cardId: formData.get('cardId'),
@@ -173,6 +171,7 @@ export async function rechargeCard(
   prevState: ActionState | undefined,
   formData: FormData
 ): Promise<ActionState> {
+  const db = getFirestore(getAdminApp());
   try {
     const validatedFields = RechargeSchema.safeParse({
       qr_code_id: formData.get('qr_code_id'),
@@ -267,6 +266,7 @@ export async function processSale(
     prevState: ActionState | undefined,
     formData: FormData
 ): Promise<ActionState> {
+    const db = getFirestore(getAdminApp());
     try {
         const items = JSON.parse(formData.get('items') as string);
         const total_venda = parseFloat(formData.get('total_venda') as string);
@@ -369,6 +369,7 @@ export async function processSale(
 
 // --- Transaction Reversal ---
 export async function reverseTransaction(transactionId: string, responsibleUser: string): Promise<ActionState> {
+    const db = getFirestore(getAdminApp());
     try {
         const reversalResult = await db.runTransaction(async (t) => {
             // --- 1. READ PHASE ---
@@ -463,6 +464,7 @@ export async function getCardBalance(
   prevState: ActionState | undefined,
   formData: FormData
 ): Promise<ActionState> {
+    const db = getFirestore(getAdminApp());
     try {
         const validatedFields = CheckBalanceSchema.safeParse({
             qr_code_id: formData.get('qr_code_id'),
@@ -522,6 +524,7 @@ const TransferBalanceSchema = z.object({
 });
 
 export async function transferBalance(prevState: ActionState | undefined, formData: FormData): Promise<ActionState> {
+    const db = getFirestore(getAdminApp());
     try {
         const validatedFields = TransferBalanceSchema.safeParse(Object.fromEntries(formData.entries()));
 
@@ -604,6 +607,7 @@ export async function transferBalance(prevState: ActionState | undefined, formDa
 
 // --- PDV / Menu ---
 export async function getPdvNameById(pdvId: string): Promise<string> {
+    const db = getFirestore(getAdminApp());
     if (pdvId === 'caixa_central') return 'Caixa Central';
     const pdvRef = db.collection('pdvs').doc(pdvId);
     const pdvSnap = await pdvRef.get();
@@ -622,6 +626,7 @@ const MenuItemSchema = z.object({
 });
 
 export async function addMenuItem( prevState: ActionState | undefined, formData: FormData): Promise<ActionState> {
+  const db = getFirestore(getAdminApp());
   const validatedFields = MenuItemSchema.safeParse({
     nome: formData.get('nome'),
     preco_reais: formData.get('preco_reais'),
@@ -648,6 +653,7 @@ export async function addMenuItem( prevState: ActionState | undefined, formData:
 }
 
 export async function updateMenuItem(prevState: ActionState | undefined, formData: FormData): Promise<ActionState> {
+  const db = getFirestore(getAdminApp());
   const validatedFields = MenuItemSchema.safeParse({
     nome: formData.get('nome'),
     preco_reais: formData.get('preco_reais'),
@@ -675,6 +681,7 @@ export async function updateMenuItem(prevState: ActionState | undefined, formDat
 }
 
 export async function deleteMenuItem(pdvId: string, itemId: string): Promise<ActionState> {
+  const db = getFirestore(getAdminApp());
   if (!pdvId || !itemId) {
     return { status: 'error', message: 'IDs inválidos.' };
   }
@@ -696,6 +703,7 @@ const UpdateOrderStatusSchema = z.object({
 });
 
 export async function updateOrderStatus(orderId: string, newStatus: Order['status']): Promise<ActionState> {
+    const db = getFirestore(getAdminApp());
     const validated = UpdateOrderStatusSchema.safeParse({ orderId, newStatus });
 
     if (!validated.success) {
@@ -731,6 +739,7 @@ export async function sendBulkNotification(
   prevState: ActionState | undefined,
   formData: FormData
 ): Promise<ActionState> {
+  const db = getFirestore(getAdminApp());
   const validatedFields = BulkNotificationSchema.safeParse({
     message: formData.get('message'),
   });
@@ -784,6 +793,7 @@ export async function sendBulkNotification(
 
 // --- Bulk Deletion ---
 export async function deleteCards(cardIds: string[]): Promise<ActionState> {
+    const db = getFirestore(getAdminApp());
     if (!cardIds || cardIds.length === 0) {
         return { status: 'error', message: 'Nenhum cartão selecionado.' };
     }
@@ -802,6 +812,7 @@ export async function deleteCards(cardIds: string[]): Promise<ActionState> {
 }
 
 export async function deleteTransactions(transactionIds: string[]): Promise<ActionState> {
+    const db = getFirestore(getAdminApp());
     if (!transactionIds || transactionIds.length === 0) {
         return { status: 'error', message: 'Nenhuma transação selecionada.' };
     }
@@ -836,6 +847,8 @@ export async function deleteTransactions(transactionIds: string[]): Promise<Acti
 }
  
 export async function createUser(prevState: ActionState | undefined, formData: FormData): Promise<ActionState> {
+    const auth = getAuth(getAdminApp());
+    const db = getFirestore(getAdminApp());
     const UserSchema = z.object({
         email: z.string().email('Email inválido.'),
         password: z.string().min(6, 'A senha deve ter pelo menos 6 caracteres.'),

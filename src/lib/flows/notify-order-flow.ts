@@ -11,7 +11,6 @@ function getAdminApp(): App {
   if (getApps().length > 0) return getApp();
   return initializeApp({ credential: applicationDefault() });
 }
-const db = getFirestore(getAdminApp());
 
 // --- Flow Logic ---
 
@@ -28,6 +27,7 @@ type NotifyResult = {
  * @param orderId The ID of the order that is ready.
  */
 export async function notifyOrderReady(orderId: string): Promise<void> {
+    const db = getFirestore(getAdminApp());
     try {
         // 1. Fetch the Order
         const orderRef = db.collection('orders').doc(orderId);

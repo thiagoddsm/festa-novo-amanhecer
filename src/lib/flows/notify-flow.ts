@@ -12,7 +12,6 @@ function getAdminApp(): App {
   if (getApps().length > 0) return getApp();
   return initializeApp({ credential: applicationDefault() });
 }
-const db = getFirestore(getAdminApp());
 
 // --- Flow Logic ---
 
@@ -33,6 +32,7 @@ async function sendCardNotification(
         sendQrImage?: boolean;
     }
 ): Promise<NotifyResult> {
+     const db = getFirestore(getAdminApp());
      const testCardData: Card = { 
         id: 'test-card-id', 
         nome_cliente: 'Cliente Teste', 
