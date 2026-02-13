@@ -1,22 +1,15 @@
 'use server';
 
-import { initializeApp, getApps, App, applicationDefault } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
+import { Firestore } from '@google-cloud/firestore';
 import type { Card } from '../definitions';
 import { formatCurrency } from '@/lib/utils';
 import { sendWhatsappMessage, sendWhatsappImage } from '@/lib/whatsapp';
 
 // --- Initialization ---
 
-function getFirebaseAdmin() {
-  if (getApps().length === 0) {
-    initializeApp({
-      credential: applicationDefault(),
-    });
-  }
-  return {
-    db: getFirestore(),
-  };
+function getDb() {
+  // This uses Application Default Credentials automatically and is more stable in serverless envs.
+  return new Firestore();
 }
 
 // --- Flow Logic ---
@@ -38,7 +31,7 @@ async function sendCardNotification(
         sendQrImage?: boolean;
     }
 ): Promise<NotifyResult> {
-     const { db } = getFirebaseAdmin();
+     const db = getDb();
      const testCardData: Card = { 
         id: 'test-card-id', 
         nome_cliente: 'Cliente Teste', 

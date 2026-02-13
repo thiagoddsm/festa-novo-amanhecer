@@ -1,21 +1,14 @@
 'use server';
 
-import { initializeApp, getApps, App, applicationDefault } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
+import { Firestore } from '@google-cloud/firestore';
 import type { Order, Transaction, Card } from '../definitions';
 import { notifyCustomMessage } from './notify-flow';
 
 // --- Initialization ---
 
-function getFirebaseAdmin() {
-  if (getApps().length === 0) {
-    initializeApp({
-      credential: applicationDefault(),
-    });
-  }
-  return {
-    db: getFirestore(),
-  };
+function getDb() {
+  // This uses Application Default Credentials automatically and is more stable in serverless envs.
+  return new Firestore();
 }
 
 // --- Flow Logic ---
@@ -33,7 +26,7 @@ type NotifyResult = {
  * @param orderId The ID of the order that is ready.
  */
 export async function notifyOrderReady(orderId: string): Promise<void> {
-    const { db } = getFirebaseAdmin();
+    const db = getDb();
     try {
         // 1. Fetch the Order
         const orderRef = db.collection('orders').doc(orderId);
