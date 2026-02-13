@@ -1,8 +1,9 @@
 'use client';
 
-import { useActionState, useEffect, useRef, useState } from 'react';
-import { useFormStatus } from 'react-dom';
-import { transferBalance } from '@/lib/actions';
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { useFirestore, useAuth } from '@/firebase';
+import { collection, query, where, doc, runTransaction, Timestamp } from 'firebase/firestore';
+import { z } from 'zod';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,72 +11,134 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, QrCode, ArrowRightLeft } from 'lucide-react';
 import QrScannerDialog from '../common/QrScannerDialog';
-import { useAuth } from '@/hooks/use-auth-context';
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
 import { formatCurrency } from '@/lib/utils';
+import type { Card as CardType } from '@/lib/definitions';
 
-const initialState = {
-  status: 'idle' as 'idle' | 'success' | 'error',
-  message: '',
-  data: null as any,
-};
 
-function SubmitButton() {
-  const { pending } = useFormStatus();
+const TransferBalanceSchema = z.object({
+  origin_qr_code_id: z.string().min(1, 'ID do cartão de origem é obrigatório.'),
+  destination_qr_code_id: z.string().min(1, 'ID do cartão de destino é obrigatório.'),
+  valor_transferencia: z.coerce.number().positive('O valor deve ser positivo.'),
+}).refine(data => data.origin_qr_code_id !== data.destination_qr_code_id, {
+  message: 'O cartão de origem e destino não podem ser os mesmos.',
+  path: ['destination_qr_code_id'],
+});
+
+function SubmitButton({ isPending }: { isPending: boolean }) {
   return (
-    <Button type="submit" disabled={pending} className="w-full">
-      {pending ? <Loader2 className="animate-spin" /> : 'Confirmar Transferência'}
+    <Button type="submit" disabled={isPending} className="w-full">
+      {isPending ? <Loader2 className="animate-spin" /> : 'Confirmar Transferência'}
     </Button>
   );
 }
 
 export default function TransferBalanceForm() {
   const { user } = useAuth();
-  const [state, formAction] = useActionState(transferBalance, initialState);
+  const firestore = useFirestore();
   const { toast } = useToast();
   const formRef = useRef<HTMLFormElement>(null);
-  
+
   const [originQr, setOriginQr] = useState('');
   const [destQr, setDestQr] = useState('');
-
+  const [isPending, setIsPending] = useState(false);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
-  const [scannerTarget, setScannerTarget] = useState<'origin' | 'destination' | null>(null);
-
-  useEffect(() => {
-    if (!state || state.status === 'idle') return;
-
-    if (state.status === 'error') {
-      toast({
-        variant: 'destructive',
-        title: 'Erro na Transferência',
-        description: state.message,
-      });
-    } else if (state.status === 'success') {
-      const amount = state.data?.amountTransferred ?? 0;
-      toast({
-        title: 'Sucesso!',
-        description: `Transferência de ${formatCurrency(amount)} realizada com sucesso!`,
-      });
-      formRef.current?.reset();
-      setOriginQr('');
-      setDestQr('');
-    }
-  }, [state, toast]);
+  const scannerTargetRef = useRef<'origin' | 'destination' | null>(null);
 
   const openScanner = (target: 'origin' | 'destination') => {
-    setScannerTarget(target);
+    scannerTargetRef.current = target;
     setIsScannerOpen(true);
   };
 
-  const handleScan = (data: string) => {
-    if (scannerTarget === 'origin') {
+  const handleScan = useCallback((data: string) => {
+    if (scannerTargetRef.current === 'origin') {
       setOriginQr(data);
-    } else if (scannerTarget === 'destination') {
+    } else if (scannerTargetRef.current === 'destination') {
       setDestQr(data);
     }
     setIsScannerOpen(false);
-    setScannerTarget(null);
-  };
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!user || !firestore) {
+        toast({ variant: 'destructive', title: 'Erro', description: 'Usuário não autenticado.' });
+        return;
+    }
+    setIsPending(true);
+
+    const formData = new FormData(e.currentTarget);
+    const validatedFields = TransferBalanceSchema.safeParse(Object.fromEntries(formData.entries()));
+
+    if (!validatedFields.success) {
+      const errors = validatedFields.error.flatten().fieldErrors;
+      const firstError = Object.values(errors)[0]?.[0] || 'Dados inválidos.';
+      toast({ variant: 'destructive', title: 'Erro de Validação', description: firstError });
+      setIsPending(false);
+      return;
+    }
+
+    try {
+        const { origin_qr_code_id, destination_qr_code_id, valor_transferencia } = validatedFields.data;
+        const valor_centavos = valor_transferencia * 100;
+        
+        await runTransaction(firestore, async (transaction) => {
+            const cardsRef = collection(firestore, 'cards');
+            
+            // Get origin card
+            const originQuery = query(cardsRef, where('qr_code_id', '==', origin_qr_code_id));
+            const originSnapshot = await transaction.get(originQuery);
+            if (originSnapshot.empty) throw new Error('Cartão de origem não encontrado.');
+            const originCardDoc = originSnapshot.docs[0];
+            const originCard = originCardDoc.data() as CardType;
+
+            // Get destination card
+            const destQuery = query(cardsRef, where('qr_code_id', '==', destination_qr_code_id));
+            const destSnapshot = await transaction.get(destQuery);
+            if (destSnapshot.empty) throw new Error('Cartão de destino não encontrado.');
+            const destCardDoc = destSnapshot.docs[0];
+            const destCard = destCardDoc.data() as CardType;
+
+            // Validations
+            if (originCard.saldo_centavos < valor_centavos) throw new Error('Saldo insuficiente no cartão de origem.');
+            if (originCard.status !== 'ATIVO' || destCard.status !== 'ATIVO') throw new Error('Ambos os cartões devem estar ATIVOS.');
+
+            // Update balances
+            const newOriginBalance = originCard.saldo_centavos - valor_centavos;
+            const newDestBalance = destCard.saldo_centavos + valor_centavos;
+
+            transaction.update(originCardDoc.ref, { saldo_centavos: newOriginBalance, updated_at: Timestamp.now() });
+            transaction.update(destCardDoc.ref, { saldo_centavos: newDestBalance, updated_at: Timestamp.now() });
+
+            // Create transactions
+            const transactionsRef = collection(firestore, 'transactions');
+            const originTxRef = doc(transactionsRef);
+            transaction.set(originTxRef, {
+                cartao_id: originCardDoc.id, pdv_id: 'caixa_central', tipo: 'TRANSFER_OUT',
+                valor_centavos, created_at: Timestamp.now(), usuario_responsavel: user.name,
+            });
+            const destTxRef = doc(transactionsRef);
+            transaction.set(destTxRef, {
+                cartao_id: destCardDoc.id, pdv_id: 'caixa_central', tipo: 'TRANSFER_IN',
+                valor_centavos, created_at: Timestamp.now(), usuario_responsavel: user.name,
+            });
+        });
+
+        toast({
+            title: 'Sucesso!',
+            description: `Transferência de ${formatCurrency(valor_centavos)} realizada com sucesso!`,
+        });
+        formRef.current?.reset();
+        setOriginQr('');
+        setDestQr('');
+
+    } catch (error) {
+        const message = error instanceof Error ? error.message : 'Ocorreu um erro desconhecido.';
+        toast({ variant: 'destructive', title: 'Erro na Transferência', description: message });
+    } finally {
+        setIsPending(false);
+    }
+  }
 
   return (
     <>
@@ -87,9 +150,7 @@ export default function TransferBalanceForm() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form ref={formRef} action={formAction} className="space-y-4">
-            <input type="hidden" name="usuario_responsavel" value={user?.name || 'Sistema'} />
-            
+          <form ref={formRef} onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="origin_qr_code_id">Cartão de Origem</Label>
               <div className="flex gap-2">
@@ -105,7 +166,6 @@ export default function TransferBalanceForm() {
                   <QrCode className="h-4 w-4" />
                 </Button>
               </div>
-               {state.data?.origin_qr_code_id && <AlertDescription className="text-destructive text-xs">{state.data.origin_qr_code_id[0]}</AlertDescription>}
             </div>
 
             <div className="flex justify-center">
@@ -127,7 +187,6 @@ export default function TransferBalanceForm() {
                   <QrCode className="h-4 w-4" />
                 </Button>
               </div>
-               {state.data?.destination_qr_code_id && <AlertDescription className="text-destructive text-xs">{state.data.destination_qr_code_id[0]}</AlertDescription>}
             </div>
             
             <div className="space-y-2">
@@ -140,22 +199,10 @@ export default function TransferBalanceForm() {
                 step="0.01"
                 required
               />
-               {state.data?.valor_transferencia && <AlertDescription className="text-destructive text-xs">{state.data.valor_transferencia[0]}</AlertDescription>}
             </div>
-
-            <SubmitButton />
+            <SubmitButton isPending={isPending} />
           </form>
         </CardContent>
-         {state.status === 'success' && state.data?.amountTransferred && (
-            <CardFooter>
-                 <Alert>
-                    <AlertTitle>Transferência Concluída</AlertTitle>
-                    <AlertDescription>
-                        O valor de {formatCurrency(state.data.amountTransferred)} foi transferido.
-                    </AlertDescription>
-                </Alert>
-            </CardFooter>
-        )}
       </Card>
 
       <QrScannerDialog

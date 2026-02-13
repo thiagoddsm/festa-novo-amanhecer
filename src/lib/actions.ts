@@ -1,28 +1,23 @@
 'use server';
 
 import { z } from 'zod';
-import { generateRandomId } from './data';
 import { Firestore, Timestamp } from '@google-cloud/firestore';
-import { initializeApp, getApps, App, applicationDefault } from 'firebase-admin/app';
+import { initializeApp, getApps } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import type { Card, Order, Transaction, OrderItem } from './definitions';
-import { notifyCardCreation, notifyRecharge, notifySale, notifyCustomMessage, notifyReversal } from './flows/notify-flow';
+import { notifySale, notifyCustomMessage, notifyReversal } from './flows/notify-flow';
 import { notifyOrderReady } from './flows/notify-order-flow';
-import { formatCurrency } from './utils';
 
-
-// Helper to get a direct, robust Firestore client instance.
 function getDb() {
-  // This uses Application Default Credentials automatically and is more stable in serverless envs.
+  if (getApps().length === 0) {
+    initializeApp();
+  }
   return new Firestore();
 }
 
-// Helper to initialize Firebase app only when auth is needed.
 function getFirebaseAuth() {
   if (getApps().length === 0) {
-    initializeApp({
-      credential: applicationDefault(),
-    });
+    initializeApp();
   }
   return getAuth();
 }
@@ -33,115 +28,6 @@ export type ActionState = {
   message: string;
   data?: any;
 };
-
-// --- Firestore Write Test ---
-export async function testFirestoreWrite(
-  prevState: ActionState | undefined,
-  formData: FormData
-): Promise<ActionState> {
-  const db = getDb();
-  try {
-    const testDocRef = db.collection('_test_writes').doc(`server-test-${Date.now()}`);
-    await testDocRef.set({
-      timestamp: Timestamp.now(),
-      status: 'ok',
-      origin: 'server-action',
-    });
-    return {
-      status: 'success',
-      message: `Teste do SERVIDOR bem-sucedido. Escrita em _test_writes/${testDocRef.id}`,
-    };
-  } catch (error) {
-    console.error("Server-side Firestore write test failed:", error);
-    const errorMessage = error instanceof Error ? error.message : 'Ocorreu um erro desconhecido.';
-    return { status: 'error', message: `O teste de escrita do SERVIDOR falhou. Isso confirma que o ambiente do servidor não consegue se autenticar com o Firestore. Erro: ${errorMessage}` };
-  }
-}
-
-// --- Card Creation ---
-const CreateCardSchema = z.object({
-  saldo_inicial: z.coerce.number().min(0, 'Valor deve ser positivo.'),
-  nome_cliente: z.string().optional(),
-  telefone_cliente: z.string().min(1, 'O telefone é obrigatório.'),
-  usuario_responsavel: z.string().min(1, 'Usuário responsável é obrigatório.'),
-});
-
-export async function createCard(
-  prevState: ActionState | undefined,
-  formData: FormData
-): Promise<ActionState> {
-  const db = getDb();
-  try {
-    const validatedFields = CreateCardSchema.safeParse({
-      saldo_inicial: formData.get('saldo_inicial'),
-      nome_cliente: formData.get('nome_cliente'),
-      telefone_cliente: formData.get('telefone_cliente'),
-      usuario_responsavel: formData.get('usuario_responsavel'),
-    });
-
-    if (!validatedFields.success) {
-      return {
-        status: 'error',
-        message: 'Dados inválidos.',
-        data: validatedFields.error.flatten().fieldErrors,
-      };
-    }
-
-    const { saldo_inicial, nome_cliente, telefone_cliente, usuario_responsavel } = validatedFields.data;
-    const saldo_centavos = saldo_inicial * 100;
-    const qr_code_id = `festa-2025-${generateRandomId().slice(0, 18)}`;
-
-    const cardData = {
-        qr_code_id: qr_code_id,
-        saldo_centavos: saldo_centavos,
-        nome_cliente: nome_cliente ?? '',
-        telefone_cliente: telefone_cliente ?? '',
-        status: 'ATIVO',
-        created_at: Timestamp.now(),
-        updated_at: Timestamp.now(),
-    };
-
-    const cardDocRef = db.collection("cards").doc();
-    
-    // We create the card first
-    await cardDocRef.set(cardData);
-
-    // Then, if there's an initial balance, we create the transaction
-    if (saldo_centavos > 0) {
-        const transactionRef = db.collection("transactions").doc();
-        await transactionRef.set({
-            cartao_id: cardDocRef.id,
-            pdv_id: 'caixa_central', // Caixa Central
-            tipo: 'RECARGA',
-            valor_centavos: saldo_centavos,
-            created_at: Timestamp.now(),
-            usuario_responsavel: usuario_responsavel,
-        });
-    }
-
-     // Trigger notification flow (non-blocking), now with QR code image enabled.
-    notifyCardCreation(cardDocRef.id).catch(console.error);
-
-    const returnData = {
-      id: cardDocRef.id,
-      qr_code_id: cardData.qr_code_id,
-      saldo_centavos: cardData.saldo_centavos,
-      nome_cliente: cardData.nome_cliente,
-      telefone_cliente: cardData.telefone_cliente,
-      status: cardData.status,
-    };
-
-    return {
-      status: 'success',
-      message: 'Cartão criado com sucesso!',
-      data: returnData,
-    };
-  } catch (error) {
-    console.error(error);
-    const errorMessage = error instanceof Error ? error.message : 'Ocorreu um erro desconhecido.';
-    return { status: 'error', message: `Erro ao criar cartão: ${errorMessage}` };
-  }
-}
 
 // --- Card Details Update ---
 const UpdateCardDetailsSchema = z.object({
@@ -186,90 +72,6 @@ export async function updateCardDetails(
         const errorMessage = error instanceof Error ? error.message : 'Ocorreu um erro desconhecido.';
         return { status: 'error', message: `Erro ao atualizar cartão: ${errorMessage}` };
     }
-}
-
-
-// --- Recharge ---
-const RechargeSchema = z.object({
-  qr_code_id: z.string().min(1, 'QR Code ID é obrigatório.'),
-  valor_recarga: z.coerce.number().positive('Valor da recarga deve ser positivo.'),
-  usuario_responsavel: z.string().min(1, 'Usuário responsável é obrigatório.'),
-});
-
-export async function rechargeCard(
-  prevState: ActionState | undefined,
-  formData: FormData
-): Promise<ActionState> {
-  const db = getDb();
-  try {
-    const validatedFields = RechargeSchema.safeParse({
-      qr_code_id: formData.get('qr_code_id'),
-      valor_recarga: formData.get('valor_recarga'),
-      usuario_responsavel: formData.get('usuario_responsavel'),
-    });
-
-    if (!validatedFields.success) {
-      return {
-        status: 'error',
-        message: 'Dados inválidos.',
-        data: validatedFields.error.flatten().fieldErrors,
-      };
-    }
-
-    const { qr_code_id, valor_recarga, usuario_responsavel } = validatedFields.data;
-    
-    const cardsRef = db.collection('cards');
-    const q = cardsRef.where('qr_code_id', '==', qr_code_id);
-    const querySnapshot = await q.get();
-
-    if (querySnapshot.empty) {
-      return { status: 'error', message: 'Cartão não encontrado.' };
-    }
-        
-    const cardDoc = querySnapshot.docs[0];
-    const card = cardDoc.data() as Card;
-
-    if (card.status !== 'ATIVO') {
-      return { status: 'error', message: `Cartão com status ${card.status}` };
-    }
-
-    const valor_recarga_centavos = valor_recarga * 100;
-    const novo_saldo_centavos = card.saldo_centavos + valor_recarga_centavos;
-
-    const cardDocRef = db.collection('cards').doc(cardDoc.id);
-    
-    const batch = db.batch();
-    
-    batch.update(cardDocRef, {
-        saldo_centavos: novo_saldo_centavos,
-        updated_at: Timestamp.now()
-    });
-
-    const transactionRef = db.collection("transactions").doc();
-    batch.set(transactionRef, {
-      cartao_id: cardDoc.id,
-      pdv_id: 'caixa_central', // Caixa Central
-      tipo: 'RECARGA',
-      valor_centavos: valor_recarga_centavos,
-      created_at: Timestamp.now(),
-      usuario_responsavel: usuario_responsavel,
-    });
-    
-    await batch.commit();
-
-    // Trigger notification flow (non-blocking)
-    notifyRecharge(cardDoc.id, valor_recarga_centavos).catch(console.error);
-
-    return {
-      status: 'success',
-      message: 'Recarga efetuada com sucesso!',
-      data: { novo_saldo_centavos },
-    };
-  } catch (error) {
-    console.error(error);
-    const errorMessage = error instanceof Error ? error.message : 'Ocorreu um erro desconhecido.';
-    return { status: 'error', message: `Erro ao recarregar: ${errorMessage}` };
-  }
 }
 
 // --- Sale ---
@@ -482,157 +284,6 @@ export async function reverseTransaction(transactionId: string, responsibleUser:
         return { status: 'error', message: `Erro ao estornar: ${errorMessage}` };
     }
 }
-
-
-// --- Check Balance ---
-const CheckBalanceSchema = z.object({
-  qr_code_id: z.string().min(1, 'QR Code ID é obrigatório.'),
-});
-
-export async function getCardBalance(
-  prevState: ActionState | undefined,
-  formData: FormData
-): Promise<ActionState> {
-    const db = getDb();
-    try {
-        const validatedFields = CheckBalanceSchema.safeParse({
-            qr_code_id: formData.get('qr_code_id'),
-        });
-
-        if (!validatedFields.success) {
-            return {
-                status: 'error',
-                message: validatedFields.error.flatten().fieldErrors.qr_code_id?.[0] || 'QR Code ID inválido.',
-            };
-        }
-        
-        const { qr_code_id } = validatedFields.data;
-        
-        const cardsRef = db.collection('cards');
-        const q = cardsRef.where('qr_code_id', '==', qr_code_id);
-        
-        const querySnapshot = await q.get();
-        
-        if (querySnapshot.empty) {
-            return { status: 'error', message: 'Cartão não encontrado.' };
-        }
-        
-        const cardDoc = querySnapshot.docs[0];
-        const cardData = cardDoc.data() as Card;
-
-        const returnData = {
-          ...cardData,
-          id: cardDoc.id,
-          created_at: cardData.created_at ? (cardData.created_at as unknown as Timestamp).toDate().toISOString() : new Date().toISOString(),
-          updated_at: cardData.updated_at ? (cardData.updated_at as unknown as Timestamp).toDate().toISOString() : new Date().toISOString(),
-        }
-
-        return {
-            status: 'success',
-            message: 'Cartão encontrado.',
-            data: returnData
-        };
-
-    } catch (error) {
-        console.error(error);
-        const errorMessage = error instanceof Error ? error.message : 'Ocorreu um erro desconhecido.';
-        return { status: 'error', message: `Erro ao consultar saldo: ${errorMessage}` };
-    }
-}
-
-
-// --- Balance Transfer ---
-const TransferBalanceSchema = z.object({
-    origin_qr_code_id: z.string().min(1, 'ID do cartão de origem é obrigatório.'),
-    destination_qr_code_id: z.string().min(1, 'ID do cartão de destino é obrigatório.'),
-    valor_transferencia: z.coerce.number().positive('O valor deve ser positivo.'),
-    usuario_responsavel: z.string().min(1, 'Usuário responsável é obrigatório.'),
-}).refine(data => data.origin_qr_code_id !== data.destination_qr_code_id, {
-    message: 'O cartão de origem e destino não podem ser os mesmos.',
-    path: ['destination_qr_code_id'],
-});
-
-export async function transferBalance(prevState: ActionState | undefined, formData: FormData): Promise<ActionState> {
-    const db = getDb();
-    try {
-        const validatedFields = TransferBalanceSchema.safeParse(Object.fromEntries(formData.entries()));
-
-        if (!validatedFields.success) {
-            return {
-                status: 'error',
-                message: 'Dados inválidos.',
-                data: validatedFields.error.flatten().fieldErrors,
-            };
-        }
-
-        const { origin_qr_code_id, destination_qr_code_id, valor_transferencia, usuario_responsavel } = validatedFields.data;
-        const valor_centavos = valor_transferencia * 100;
-
-        const result = await db.runTransaction(async (t) => {
-            // Get origin card
-            const originCardsQuery = db.collection('cards').where('qr_code_id', '==', origin_qr_code_id).limit(1);
-            const originSnapshot = await t.get(originCardsQuery);
-            if (originSnapshot.empty) throw new Error('Cartão de origem não encontrado.');
-            const originCardDoc = originSnapshot.docs[0];
-            const originCard = originCardDoc.data() as Card;
-
-            // Get destination card
-            const destCardsQuery = db.collection('cards').where('qr_code_id', '==', destination_qr_code_id).limit(1);
-            const destSnapshot = await t.get(destCardsQuery);
-            if (destSnapshot.empty) throw new Error('Cartão de destino não encontrado.');
-            const destCardDoc = destSnapshot.docs[0];
-            const destCard = destCardDoc.data() as Card;
-
-            // Check if origin has enough balance
-            if (originCard.saldo_centavos < valor_centavos) {
-                throw new Error('Saldo insuficiente no cartão de origem.');
-            }
-
-            // Update balances
-            const newOriginBalance = originCard.saldo_centavos - valor_centavos;
-            const newDestBalance = destCard.saldo_centavos + valor_centavos;
-
-            t.update(originCardDoc.ref, { saldo_centavos: newOriginBalance, updated_at: Timestamp.now() });
-            t.update(destCardDoc.ref, { saldo_centavos: newDestBalance, updated_at: Timestamp.now() });
-
-            // Create transaction for origin
-            const originTxRef = db.collection('transactions').doc();
-            t.set(originTxRef, {
-                cartao_id: originCardDoc.id,
-                pdv_id: 'caixa_central',
-                tipo: 'TRANSFER_OUT',
-                valor_centavos: valor_centavos,
-                created_at: Timestamp.now(),
-                usuario_responsavel,
-            });
-
-            // Create transaction for destination
-            const destTxRef = db.collection('transactions').doc();
-            t.set(destTxRef, {
-                cartao_id: destCardDoc.id,
-                pdv_id: 'caixa_central',
-                tipo: 'TRANSFER_IN',
-                valor_centavos: valor_centavos,
-                created_at: Timestamp.now(),
-                usuario_responsavel,
-            });
-
-            return { newOriginBalance, newDestBalance, amountTransferred: valor_centavos };
-        });
-
-        return {
-            status: 'success',
-            message: `Transferência de ${formatCurrency(result.amountTransferred)} realizada!`,
-            data: result
-        };
-
-    } catch (error) {
-        console.error(error);
-        const errorMessage = error instanceof Error ? error.message : 'Ocorreu um erro desconhecido.';
-        return { status: 'error', message: `Erro na transferência: ${errorMessage}` };
-    }
-}
-
 
 // --- PDV / Menu ---
 export async function getPdvNameById(pdvId: string): Promise<string> {
