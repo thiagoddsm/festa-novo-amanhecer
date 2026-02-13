@@ -41,19 +41,20 @@ export async function testFirestoreWrite(
 ): Promise<ActionState> {
   const db = getDb();
   try {
-    const testDocRef = db.collection('_test_writes').doc(`test-${Date.now()}`);
+    const testDocRef = db.collection('_test_writes').doc(`server-test-${Date.now()}`);
     await testDocRef.set({
       timestamp: Timestamp.now(),
       status: 'ok',
+      origin: 'server-action',
     });
     return {
       status: 'success',
-      message: `Documento de teste escrito com sucesso em _test_writes/${testDocRef.id}`,
+      message: `Teste do SERVIDOR bem-sucedido. Escrita em _test_writes/${testDocRef.id}`,
     };
   } catch (error) {
-    console.error("Firestore write test failed:", error);
+    console.error("Server-side Firestore write test failed:", error);
     const errorMessage = error instanceof Error ? error.message : 'Ocorreu um erro desconhecido.';
-    return { status: 'error', message: `Falha no teste de escrita: ${errorMessage}` };
+    return { status: 'error', message: `O teste de escrita do SERVIDOR falhou. Isso confirma que o ambiente do servidor não consegue se autenticar com o Firestore. Erro: ${errorMessage}` };
   }
 }
 

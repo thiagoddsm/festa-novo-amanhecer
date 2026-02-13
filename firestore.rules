@@ -2,9 +2,9 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // ATENÇÃO: Essas regras permitem acesso total ao seu banco de dados.
-    // Elas são destinadas apenas para desenvolvimento e devem ser
-    // substituídas por regras de segurança adequadas antes da produção.
+    // ATENÇÃO: Regras 100% liberais para desenvolvimento.
+    // Permitem leitura e escrita em todo o banco de dados.
+    // SUBSTITUA por regras seguras antes de ir para produção.
     match /{document=**} {
       allow read, write: if true;
     }

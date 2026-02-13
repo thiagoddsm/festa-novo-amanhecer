@@ -1,8 +1,11 @@
 'use client';
 
-import React, { useActionState, useEffect, useRef, useState } from 'react';
-import { useFormStatus } from 'react-dom';
-import { createCard } from '@/lib/actions';
+import React, { useEffect, useRef, useState } from 'react';
+import { useFirestore, useAuth } from '@/firebase';
+import { collection, doc, writeBatch, Timestamp } from 'firebase/firestore';
+import { generateRandomId } from '@/lib/data';
+import { z } from 'zod';
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,31 +21,34 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { formatCurrency } from '@/lib/utils';
-import { QrCode, Loader2, User, Printer } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import type { Card as CardType } from '@/lib/definitions';
 import { toDataURL as generateQrCodeDataUrl } from 'qrcode';
-import { useAuth } from '@/hooks/use-auth-context';
 
 
-const initialState = {
-  status: 'idle' as 'idle' |'success' | 'error',
-  message: '',
-};
+// Schema for client-side validation
+const CreateCardSchema = z.object({
+  saldo_inicial: z.coerce.number().min(0, 'Valor deve ser positivo.'),
+  nome_cliente: z.string().optional(),
+  telefone_cliente: z.string().min(1, 'O telefone é obrigatório.'),
+});
 
-function SubmitButton() {
-  const { pending } = useFormStatus();
+
+function SubmitButton({ isPending }: { isPending: boolean }) {
   return (
-    <Button type="submit" disabled={pending} className="w-full">
-      {pending ? <Loader2 className="animate-spin" /> : 'Criar Novo Cartão'}
+    <Button type="submit" disabled={isPending} className="w-full">
+      {isPending ? <Loader2 className="animate-spin" /> : 'Criar Novo Cartão'}
     </Button>
   );
 }
 
 export default function CreateCardForm() {
   const { user } = useAuth();
-  const [state, formAction] = useActionState(createCard, initialState);
+  const firestore = useFirestore();
   const { toast } = useToast();
   const formRef = useRef<HTMLFormElement>(null);
+  
+  const [isPending, setIsPending] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [newCard, setNewCard] = useState<CardType | null>(null);
 
@@ -142,28 +148,84 @@ export default function CreateCardForm() {
       formRef.current?.reset();
   }
 
-  useEffect(() => {
-    if (!state) return;
-    if (state.status === 'error') {
-      toast({
-        variant: 'destructive',
-        title: 'Erro ao criar cartão',
-        description: state.message,
-      });
-      setNewCard(null);
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!user || !firestore) {
+        toast({ variant: 'destructive', title: 'Erro', description: 'Usuário não autenticado ou conexão indisponível.' });
+        return;
     }
-    if (state.status === 'success' && state.data) {
-      const cardData = state.data as CardType;
-      setNewCard(cardData);
-      setDialogOpen(true);
-      formRef.current?.reset();
-      
-      // Delay to allow state to update before printing
-      setTimeout(() => {
-          handlePrint(cardData);
-      }, 100);
+    setIsPending(true);
+
+    const formData = new FormData(e.currentTarget);
+    const validatedFields = CreateCardSchema.safeParse(Object.fromEntries(formData.entries()));
+
+    if (!validatedFields.success) {
+      const errors = validatedFields.error.flatten().fieldErrors;
+      const firstError = Object.values(errors)[0]?.[0] || 'Dados inválidos.';
+      toast({ variant: 'destructive', title: 'Erro de Validação', description: firstError });
+      setIsPending(false);
+      return;
     }
-  }, [state, toast]);
+
+    try {
+        const { saldo_inicial, nome_cliente, telefone_cliente } = validatedFields.data;
+        const saldo_centavos = saldo_inicial * 100;
+        const qr_code_id = `festa-2025-${generateRandomId().slice(0, 18)}`;
+        const now = Timestamp.now();
+
+        const cardData = {
+            qr_code_id,
+            saldo_centavos,
+            nome_cliente: nome_cliente ?? '',
+            telefone_cliente: telefone_cliente ?? '',
+            status: 'ATIVO' as const,
+            created_at: now,
+            updated_at: now,
+        };
+
+        const batch = writeBatch(firestore);
+
+        const cardDocRef = doc(collection(firestore, "cards"));
+        batch.set(cardDocRef, cardData);
+
+        if (saldo_centavos > 0) {
+            const transactionRef = doc(collection(firestore, "transactions"));
+            batch.set(transactionRef, {
+                cartao_id: cardDocRef.id,
+                pdv_id: 'caixa_central',
+                tipo: 'RECARGA' as const,
+                valor_centavos: saldo_centavos,
+                created_at: now,
+                usuario_responsavel: user.name || 'Caixa',
+            });
+        }
+        
+        await batch.commit();
+
+        const createdCard = { id: cardDocRef.id, ...cardData };
+        setNewCard(createdCard);
+        setDialogOpen(true);
+        formRef.current?.reset();
+        
+        // Delay print slightly
+        setTimeout(() => handlePrint(createdCard as CardType), 100);
+
+        // TODO: Re-implement notification by calling a server action here.
+        // For now, focusing on core functionality.
+
+    } catch (error) {
+        console.error("Client-side card creation failed:", error);
+        const message = error instanceof Error ? error.message : 'Ocorreu um erro desconhecido.';
+        toast({
+            variant: 'destructive',
+            title: 'Erro ao Criar Cartão',
+            description: `A operação falhou no navegador. Verifique sua conexão e as permissões. Erro: ${message}`,
+        });
+    } finally {
+        setIsPending(false);
+    }
+  }
+
 
   return (
     <>
@@ -175,8 +237,7 @@ export default function CreateCardForm() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form ref={formRef} action={formAction} className="space-y-4">
-            <input type="hidden" name="usuario_responsavel" value={user?.name || 'Sistema'} />
+          <form ref={formRef} onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="nome_cliente">Nome do Cliente (Opcional)</Label>
               <Input
@@ -205,7 +266,7 @@ export default function CreateCardForm() {
                 required
               />
             </div>
-            <SubmitButton />
+            <SubmitButton isPending={isPending} />
           </form>
         </CardContent>
         {newCard && (
