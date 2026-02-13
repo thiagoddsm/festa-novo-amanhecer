@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import { useFirestore, useAuth } from '@/firebase';
+import { useFirestore } from '@/firebase';
+import { useAuth } from '@/hooks/use-auth-context';
 import { collection, doc, writeBatch, Timestamp } from 'firebase/firestore';
 import { generateRandomId } from '@/lib/data';
 import { z } from 'zod';

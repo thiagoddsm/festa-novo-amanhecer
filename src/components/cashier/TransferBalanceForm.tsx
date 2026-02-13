@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { useFirestore, useAuth } from '@/firebase';
+import { useFirestore } from '@/firebase';
+import { useAuth } from '@/hooks/use-auth-context';
 import { collection, query, where, doc, runTransaction, Timestamp } from 'firebase/firestore';
 import { z } from 'zod';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';

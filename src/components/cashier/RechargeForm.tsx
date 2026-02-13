@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { useFirestore, useAuth } from '@/firebase';
+import { useFirestore } from '@/firebase';
+import { useAuth } from '@/hooks/use-auth-context';
 import { collection, query, where, getDocs, writeBatch, Timestamp, doc } from 'firebase/firestore';
 import { z } from 'zod';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -45,7 +46,7 @@ export default function RechargeForm() {
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!user || !firestore) {
-      toast({ variant: 'destructive', title: 'Erro', description: 'Usuário não autenticado.' });
+      toast({ variant: 'destructive', title: 'Erro', description: 'Usuário não autenticado ou conexão indisponível.' });
       return;
     }
     setIsPending(true);
