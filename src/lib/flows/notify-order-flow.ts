@@ -1,15 +1,21 @@
 'use server';
 
-import { initializeApp, getApps, getApp, App, applicationDefault } from 'firebase-admin/app';
+import { initializeApp, getApps, App, applicationDefault } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import type { Order, Transaction, Card } from '../definitions';
 import { notifyCustomMessage } from './notify-flow';
 
 // --- Initialization ---
 
-function getAdminApp(): App {
-  if (getApps().length > 0) return getApp();
-  return initializeApp({ credential: applicationDefault() });
+function getFirebaseAdmin() {
+  if (getApps().length === 0) {
+    initializeApp({
+      credential: applicationDefault(),
+    });
+  }
+  return {
+    db: getFirestore(),
+  };
 }
 
 // --- Flow Logic ---
@@ -27,7 +33,7 @@ type NotifyResult = {
  * @param orderId The ID of the order that is ready.
  */
 export async function notifyOrderReady(orderId: string): Promise<void> {
-    const db = getFirestore(getAdminApp());
+    const { db } = getFirebaseAdmin();
     try {
         // 1. Fetch the Order
         const orderRef = db.collection('orders').doc(orderId);

@@ -1,6 +1,6 @@
 'use server';
 
-import { initializeApp, getApps, getApp, App, applicationDefault } from 'firebase-admin/app';
+import { initializeApp, getApps, App, applicationDefault } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import type { Card } from '../definitions';
 import { formatCurrency } from '@/lib/utils';
@@ -8,9 +8,15 @@ import { sendWhatsappMessage, sendWhatsappImage } from '@/lib/whatsapp';
 
 // --- Initialization ---
 
-function getAdminApp(): App {
-  if (getApps().length > 0) return getApp();
-  return initializeApp({ credential: applicationDefault() });
+function getFirebaseAdmin() {
+  if (getApps().length === 0) {
+    initializeApp({
+      credential: applicationDefault(),
+    });
+  }
+  return {
+    db: getFirestore(),
+  };
 }
 
 // --- Flow Logic ---
@@ -32,7 +38,7 @@ async function sendCardNotification(
         sendQrImage?: boolean;
     }
 ): Promise<NotifyResult> {
-     const db = getFirestore(getAdminApp());
+     const { db } = getFirebaseAdmin();
      const testCardData: Card = { 
         id: 'test-card-id', 
         nome_cliente: 'Cliente Teste', 
