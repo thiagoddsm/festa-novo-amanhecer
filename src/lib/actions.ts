@@ -34,6 +34,29 @@ export type ActionState = {
   data?: any;
 };
 
+// --- Firestore Write Test ---
+export async function testFirestoreWrite(
+  prevState: ActionState | undefined,
+  formData: FormData
+): Promise<ActionState> {
+  const db = getDb();
+  try {
+    const testDocRef = db.collection('_test_writes').doc(`test-${Date.now()}`);
+    await testDocRef.set({
+      timestamp: Timestamp.now(),
+      status: 'ok',
+    });
+    return {
+      status: 'success',
+      message: `Documento de teste escrito com sucesso em _test_writes/${testDocRef.id}`,
+    };
+  } catch (error) {
+    console.error("Firestore write test failed:", error);
+    const errorMessage = error instanceof Error ? error.message : 'Ocorreu um erro desconhecido.';
+    return { status: 'error', message: `Falha no teste de escrita: ${errorMessage}` };
+  }
+}
+
 // --- Card Creation ---
 const CreateCardSchema = z.object({
   saldo_inicial: z.coerce.number().min(0, 'Valor deve ser positivo.'),
