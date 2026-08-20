@@ -91,6 +91,8 @@ const SaleSchema = z.object({
     items: z.array(SaleItemSchema).min(1, "O carrinho está vazio."),
     total_venda: z.coerce.number().positive('Valor da venda deve ser positivo.'),
     usuario_responsavel: z.string().min(1, 'Usuário responsável é obrigatório.'),
+    tenant_id: z.string().optional(),
+    event_id: z.string().optional(),
 });
 
 export async function processSale(
@@ -109,6 +111,8 @@ export async function processSale(
             items: items,
             total_venda: total_venda,
             usuario_responsavel: formData.get('usuario_responsavel'),
+            tenant_id: formData.get('tenant_id') || undefined,
+            event_id: formData.get('event_id') || undefined,
         });
 
         if (!validatedFields.success) {
@@ -120,7 +124,7 @@ export async function processSale(
             };
         }
 
-        const { qr_code_id, pdv_id, pdv_nome, total_venda: valor_venda_centavos, usuario_responsavel } = validatedFields.data;
+        const { qr_code_id, pdv_id, pdv_nome, total_venda: valor_venda_centavos, usuario_responsavel, tenant_id, event_id } = validatedFields.data;
 
         const cardsRef = db.collection('cards');
         const q = cardsRef.where('qr_code_id', '==', qr_code_id);
@@ -162,6 +166,8 @@ export async function processSale(
           created_at: Timestamp.now(),
           items: validatedFields.data.items, // This now includes observations
           usuario_responsavel: usuario_responsavel,
+          tenant_id: tenant_id || null,
+          event_id: event_id || null,
         });
 
         // 3. Create order record
@@ -177,6 +183,8 @@ export async function processSale(
             updated_at: Timestamp.now(),
             items: validatedFields.data.items, // This now includes observations
             order_number: `#${orderId.substring(0, 4).toUpperCase()}`,
+            tenant_id: tenant_id || null,
+            event_id: event_id || null,
         });
 
         await batch.commit();
@@ -263,7 +271,7 @@ export async function reverseTransaction(transactionId: string, responsibleUser:
                 pdv_id: originalTx.pdv_id,
                 tipo: 'REEMBOLSO',
                 valor_centavos: originalTx.valor_centavos,
-                created_at: Timestamp.now(),
+                created_at: Timestamp.now() as any,
                 usuario_responsavel: responsibleUser,
                 reversed_tx_id: transactionId,
                 items: originalTx.items || [],
@@ -373,6 +381,148 @@ export async function deleteMenuItem(pdvId: string, itemId: string): Promise<Act
     return { status: 'success', message: 'Item excluído com sucesso!' };
   } catch (error) {
     return { status: 'error', message: 'Erro ao excluir item.' };
+  }
+}
+
+// --- PDV Management ---
+const CreatePdvSchema = z.object({
+  nome: z.string().min(1, 'Nome do PDV é obrigatório.'),
+  tenant_id: z.string().optional(),
+  event_id: z.string().optional(),
+});
+
+export async function createPdv(prevState: ActionState | undefined, formData: FormData): Promise<ActionState> {
+  const db = getDb();
+  const validated = CreatePdvSchema.safeParse({
+    nome: formData.get('nome'),
+    tenant_id: formData.get('tenant_id') || undefined,
+    event_id: formData.get('event_id') || undefined,
+  });
+
+  if (!validated.success) {
+    return { status: 'error', message: 'Nome inválido.' };
+  }
+
+  try {
+    const { nome, tenant_id, event_id } = validated.data;
+    const pdvRef = await db.collection('pdvs').add({
+      nome,
+      tenant_id: tenant_id || null,
+      event_id: event_id || null,
+      created_at: Timestamp.now(),
+    });
+
+    return { status: 'success', message: `PDV "${nome}" criado com sucesso!`, data: { id: pdvRef.id } };
+  } catch (error) {
+    console.error(error);
+    return { status: 'error', message: 'Erro ao criar PDV.' };
+  }
+}
+
+export async function updatePdv(pdvId: string, nome: string): Promise<ActionState> {
+  const db = getDb();
+  if (!pdvId || !nome.trim()) {
+    return { status: 'error', message: 'Dados inválidos.' };
+  }
+
+  try {
+    await db.collection('pdvs').doc(pdvId).update({
+      nome: nome.trim(),
+      updated_at: Timestamp.now(),
+    });
+    return { status: 'success', message: 'PDV atualizado com sucesso!' };
+  } catch (error) {
+    return { status: 'error', message: 'Erro ao atualizar PDV.' };
+  }
+}
+
+export async function deletePdv(pdvId: string): Promise<ActionState> {
+  const db = getDb();
+  if (!pdvId) {
+    return { status: 'error', message: 'ID inválido.' };
+  }
+
+  try {
+    // Delete all menu items inside pdv
+    const menuItemsSnap = await db.collection('pdvs').doc(pdvId).collection('menuItems').get();
+    const batch = db.batch();
+    menuItemsSnap.docs.forEach((doc) => batch.delete(doc.ref));
+    batch.delete(db.collection('pdvs').doc(pdvId));
+    await batch.commit();
+
+    return { status: 'success', message: 'PDV e seu cardápio excluídos com sucesso!' };
+  } catch (error) {
+    console.error(error);
+    return { status: 'error', message: 'Erro ao excluir PDV.' };
+  }
+}
+
+export async function seedDefaultPdvs(tenantId: string, eventId: string): Promise<ActionState> {
+  const db = getDb();
+  if (!tenantId || !eventId) {
+    return { status: 'error', message: 'Organização e Evento são obrigatórios para inicializar barracas.' };
+  }
+
+  try {
+    const defaultPdvs = [
+      {
+        nome: 'Barraca de Bebidas',
+        menu: [
+          { nome: 'Refrigerante Lata', preco_centavos: 600, ingredientes: ['Lata 350ml'] },
+          { nome: 'Água Mineral', preco_centavos: 400, ingredientes: ['Garrafa 500ml'] },
+          { nome: 'Suco Natural', preco_centavos: 800, ingredientes: ['Copo 300ml'] },
+          { nome: 'Cerveja Lata', preco_centavos: 800, ingredientes: ['Lata 350ml'] },
+        ],
+      },
+      {
+        nome: 'Barraca do Pastel',
+        menu: [
+          { nome: 'Pastel de Carne', preco_centavos: 1000, ingredientes: ['Carne moída', 'Massa artesanal'] },
+          { nome: 'Pastel de Queijo', preco_centavos: 1000, ingredientes: ['Mussarela', 'Orégano'] },
+          { nome: 'Pastel de Pizza', preco_centavos: 1200, ingredientes: ['Queijo', 'Presunto', 'Tomate', 'Orégano'] },
+          { nome: 'Pastel Doce', preco_centavos: 1000, ingredientes: ['Nutella', 'Banana'] },
+        ],
+      },
+      {
+        nome: 'Barraca do Churrasco',
+        menu: [
+          { nome: 'Espetinho de Carne', preco_centavos: 1200, ingredientes: ['Alcatra', 'Farofa', 'Vinagrete'] },
+          { nome: 'Espetinho de Frango', preco_centavos: 1000, ingredientes: ['Peito de frango com bacon'] },
+          { nome: 'Espetinho de Linguiça', preco_centavos: 1000, ingredientes: ['Linguiça toscana'] },
+          { nome: 'Pão de Alho', preco_centavos: 800, ingredientes: ['Pão com pasta de alho e queijo'] },
+        ],
+      },
+      {
+        nome: 'Barraca de Doces',
+        menu: [
+          { nome: 'Bolo no Pote', preco_centavos: 1000, ingredientes: ['Chocolate', 'Cenoura com brigadeiro'] },
+          { nome: 'Brigadeiro Gourmet (Un)', preco_centavos: 400, ingredientes: ['Chocolate nobre'] },
+          { nome: 'Churros com Doce de Leite', preco_centavos: 800, ingredientes: ['Açúcar e canela'] },
+          { nome: 'Pudim Fatia', preco_centavos: 700, ingredientes: ['Calda de caramelo'] },
+        ],
+      },
+    ];
+
+    for (const pdvData of defaultPdvs) {
+      const pdvRef = await db.collection('pdvs').add({
+        nome: pdvData.nome,
+        tenant_id: tenantId,
+        event_id: eventId,
+        created_at: Timestamp.now(),
+      });
+
+      const menuBatch = db.batch();
+      for (const item of pdvData.menu) {
+        const itemRef = pdvRef.collection('menuItems').doc();
+        menuBatch.set(itemRef, item);
+      }
+      await menuBatch.commit();
+    }
+
+    return { status: 'success', message: '4 barracas padrão e seus cardápios foram criados com sucesso!' };
+  } catch (error) {
+    console.error(error);
+    return { status: 'error', message: 'Erro ao inicializar barracas.' };
   }
 }
 
@@ -533,8 +683,13 @@ export async function createUser(prevState: ActionState | undefined, formData: F
         email: z.string().email('Email inválido.'),
         password: z.string().min(6, 'A senha deve ter pelo menos 6 caracteres.'),
         name: z.string().min(1, 'O nome é obrigatório.'),
-        role: z.enum(['ADMIN', 'CAIXA', 'PDV'], { required_error: 'A função é obrigatória.' }),
+        role: z.enum(
+            ['SUPERADMIN', 'ADMIN_ORGANIZACAO', 'ADMIN_EVENTO', 'CAIXA', 'PDV'],
+            { required_error: 'A função é obrigatória.' },
+        ),
         pdvId: z.string().optional(),
+        tenantId: z.string().optional(),
+        eventId: z.string().optional(),
     }).refine(data => data.role !== 'PDV' || !!data.pdvId, {
         message: "PDV é obrigatório para a função PDV",
         path: ["pdvId"],
@@ -546,7 +701,17 @@ export async function createUser(prevState: ActionState | undefined, formData: F
         return { status: 'error', message: 'Dados inválidos.', data: validatedFields.error.flatten().fieldErrors };
     }
 
-    const { email, password, name, role, pdvId } = validatedFields.data;
+    const { email, password, name, role, pdvId, tenantId, eventId } = validatedFields.data;
+
+    // Build tenant access map when tenantId is provided
+    const tenantsMap = tenantId
+        ? {
+            [tenantId]: {
+                role: eventId ? 'CAIXA' : 'ADMIN',
+                ...(eventId ? { allowedEventIds: [eventId] } : {}),
+            },
+          }
+        : undefined;
 
     try {
         const userRecord = await auth.createUser({
@@ -557,12 +722,16 @@ export async function createUser(prevState: ActionState | undefined, formData: F
 
         await auth.setCustomUserClaims(userRecord.uid, { role });
 
-        const userProfile = {
+        const userProfile: Record<string, unknown> = {
             name,
             email,
             role,
-            pdvId: role === 'PDV' ? pdvId : null,
+            pdvId: role === 'PDV' ? (pdvId ?? null) : null,
         };
+
+        if (tenantsMap) {
+            userProfile.tenants = tenantsMap;
+        }
 
         await db.collection('users').doc(userRecord.uid).set(userProfile);
 
@@ -575,3 +744,4 @@ export async function createUser(prevState: ActionState | undefined, formData: F
         return { status: 'error', message: 'Erro ao criar usuário.' };
     }
 }
+

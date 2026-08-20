@@ -1,26 +1,42 @@
 import type { User as FirebaseUser } from 'firebase/auth';
+import type { UserRole, TenantAccess } from './definitions';
 
-export type UserRole = 'ADMIN' | 'CAIXA' | 'PDV' | 'VISITANTE';
+export type { UserRole };
 
 export type AuthenticatedUser = {
   uid: string;
   email: string | null;
   name: string | null;
   role: UserRole;
-  pdvId?: string; // Associated PDV if the role is PDV
+  pdvId?: string;
+  /** Mapa de tenantId → acesso dentro daquele tenant. */
+  tenants?: { [tenantId: string]: TenantAccess };
+  requestedTenantId?: string;
+  requestedEventId?: string;
 };
 
-// This function maps the Firebase User object and the user profile from Firestore
-// to a single AuthenticatedUser object.
+// Maps Firebase Auth user + Firestore profile → AuthenticatedUser
 export const mapFirebaseAuthToAuthenticatedUser = (
   firebaseUser: FirebaseUser,
   userProfile: { [key: string]: any }
 ): AuthenticatedUser => {
+  const isMasterAdmin = firebaseUser.email === 'thiagoddsm@gmail.com';
+  let role: UserRole = userProfile?.role || 'VISITANTE';
+  if (isMasterAdmin) {
+    role = 'SUPERADMIN';
+  } else if ((role as string) === 'ADMIN') {
+    role = 'ADMIN_ORGANIZACAO';
+  }
+
   return {
     uid: firebaseUser.uid,
     email: firebaseUser.email,
-    name: userProfile.name || firebaseUser.displayName || "Usuário",
-    role: userProfile.role || 'VISITANTE', // Default to VISITANTE if role is not set
-    pdvId: userProfile.pdvId,
+    name: userProfile?.name || userProfile?.nome || firebaseUser.displayName || 'Usuário',
+    role,
+    pdvId: userProfile?.pdvId,
+    tenants: userProfile?.tenants,
+    requestedTenantId: userProfile?.requestedTenantId,
+    requestedEventId: userProfile?.requestedEventId,
   };
 };
+

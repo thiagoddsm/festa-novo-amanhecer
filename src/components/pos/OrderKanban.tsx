@@ -17,6 +17,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import { Button } from '../ui/button';
 import { formatDateTime } from '@/lib/utils';
+import { useTenant } from '@/hooks/use-tenant-context';
 
 
 type OrderStatus = 'EM_PREPARO' | 'PRONTO' | 'ENTREGUE';
@@ -48,7 +49,7 @@ const KanbanColumn = ({ title, variant, orders, status, isPending }: {
 
     return (
         <Card
-            ref={drop}
+            ref={(node) => { drop(node); }}
             className={cn(
                 "flex-1 flex flex-col min-w-[300px] transition-colors",
                 isOver ? 'bg-accent' : ''
@@ -127,7 +128,7 @@ const OrderCard = ({ order }: { order: Order }) => {
     
     return (
     <Card
-        ref={drag}
+        ref={(node) => { drag(node); }}
         className={cn(
             "cursor-grab bg-card active:cursor-grabbing",
             isDragging ? 'opacity-50' : 'opacity-100',
@@ -172,6 +173,7 @@ const OrderCard = ({ order }: { order: Order }) => {
 
 function KanbanBoard({ pdvId }: { pdvId: string }) {
     const firestore = useFirestore();
+    const { currentTenant, currentEvent } = useTenant();
     const { toast } = useToast();
     const [orders, setOrders] = useState<Order[] | null>(null);
 
@@ -195,14 +197,21 @@ function KanbanBoard({ pdvId }: { pdvId: string }) {
                 return dateA.getTime() - dateB.getTime();
             });
 
-            setOrders(fetchedOrders);
+            // Filter by tenant and event
+            const filteredOrders = fetchedOrders.filter((order) => {
+                if (currentTenant && order.tenant_id && order.tenant_id !== currentTenant.id) return false;
+                if (currentEvent && order.event_id && order.event_id !== currentEvent.id) return false;
+                return true;
+            });
+
+            setOrders(filteredOrders);
         }, (error) => {
             console.error("Error fetching orders:", error);
             toast({ variant: 'destructive', title: 'Erro ao buscar pedidos', description: 'Não foi possível carregar os pedidos em tempo real.' });
         });
 
         return () => unsubscribe();
-    }, [firestore, pdvId, toast]);
+    }, [firestore, pdvId, currentTenant, currentEvent, toast]);
     
     // Automatically archive delivered orders after 5 minutes
     useEffect(() => {

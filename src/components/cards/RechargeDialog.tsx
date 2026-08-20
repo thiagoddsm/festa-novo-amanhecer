@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react';
 import { useFirestore } from '@/firebase';
 import { useAuth } from '@/hooks/use-auth-context';
+import { useTenant } from '@/hooks/use-tenant-context';
 import { doc, writeBatch, Timestamp, collection } from 'firebase/firestore';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
@@ -40,11 +41,12 @@ function SubmitButton({ isPending }: { isPending: boolean }) {
 
 export default function RechargeDialog({ card }: { card: Card }) {
   const [open, setOpen] = useState(false);
+  const { user } = useAuth();
+  const { currentTenant, currentEvent } = useTenant();
+  const firestore = useFirestore();
   const { toast } = useToast();
   const formRef = useRef<HTMLFormElement>(null);
   const [isPending, setIsPending] = useState(false);
-  const { user } = useAuth();
-  const firestore = useFirestore();
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -89,6 +91,8 @@ export default function RechargeDialog({ card }: { card: Card }) {
             valor_centavos: valor_recarga_centavos,
             created_at: Timestamp.now(),
             usuario_responsavel: user.name || 'Caixa',
+            tenant_id: currentTenant?.id ?? null,
+            event_id: currentEvent?.id ?? null,
         });
         
         await batch.commit();

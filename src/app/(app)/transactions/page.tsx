@@ -112,7 +112,7 @@ const getTipoVariant = (tipo: string) => {
     }
     
     // Disable if transaction is a refund or transfer
-    if (transaction.tipo === 'REEMBOLSO' || transaction.tipo === 'TRANSFER_IN' || transaction.tipo === 'TRANSFER_OUT' || !user || user.role !== 'ADMIN') {
+    if (transaction.tipo === 'REEMBOLSO' || transaction.tipo === 'TRANSFER_IN' || transaction.tipo === 'TRANSFER_OUT' || !user || !['SUPERADMIN', 'ADMIN_ORGANIZACAO'].includes(user.role ?? '')) {
         return null;
     }
 
@@ -269,12 +269,24 @@ const generatePDF = (filteredData: Row<TransactionDetails>[]) => {
     doc.save(`relatorio_transacoes_${Date.now()}.pdf`);
 };
 
+import { useTenant } from '@/hooks/use-tenant-context';
+
 export default function TransactionsPage() {
   const { user } = useAuth();
+  const { currentTenant, currentEvent } = useTenant();
   const { transactions: allTransactions, pdvs, isLoading } = useTransactionDetails();
   const { toast } = useToast();
   
   const columns = useMemo(() => getColumns(user), [user]);
+
+  const filteredTransactions = useMemo(() => {
+    if (!allTransactions) return [];
+    return allTransactions.filter((tx) => {
+      if (currentTenant && tx.tenant_id && tx.tenant_id !== currentTenant.id) return false;
+      if (currentEvent && tx.event_id && tx.event_id !== currentEvent.id) return false;
+      return true;
+    });
+  }, [allTransactions, currentTenant, currentEvent]);
 
   const pdvOptions = useMemo(() => {
     const options = pdvs.map(pdv => ({ value: pdv.nome, label: pdv.nome }));
@@ -316,10 +328,10 @@ export default function TransactionsPage() {
         ) : (
           <DataTable
             columns={columns}
-            data={allTransactions || []}
+            data={filteredTransactions}
             renderSubComponent={SubRowComponent}
             onGeneratePdf={generatePDF}
-            onDeleteSelected={user?.role === 'ADMIN' ? handleDeleteSelected : undefined}
+            onDeleteSelected={['SUPERADMIN', 'ADMIN_ORGANIZACAO'].includes(user?.role ?? '') ? handleDeleteSelected : undefined}
             filterColumns={[
                 {
                     columnId: 'card_qr_code_id',

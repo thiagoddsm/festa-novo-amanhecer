@@ -30,7 +30,6 @@ const checkAndCreateUserProfile = async (firestore: any, user: User): Promise<vo
     try {
         const docSnap = await getDoc(userDocRef);
         
-        // Specific override to make a certain user an admin.
         const isMasterAdmin = user.email === 'thiagoddsm@gmail.com';
 
         if (!docSnap.exists()) {
@@ -42,20 +41,23 @@ const checkAndCreateUserProfile = async (firestore: any, user: User): Promise<vo
             const newUserProfile = {
                 name: user.displayName || user.email || 'Novo Usuário',
                 email: user.email,
-                role: isMasterAdmin || isFirstUser ? 'ADMIN' : 'VISITANTE', // Make master user or first user an ADMIN, others VISITANTE
+                // Master admin → SUPERADMIN; first user → ADMIN_ORGANIZACAO; everyone else → VISITANTE
+                role: isMasterAdmin ? 'SUPERADMIN' : isFirstUser ? 'ADMIN_ORGANIZACAO' : 'VISITANTE',
                 pdvId: null,
+                tenants: {},
             };
             await setDoc(userDocRef, newUserProfile);
-            console.log(`Created profile for new user: ${user.uid} with role: ${newUserProfile.role}`);
-        } else if (isMasterAdmin && docSnap.data()?.role !== 'ADMIN') {
-            // If the master user exists but is not an admin, promote them.
-            console.log(`Promoting ${user.email} to ADMIN.`);
-            await setDoc(userDocRef, { role: 'ADMIN' }, { merge: true });
+            console.log(`Created profile for ${user.uid} with role: ${newUserProfile.role}`);
+        } else if (isMasterAdmin && docSnap.data()?.role !== 'SUPERADMIN') {
+            // Ensure master admin always has SUPERADMIN role
+            console.log(`Promoting ${user.email} to SUPERADMIN.`);
+            await setDoc(userDocRef, { role: 'SUPERADMIN' }, { merge: true });
         }
     } catch (error) {
-        console.error("Error in checkAndCreateUserProfile: ", error);
+        console.error('Error in checkAndCreateUserProfile: ', error);
     }
 };
+
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const auth = useFirebaseAuth();

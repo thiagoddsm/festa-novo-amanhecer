@@ -23,6 +23,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import OrderKanban from './OrderKanban';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Label } from '../ui/label';
+import { useTenant } from '@/hooks/use-tenant-context';
 import { Checkbox } from '../ui/checkbox';
 import { useAuth } from '@/hooks/use-auth-context';
 
@@ -146,6 +147,7 @@ function ObservationDialog({ item, onSave }: { item: CartItem; onSave: (observat
 
 export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv, onGoBack: () => void }) {
   const { user } = useAuth();
+  const { currentTenant, currentEvent } = useTenant();
   const { toast } = useToast();
   const firestore = useFirestore();
 
@@ -273,25 +275,37 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv, onGoBack: ()
         </div>
         <TabsContent value="venda">
             <div className="flex flex-col lg:flex-row gap-2 md:gap-4 items-start">
-                <Card className="flex-1 w-full lg:w-3/5">
-                <CardHeader className="p-4 md:p-6">
+                <Card className="flex-1 w-full lg:w-3/5 shadow-sm border-border/60">
+                <CardHeader className="p-4 md:p-6 pb-2">
                     <div className="flex justify-between items-center">
                         <div className='flex items-center gap-2'>
-                            <CardTitle>Cardápio</CardTitle>
-                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setIsMenuSheetOpen(true)}>
+                            <CardTitle className="text-xl font-bold">Cardápio</CardTitle>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={() => setIsMenuSheetOpen(true)}>
                                 <Pencil className="h-4 w-4" />
                             </Button>
                         </div>
                     </div>
                     <CardDescription>Vendendo em: <span className='font-semibold text-primary'>{pdv.nome}</span></CardDescription>
                 </CardHeader>
-                <CardContent className="p-2 md:p-3 grid grid-cols-2 md:grid-cols-3 gap-2 md:gap-3">
-                    {menuItems === null && Array.from({length: 6}).map((_, i) => <Skeleton key={i} className="h-20 md:h-24 w-full" />)}
-                    {menuItems && menuItems.length === 0 && <p className='col-span-full text-center text-muted-foreground'>Nenhum item no cardápio para este PDV.</p>}
+                <CardContent className="p-3 md:p-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {menuItems === null && Array.from({length: 6}).map((_, i) => <Skeleton key={i} className="h-24 w-full rounded-xl" />)}
+                    {menuItems && menuItems.length === 0 && (
+                      <div className='col-span-full py-12 text-center text-muted-foreground bg-muted/30 rounded-xl border border-dashed'>
+                        Nenhum item no cardápio para este PDV.
+                      </div>
+                    )}
                     {menuItems && menuItems.map(item => (
-                    <Button key={item.id} variant="outline" className="h-20 md:h-24 flex-col justify-center" onClick={() => addToCart(item)}>
-                        <span className="text-sm md:text-base text-center">{item.nome}</span>
-                        <span className="text-sm font-bold">{formatCurrency(item.preco_centavos)}</span>
+                    <Button 
+                      key={item.id} 
+                      variant="outline" 
+                      className="h-24 flex-col justify-between items-stretch p-3 text-left hover:border-primary/50 hover:bg-primary/5 transition-all duration-200 group relative overflow-hidden rounded-xl border-border/80 shadow-xs" 
+                      onClick={() => addToCart(item)}
+                    >
+                        <span className="text-sm font-semibold text-foreground line-clamp-2 leading-tight group-hover:text-primary transition-colors">{item.nome}</span>
+                        <div className="flex items-center justify-between mt-1">
+                          <span className="text-base font-bold text-primary">{formatCurrency(item.preco_centavos)}</span>
+                          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-muted text-muted-foreground group-hover:bg-primary group-hover:text-primary-foreground transition-colors">+ Adicionar</span>
+                        </div>
                     </Button>
                     ))}
                 </CardContent>
@@ -355,6 +369,8 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv, onGoBack: ()
                                 <input type="hidden" name="items" value={JSON.stringify(cart)} />
                                 <input type="hidden" name="total_venda" value={total} />
                                 <input type="hidden" name="usuario_responsavel" value={user?.name || 'Sistema'} />
+                                <input type="hidden" name="tenant_id" value={currentTenant?.id || ''} />
+                                <input type="hidden" name="event_id" value={currentEvent?.id || ''} />
                                 <SubmitButton disabled={cart.length === 0 || !qrCodeId} />
                             </div>
                         </form>

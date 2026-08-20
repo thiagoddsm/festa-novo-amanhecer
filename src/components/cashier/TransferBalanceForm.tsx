@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useFirestore } from '@/firebase';
 import { useAuth } from '@/hooks/use-auth-context';
-import { collection, query, where, doc, runTransaction, Timestamp } from 'firebase/firestore';
+import { useTenant } from '@/hooks/use-tenant-context';
+import { collection, query, where, doc, runTransaction, getDocs, Timestamp } from 'firebase/firestore';
 import { z } from 'zod';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -36,6 +37,7 @@ function SubmitButton({ isPending }: { isPending: boolean }) {
 
 export default function TransferBalanceForm() {
   const { user } = useAuth();
+  const { currentTenant, currentEvent } = useTenant();
   const firestore = useFirestore();
   const { toast } = useToast();
   const formRef = useRef<HTMLFormElement>(null);
@@ -88,14 +90,14 @@ export default function TransferBalanceForm() {
             
             // Get origin card
             const originQuery = query(cardsRef, where('qr_code_id', '==', origin_qr_code_id));
-            const originSnapshot = await transaction.get(originQuery);
+            const originSnapshot = await getDocs(originQuery);
             if (originSnapshot.empty) throw new Error('Cartão de origem não encontrado.');
             const originCardDoc = originSnapshot.docs[0];
             const originCard = originCardDoc.data() as CardType;
 
             // Get destination card
             const destQuery = query(cardsRef, where('qr_code_id', '==', destination_qr_code_id));
-            const destSnapshot = await transaction.get(destQuery);
+            const destSnapshot = await getDocs(destQuery);
             if (destSnapshot.empty) throw new Error('Cartão de destino não encontrado.');
             const destCardDoc = destSnapshot.docs[0];
             const destCard = destCardDoc.data() as CardType;
@@ -117,11 +119,13 @@ export default function TransferBalanceForm() {
             transaction.set(originTxRef, {
                 cartao_id: originCardDoc.id, pdv_id: 'caixa_central', tipo: 'TRANSFER_OUT',
                 valor_centavos, created_at: Timestamp.now(), usuario_responsavel: user.name,
+                tenant_id: currentTenant?.id ?? null, event_id: currentEvent?.id ?? null,
             });
             const destTxRef = doc(transactionsRef);
             transaction.set(destTxRef, {
                 cartao_id: destCardDoc.id, pdv_id: 'caixa_central', tipo: 'TRANSFER_IN',
                 valor_centavos, created_at: Timestamp.now(), usuario_responsavel: user.name,
+                tenant_id: currentTenant?.id ?? null, event_id: currentEvent?.id ?? null,
             });
         });
 

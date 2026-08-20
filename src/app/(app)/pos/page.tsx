@@ -9,10 +9,13 @@ import { useAuth } from '@/hooks/use-auth-context';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { FullPageLoader } from '@/components/ui/loader';
 
+import { useTenant } from '@/hooks/use-tenant-context';
+
 export default function PosPage() {
   const { user } = useAuth();
+  const { currentTenant, currentEvent } = useTenant();
   const [selectedPdv, setSelectedPdv] = useState<Pdv | null>(null);
-  const [pdvs, setPdvs] = useState<Pdv[] | null>(null);
+  const [allPdvs, setAllPdvs] = useState<Pdv[] | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const firestore = useFirestore();
 
@@ -22,26 +25,33 @@ export default function PosPage() {
     const q = query(pdvCollection, orderBy('nome', 'asc'));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const allPdvs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Pdv));
-      setPdvs(allPdvs);
+      const fetched = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Pdv));
+      setAllPdvs(fetched);
     }, (error) => {
       console.error("Error fetching PDVs:", error);
-      setPdvs([]);
+      setAllPdvs([]);
     });
 
     return () => unsubscribe();
   }, [firestore]);
 
+  // Filter PDVs by active tenant & event
+  const pdvs = (allPdvs || []).filter((p) => {
+    if (currentTenant && p.tenant_id && p.tenant_id !== currentTenant.id) return false;
+    if (currentEvent && p.event_id && p.event_id !== currentEvent.id) return false;
+    return true;
+  });
+
   useEffect(() => {
     // Wait for both user and pdvs data to be loaded
-    if (!user || pdvs === null) {
+    if (!user || allPdvs === null) {
       setIsLoading(true);
       return;
     }
 
     let pdvToSelect = null;
     if (user.role === 'PDV' && user.pdvId) {
-      const assignedPdv = pdvs.find(p => p.id === user.pdvId);
+      const assignedPdv = (allPdvs || []).find(p => p.id === user.pdvId);
       if (assignedPdv) {
         pdvToSelect = assignedPdv;
       }
@@ -55,7 +65,7 @@ export default function PosPage() {
     // Loading is finished once we have user/pdv data and have checked for an assigned pdv.
     setIsLoading(false);
 
-  }, [user, pdvs]);
+  }, [user, allPdvs]);
 
 
   const handlePdvSelect = (pdv: Pdv) => {
@@ -63,8 +73,8 @@ export default function PosPage() {
   };
 
   const handleGoBack = () => {
-    // Only ADMINs should be able to go back to selector
-    if (user?.role === 'ADMIN') {
+    // Only admin-level roles can go back to the selector
+    if (['SUPERADMIN', 'ADMIN_ORGANIZACAO', 'ADMIN_EVENTO'].includes(user?.role ?? '')) {
         setSelectedPdv(null);
     }
   }

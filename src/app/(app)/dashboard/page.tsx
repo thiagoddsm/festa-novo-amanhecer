@@ -12,8 +12,11 @@ import { collection, onSnapshot, Timestamp } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
 import BulkNotifier from '@/components/dashboard/BulkNotifier';
+import SalesChart from '@/components/dashboard/SalesChart';
 import { useCollection } from '@/firebase/firestore/use-collection';
 import { useMemoFirebase } from '@/firebase/provider';
+
+import { useTenant } from '@/hooks/use-tenant-context';
 
 const formatTimestamp = (ts: unknown): Date => {
   if (ts instanceof Timestamp) {
@@ -33,6 +36,7 @@ const formatTimestamp = (ts: unknown): Date => {
 
 export default function DashboardPage() {
   const firestore = useFirestore();
+  const { currentTenant, currentEvent } = useTenant();
 
   const cardsQuery = useMemoFirebase(() => collection(firestore, 'cards'), [firestore]);
   const transactionsQuery = useMemoFirebase(() => collection(firestore, 'transactions'), [firestore]);
@@ -44,6 +48,26 @@ export default function DashboardPage() {
   
   const isLoading = loadingCards || loadingTransactions || loadingPdvs;
 
+  // Filter cards by current tenant and event
+  const filteredCards = useMemo(() => {
+    if (!allCards) return [];
+    return allCards.filter((card) => {
+      if (currentTenant && card.tenant_id && card.tenant_id !== currentTenant.id) return false;
+      if (currentEvent && card.event_id && card.event_id !== currentEvent.id) return false;
+      return true;
+    });
+  }, [allCards, currentTenant, currentEvent]);
+
+  // Filter transactions by current tenant and event
+  const filteredTransactions = useMemo(() => {
+    if (!allTransactions) return [];
+    return allTransactions.filter((tx) => {
+      if (currentTenant && tx.tenant_id && tx.tenant_id !== currentTenant.id) return false;
+      if (currentEvent && tx.event_id && tx.event_id !== currentEvent.id) return false;
+      return true;
+    });
+  }, [allTransactions, currentTenant, currentEvent]);
+
   const pdvNameMap = useMemo(() => {
     if (!allPdvs) return new Map<string, string>();
     const map = new Map<string, string>();
@@ -53,26 +77,26 @@ export default function DashboardPage() {
   }, [allPdvs]);
 
   const recentTransactions = useMemo(() => {
-    if (!allTransactions) return [];
+    if (!filteredTransactions) return [];
     
-    return [...allTransactions]
+    return [...filteredTransactions]
       .sort((a, b) => formatTimestamp(b.created_at).getTime() - formatTimestamp(a.created_at).getTime())
       .slice(0, 10);
       
-  }, [allTransactions]);
+  }, [filteredTransactions]);
 
   const report = useMemo(() => {
-    if (!allTransactions) return null;
+    if (!filteredTransactions) return null;
 
-    const total_recarregado_centavos = allTransactions
+    const total_recarregado_centavos = filteredTransactions
       .filter(t => t.tipo === 'RECARGA')
       .reduce((sum, t) => sum + t.valor_centavos, 0);
 
-    const total_vendido_centavos = allTransactions
+    const total_vendido_centavos = filteredTransactions
       .filter(t => t.tipo === 'VENDA')
       .reduce((sum, t) => sum + t.valor_centavos, 0);
 
-    const totalVendasUn = allTransactions.filter(t => t.tipo === 'VENDA').length;
+    const totalVendasUn = filteredTransactions.filter(t => t.tipo === 'VENDA').length;
     
     return {
       total_recarregado_centavos,
@@ -80,9 +104,32 @@ export default function DashboardPage() {
       totalVendasUn,
       ticketMedio: total_vendido_centavos / (totalVendasUn || 1),
     };
-  }, [allTransactions]);
+  }, [filteredTransactions]);
 
-  const activeCardsStat = { title: 'Cartões Ativos', value: allCards?.length ?? 0, icon: Users };
+  const salesByHour = useMemo(() => {
+    if (!filteredTransactions) return [];
+    
+    const sales = filteredTransactions.filter(t => t.tipo === 'VENDA');
+    const hourlyMap = new Map<string, { total: number; count: number }>();
+
+    // Group by HH:00
+    sales.forEach(tx => {
+      const date = formatTimestamp(tx.created_at);
+      const hourStr = `${String(date.getHours()).padStart(2, '0')}:00`;
+      const current = hourlyMap.get(hourStr) || { total: 0, count: 0 };
+      hourlyMap.set(hourStr, {
+        total: current.total + tx.valor_centavos,
+        count: current.count + 1
+      });
+    });
+
+    // Sort by hour
+    return Array.from(hourlyMap.entries())
+      .map(([hour, val]) => ({ hour, ...val }))
+      .sort((a, b) => a.hour.localeCompare(b.hour));
+  }, [filteredTransactions]);
+
+  const activeCardsStat = { title: 'Cartões Ativos', value: filteredCards?.length ?? 0, icon: Users };
 
   const stats = [
     { title: 'Total Recarregado', value: report ? formatCurrency(report.total_recarregado_centavos) : 'R$ 0,00', icon: CreditCard },
@@ -109,6 +156,24 @@ export default function DashboardPage() {
           </>
         )}
       </div>
+
+      <Card className="w-full">
+        <CardHeader>
+          <CardTitle>Evolução de Vendas por Hora</CardTitle>
+          <CardDescription>Acompanhe o volume financeiro vendido no decorrer do evento</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <Skeleton className="h-[300px] w-full" />
+          ) : salesByHour.length > 0 ? (
+            <SalesChart data={salesByHour} />
+          ) : (
+            <div className="h-[200px] flex items-center justify-center text-muted-foreground text-sm">
+              Nenhuma venda registrada até o momento.
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>

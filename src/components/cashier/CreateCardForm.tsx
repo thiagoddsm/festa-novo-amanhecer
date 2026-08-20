@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useFirestore } from '@/firebase';
 import { useAuth } from '@/hooks/use-auth-context';
+import { useTenant } from '@/hooks/use-tenant-context';
 import { collection, doc, writeBatch, Timestamp } from 'firebase/firestore';
 import { generateRandomId } from '@/lib/data';
 import { z } from 'zod';
@@ -45,6 +46,7 @@ function SubmitButton({ isPending }: { isPending: boolean }) {
 
 export default function CreateCardForm() {
   const { user } = useAuth();
+  const { currentTenant, currentEvent } = useTenant();
   const firestore = useFirestore();
   const { toast } = useToast();
   const formRef = useRef<HTMLFormElement>(null);
@@ -174,7 +176,7 @@ export default function CreateCardForm() {
         const qr_code_id = `festa-2025-${generateRandomId().slice(0, 18)}`;
         const now = Timestamp.now();
 
-        const cardData = {
+        const cardData: Record<string, any> = {
             qr_code_id,
             saldo_centavos,
             nome_cliente: nome_cliente ?? '',
@@ -182,6 +184,8 @@ export default function CreateCardForm() {
             status: 'ATIVO' as const,
             created_at: now,
             updated_at: now,
+            tenant_id: currentTenant?.id ?? null,
+            event_id: currentEvent?.id ?? null,
         };
 
         const batch = writeBatch(firestore);
@@ -198,12 +202,14 @@ export default function CreateCardForm() {
                 valor_centavos: saldo_centavos,
                 created_at: now,
                 usuario_responsavel: user.name || 'Caixa',
+                tenant_id: currentTenant?.id ?? null,
+                event_id: currentEvent?.id ?? null,
             });
         }
         
         await batch.commit();
 
-        const createdCard = { id: cardDocRef.id, ...cardData };
+        const createdCard = { id: cardDocRef.id, ...cardData } as unknown as CardType;
         setNewCard(createdCard);
         setDialogOpen(true);
         formRef.current?.reset();

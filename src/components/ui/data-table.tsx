@@ -109,6 +109,9 @@ export function DataTable<TData, TValue>({
   const table = useReactTable({
     data,
     columns: tableColumns,
+    getRowId: (row: any) => row.id ?? row.uid,
+    autoResetPageIndex: false,
+    autoResetExpanded: false,
     getCoreRowModel: getCoreRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
     onSortingChange: setSorting,

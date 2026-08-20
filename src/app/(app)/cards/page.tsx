@@ -92,11 +92,20 @@ const columns: ColumnDef<CardType>[] = [
     }
 ]
 
+import { useTenant } from '@/hooks/use-tenant-context';
+
 export default function CardsPage() {
   const { user } = useAuth();
+  const { currentTenant, currentEvent } = useTenant();
   const allCards = useCollection<CardType>('cards');
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
+
+  const filteredCards = (allCards || []).filter((card) => {
+    if (currentTenant && card.tenant_id && card.tenant_id !== currentTenant.id) return false;
+    if (currentEvent && card.event_id && card.event_id !== currentEvent.id) return false;
+    return true;
+  });
 
   useEffect(() => {
     if (allCards !== null) {
@@ -135,7 +144,7 @@ export default function CardsPage() {
         ) : (
           <DataTable
             columns={columns}
-            data={allCards || []}
+            data={filteredCards}
             filterColumns={[
                 {
                     columnId: 'nome_cliente',
@@ -159,7 +168,7 @@ export default function CardsPage() {
                     ]
                 }
             ]}
-            onDeleteSelected={user?.role === 'ADMIN' ? handleDeleteSelected : undefined}
+            onDeleteSelected={['SUPERADMIN', 'ADMIN_ORGANIZACAO'].includes(user?.role ?? '') ? handleDeleteSelected : undefined}
            />
         )}
       </CardContent>

@@ -5,6 +5,7 @@ import { SidebarNav } from "@/components/layout/SidebarNav";
 import { Header } from "@/components/layout/Header";
 import { FirebaseClientProvider } from "@/firebase";
 import { AuthProvider, useAuth } from "@/hooks/use-auth-context";
+import { TenantProvider } from "@/hooks/use-tenant-context";
 import { usePathname, useRouter } from "next/navigation";
 import { FullPageLoader } from "@/components/ui/loader";
 import { useEffect } from "react";
@@ -12,71 +13,97 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Lock } from "lucide-react";
 
 
+// Per-role allowed paths (null = unrestricted)
+const ROLE_ALLOWED_PATHS: Record<string, string[] | null> = {
+    SUPERADMIN: null, // access everything
+    ADMIN: null, // legacy support for Super Admin
+    ADMIN_ORGANIZACAO: ['/dashboard', '/cards', '/transactions', '/cashier', '/admin/users', '/admin/tenants', '/admin/pdvs', '/pos', '/manual'],
+    ADMIN_EVENTO: ['/dashboard', '/cards', '/transactions', '/cashier', '/admin/pdvs', '/pos', '/manual'],
+    CAIXA: ['/dashboard', '/cashier', '/cards', '/transactions', '/manual'],
+    PDV: ['/pos', '/manual'],
+    VISITANTE: [], // blocked — shown a waiting card
+};
+
+const ROLE_DEFAULT_REDIRECT: Record<string, string> = {
+    SUPERADMIN: '/dashboard',
+    ADMIN_ORGANIZACAO: '/dashboard',
+    ADMIN_EVENTO: '/dashboard',
+    CAIXA: '/dashboard',
+    PDV: '/pos',
+    VISITANTE: '/',
+};
+
 function AppContent({ children }: { children: React.ReactNode }) {
     const { user, loading } = useAuth();
     const router = useRouter();
     const pathname = usePathname();
 
     useEffect(() => {
-        if (loading) return; // Do nothing while loading
-        
+        if (loading) return;
+
         if (!user) {
             router.replace('/login');
             return;
         }
 
-        // If user is PDV and not on an allowed page, redirect them.
-        const allowedPdvPaths = ['/pos', '/manual'];
-        if (user.role === 'PDV' && !allowedPdvPaths.includes(pathname)) {
-            router.replace('/pos');
-        } else if (user.role !== 'PDV' && pathname === '/pos' && user.role !== 'ADMIN') {
-            // If user is NOT PDV (and not ADMIN) and tries to access POS, redirect them away.
-            router.replace('/dashboard');
+        const currentPath = pathname || '';
+        const allowedPaths = ROLE_ALLOWED_PATHS[user.role];
+
+        // null means unrestricted (SUPERADMIN)
+        if (allowedPaths === null) return;
+
+        // VISITANTE is handled by the render path — no redirect needed here
+        if (user.role === 'VISITANTE') return;
+
+        // Redirect if current path is not in the allowed list
+        if (!allowedPaths.includes(currentPath)) {
+            router.replace(ROLE_DEFAULT_REDIRECT[user.role] ?? '/dashboard');
         }
     }, [user, loading, router, pathname]);
 
-    // While checking auth state or if there's no user (and we're about to redirect), show a full-page loader.
     if (loading || !user) {
         return <FullPageLoader />;
     }
-    
-    const allowedPdvPaths = ['/pos', '/manual'];
-    // If user role requires a redirect, show loader while redirecting
-    if ((user.role === 'PDV' && !allowedPdvPaths.includes(pathname)) || (user.role !== 'PDV' && user.role !== 'ADMIN' && pathname === '/pos')) {
+
+    const currentPath = pathname || '';
+    const allowedPaths = ROLE_ALLOWED_PATHS[user.role];
+
+    // Show loader while a redirect is pending
+    if (
+        user.role !== 'VISITANTE' &&
+        allowedPaths !== null &&
+        !allowedPaths.includes(currentPath)
+    ) {
         return <FullPageLoader />;
     }
-    
-    const MainContent = ({children}: {children: React.ReactNode}) => (
-      <main className="flex-grow p-4 lg:p-6 bg-background">
-          {children}
-      </main>
-    );
 
-    // Block visitor access and show a message.
+    // VISITANTE: show waiting card, wrapped in SidebarProvider to satisfy useSidebar
     if (user.role === 'VISITANTE') {
-       return (
-            <div className="flex flex-col h-screen bg-background">
-              <Header />
-              <div className="flex flex-grow items-center justify-center p-4">
-                <Card className="max-w-md text-center">
-                  <CardHeader>
-                    <CardTitle className="flex items-center justify-center gap-2">
-                      <Lock />
-                      Acesso Restrito
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <CardDescription>
-                      Você está logado como visitante. Por favor, aguarde um administrador liberar seu acesso para visualizar o conteúdo.
-                    </CardDescription>
-                  </CardContent>
-                </Card>
-              </div>
-            </div>
-       )
+        return (
+            <SidebarProvider>
+                <div className="flex flex-col h-screen w-full bg-background">
+                    <Header />
+                    <div className="flex flex-grow items-center justify-center p-4">
+                        <Card className="max-w-md text-center">
+                            <CardHeader>
+                                <CardTitle className="flex items-center justify-center gap-2">
+                                    <Lock />
+                                    Acesso Restrito
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <CardDescription>
+                                    Você está logado como visitante. Por favor, aguarde um administrador liberar seu acesso para visualizar o conteúdo.
+                                </CardDescription>
+                            </CardContent>
+                        </Card>
+                    </div>
+                </div>
+            </SidebarProvider>
+        );
     }
-    
-    // Once the user object is available, render the app layout for ADMIN/CAIXA/PDV.
+
+    // All other roles get the full sidebar layout
     return (
         <SidebarProvider>
             <Sidebar>
@@ -84,7 +111,9 @@ function AppContent({ children }: { children: React.ReactNode }) {
             </Sidebar>
             <SidebarInset>
                 <Header />
-                <MainContent>{children}</MainContent>
+                <main className="flex-grow p-4 lg:p-6 bg-background">
+                    {children}
+                </main>
             </SidebarInset>
         </SidebarProvider>
     );
@@ -94,9 +123,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <FirebaseClientProvider>
       <AuthProvider>
-        <AppContent>
-          {children}
-        </AppContent>
+        <TenantProvider>
+          <AppContent>
+            {children}
+          </AppContent>
+        </TenantProvider>
       </AuthProvider>
     </FirebaseClientProvider>
   );
