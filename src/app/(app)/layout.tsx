@@ -5,6 +5,7 @@ import { SidebarNav } from "@/components/layout/SidebarNav";
 import { Header } from "@/components/layout/Header";
 import { FirebaseClientProvider } from "@/firebase";
 import { AuthProvider, useAuth } from "@/hooks/use-auth-context";
+import { TenantProvider } from "@/hooks/use-tenant-context";
 import { usePathname, useRouter } from "next/navigation";
 import { FullPageLoader } from "@/components/ui/loader";
 import { useEffect } from "react";
@@ -27,10 +28,11 @@ function AppContent({ children }: { children: React.ReactNode }) {
 
         // If user is PDV and not on an allowed page, redirect them.
         const allowedPdvPaths = ['/pos', '/manual'];
-        if (user.role === 'PDV' && !allowedPdvPaths.includes(pathname)) {
+        const currentPath = pathname || '';
+        if (user.role === 'PDV' && !allowedPdvPaths.includes(currentPath)) {
             router.replace('/pos');
-        } else if (user.role !== 'PDV' && pathname === '/pos' && user.role !== 'ADMIN') {
-            // If user is NOT PDV (and not ADMIN) and tries to access POS, redirect them away.
+        } else if (user.role !== 'PDV' && currentPath === '/pos' && user.role !== 'ADMIN' && user.role !== 'SUPERADMIN') {
+            // If user is NOT PDV (and not ADMIN/SUPERADMIN) and tries to access POS, redirect them away.
             router.replace('/dashboard');
         }
     }, [user, loading, router, pathname]);
@@ -41,8 +43,9 @@ function AppContent({ children }: { children: React.ReactNode }) {
     }
     
     const allowedPdvPaths = ['/pos', '/manual'];
+    const currentPath = pathname || '';
     // If user role requires a redirect, show loader while redirecting
-    if ((user.role === 'PDV' && !allowedPdvPaths.includes(pathname)) || (user.role !== 'PDV' && user.role !== 'ADMIN' && pathname === '/pos')) {
+    if ((user.role === 'PDV' && !allowedPdvPaths.includes(currentPath)) || (user.role !== 'PDV' && user.role !== 'ADMIN' && user.role !== 'SUPERADMIN' && currentPath === '/pos')) {
         return <FullPageLoader />;
     }
     
@@ -94,9 +97,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <FirebaseClientProvider>
       <AuthProvider>
-        <AppContent>
-          {children}
-        </AppContent>
+        <TenantProvider>
+          <AppContent>
+            {children}
+          </AppContent>
+        </TenantProvider>
       </AuthProvider>
     </FirebaseClientProvider>
   );

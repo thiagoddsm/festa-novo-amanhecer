@@ -263,7 +263,7 @@ export async function reverseTransaction(transactionId: string, responsibleUser:
                 pdv_id: originalTx.pdv_id,
                 tipo: 'REEMBOLSO',
                 valor_centavos: originalTx.valor_centavos,
-                created_at: Timestamp.now(),
+                created_at: Timestamp.now() as any,
                 usuario_responsavel: responsibleUser,
                 reversed_tx_id: transactionId,
                 items: originalTx.items || [],

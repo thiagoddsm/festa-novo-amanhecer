@@ -4,6 +4,8 @@ import { usePathname } from "next/navigation";
 import { Button } from "../ui/button";
 import { LogOut } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth-context";
+import NetworkStatusIndicator from "../common/NetworkStatusIndicator";
+import TenantSelector from "./TenantSelector";
 
 const getTitleFromPathname = (pathname: string): string => {
     switch (pathname) {
@@ -29,16 +31,18 @@ const getTitleFromPathname = (pathname: string): string => {
 export function Header() {
     const pathname = usePathname();
     const { user, signOut } = useAuth();
-    const title = getTitleFromPathname(pathname);
+    const title = getTitleFromPathname(pathname || '');
     
     return (
         <header className="flex h-14 items-center gap-4 border-b bg-card px-4 lg:h-[60px] lg:px-6">
             <SidebarTrigger className="md:hidden" />
-            <div className="w-full flex-1">
+            <div className="w-full flex-1 flex items-center gap-3">
                  <h1 className="text-lg font-semibold">{title}</h1>
+                 <NetworkStatusIndicator />
             </div>
             {user && (
                  <div className="flex items-center gap-4">
+                    <TenantSelector />
                     <span className="text-sm text-muted-foreground hidden md:inline">
                         Olá, {user.name}
                     </span>

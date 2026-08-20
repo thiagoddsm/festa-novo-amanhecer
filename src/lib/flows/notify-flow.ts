@@ -34,6 +34,8 @@ async function sendCardNotification(
      const db = getDb();
      const testCardData: Card = { 
         id: 'test-card-id', 
+        tenant_id: 'test-tenant',
+        event_id: 'test-event',
         nome_cliente: 'Cliente Teste', 
         telefone_cliente: options?.testNumber || '',
         qr_code_id: 'qr-test-12345',

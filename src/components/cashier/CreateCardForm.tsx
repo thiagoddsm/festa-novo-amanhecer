@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useFirestore } from '@/firebase';
 import { useAuth } from '@/hooks/use-auth-context';
+import { useTenant } from '@/hooks/use-tenant-context';
 import { collection, doc, writeBatch, Timestamp } from 'firebase/firestore';
 import { generateRandomId } from '@/lib/data';
 import { z } from 'zod';
@@ -46,6 +47,7 @@ function SubmitButton({ isPending }: { isPending: boolean }) {
 export default function CreateCardForm() {
   const { user } = useAuth();
   const firestore = useFirestore();
+  const { currentTenant, currentEvent } = useTenant();
   const { toast } = useToast();
   const formRef = useRef<HTMLFormElement>(null);
   
@@ -175,6 +177,8 @@ export default function CreateCardForm() {
         const now = Timestamp.now();
 
         const cardData = {
+            tenant_id: currentTenant?.id || 'default_tenant',
+            event_id: currentEvent?.id || 'default_event',
             qr_code_id,
             saldo_centavos,
             nome_cliente: nome_cliente ?? '',

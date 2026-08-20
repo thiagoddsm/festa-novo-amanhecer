@@ -48,7 +48,7 @@ const KanbanColumn = ({ title, variant, orders, status, isPending }: {
 
     return (
         <Card
-            ref={drop}
+            ref={(node) => { drop(node); }}
             className={cn(
                 "flex-1 flex flex-col min-w-[300px] transition-colors",
                 isOver ? 'bg-accent' : ''
@@ -127,7 +127,7 @@ const OrderCard = ({ order }: { order: Order }) => {
     
     return (
     <Card
-        ref={drag}
+        ref={(node) => { drag(node); }}
         className={cn(
             "cursor-grab bg-card active:cursor-grabbing",
             isDragging ? 'opacity-50' : 'opacity-100',

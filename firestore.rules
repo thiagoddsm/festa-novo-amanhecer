@@ -2,11 +2,45 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // ATENÇÃO: Regras 100% liberais para desenvolvimento.
-    // Permitem leitura e escrita em todo o banco de dados.
-    // SUBSTITUA por regras seguras antes de ir para produção.
-    match /{document=**} {
-      allow read, write: if true;
+    
+    // Check if user belongs to the tenant
+    function isTenantMember(tenantId) {
+      return request.auth != null && (
+        request.auth.token.role == 'SUPERADMIN' ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tenants[tenantId] != null
+      );
+    }
+
+    match /users/{userId} {
+      allow read, write: if request.auth != null && (request.auth.uid == userId || request.auth.token.role == 'SUPERADMIN');
+    }
+
+    match /tenants/{tenantId} {
+      allow read, write: if isTenantMember(tenantId);
+      
+      match /events/{eventId} {
+        allow read, write: if isTenantMember(tenantId);
+      }
+    }
+
+    match /cards/{cardId} {
+      allow read, write: if isTenantMember(resource.data.tenant_id || request.resource.data.tenant_id);
+    }
+
+    match /pdvs/{pdvId} {
+      allow read, write: if isTenantMember(resource.data.tenant_id || request.resource.data.tenant_id);
+      
+      match /menuItems/{itemId} {
+        allow read, write: if request.auth != null;
+      }
+    }
+
+    match /transactions/{txId} {
+      allow read, write: if isTenantMember(resource.data.tenant_id || request.resource.data.tenant_id);
+    }
+
+    match /orders/{orderId} {
+      allow read, write: if isTenantMember(resource.data.tenant_id || request.resource.data.tenant_id);
     }
   }
 }

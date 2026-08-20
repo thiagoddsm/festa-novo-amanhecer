@@ -5,6 +5,9 @@ import { Toaster } from '@/components/ui/toaster';
 export const metadata: Metadata = {
   title: 'FestaPay',
   description: 'Sistema Cashless para Eventos via QR Code',
+  icons: {
+    icon: '/icon.svg',
+  },
 };
 
 export default function RootLayout({

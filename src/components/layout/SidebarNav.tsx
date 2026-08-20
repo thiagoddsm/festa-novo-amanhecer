@@ -2,19 +2,21 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, ShoppingCart, WalletCards, Users, List, UserCog, BookUser } from "lucide-react";
+import { LayoutDashboard, ShoppingCart, WalletCards, Users, List, UserCog, BookUser, Building2, Store } from "lucide-react";
 import { SidebarHeader, SidebarMenu, SidebarMenuItem, SidebarMenuButton } from "@/components/ui/sidebar";
 import { useAuth } from "@/hooks/use-auth-context";
 import { Logo } from "./Logo";
 
 const allNavItems = [
-    { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', roles: ['ADMIN', 'CAIXA'] },
-    { href: '/cards', icon: Users, label: 'Cartões', roles: ['ADMIN', 'CAIXA'] },
-    { href: '/transactions', icon: List, label: 'Transações', roles: ['ADMIN', 'CAIXA'] },
-    { href: '/cashier', icon: WalletCards, label: 'Caixa', roles: ['ADMIN', 'CAIXA'] },
-    { href: '/pos', icon: ShoppingCart, label: 'PDV', roles: ['ADMIN', 'PDV'] },
-    { href: '/manual', icon: BookUser, label: 'Manual', roles: ['ADMIN', 'CAIXA', 'PDV'] },
-    { href: '/admin/users', icon: UserCog, label: 'Usuários', roles: ['ADMIN'] },
+    { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', roles: ['SUPERADMIN', 'ADMIN', 'CAIXA'] },
+    { href: '/cards', icon: Users, label: 'Cartões', roles: ['SUPERADMIN', 'ADMIN', 'CAIXA'] },
+    { href: '/transactions', icon: List, label: 'Transações', roles: ['SUPERADMIN', 'ADMIN', 'CAIXA'] },
+    { href: '/cashier', icon: WalletCards, label: 'Caixa', roles: ['SUPERADMIN', 'ADMIN', 'CAIXA'] },
+    { href: '/pos', icon: ShoppingCart, label: 'PDV Terminal', roles: ['SUPERADMIN', 'ADMIN', 'PDV'] },
+    { href: '/admin/pdvs', icon: Store, label: 'Pontos de Venda', roles: ['SUPERADMIN', 'ADMIN'] },
+    { href: '/manual', icon: BookUser, label: 'Manual', roles: ['SUPERADMIN', 'ADMIN', 'CAIXA', 'PDV'] },
+    { href: '/admin/tenants', icon: Building2, label: 'Organizações', roles: ['SUPERADMIN', 'ADMIN'] },
+    { href: '/admin/users', icon: UserCog, label: 'Usuários', roles: ['SUPERADMIN', 'ADMIN'] },
 ]
 
 export function SidebarNav() {

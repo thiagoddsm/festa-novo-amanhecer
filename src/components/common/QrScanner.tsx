@@ -2,7 +2,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import type { Html5QrcodeScanner, QrCodeSuccessCallback, QrCodeErrorCallback } from 'html5-qrcode';
+import type { Html5QrcodeScanner } from 'html5-qrcode';
 
 interface QrScannerProps {
   onScanSuccess: (decodedText: string) => void;
@@ -28,7 +28,7 @@ export function QrScanner({ onScanSuccess, onScanFailure }: QrScannerProps) {
           false // Verbose logging
         );
 
-        const successCallback: QrCodeSuccessCallback = (decodedText, decodedResult) => {
+        const successCallback = (decodedText: string, decodedResult: any) => {
           // Wrap in a try-catch in case onScanSuccess throws an error
           try {
             onScanSuccess(decodedText);
@@ -41,7 +41,7 @@ export function QrScanner({ onScanSuccess, onScanFailure }: QrScannerProps) {
           }
         };
 
-        const errorCallback: QrCodeErrorCallback = (error) => {
+        const errorCallback = (error: string) => {
           // This callback is called frequently, so we only log/handle significant errors
           // It's common for it to fire when no QR code is in view.
            onScanFailure(error);

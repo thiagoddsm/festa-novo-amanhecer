@@ -12,6 +12,8 @@ import { collection, onSnapshot, Timestamp } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
 import BulkNotifier from '@/components/dashboard/BulkNotifier';
+import SalesChart from '@/components/dashboard/SalesChart';
+import { useTenant } from '@/hooks/use-tenant-context';
 import { useCollection } from '@/firebase/firestore/use-collection';
 import { useMemoFirebase } from '@/firebase/provider';
 
@@ -33,14 +35,42 @@ const formatTimestamp = (ts: unknown): Date => {
 
 export default function DashboardPage() {
   const firestore = useFirestore();
+  const { currentTenant, currentEvent } = useTenant();
 
   const cardsQuery = useMemoFirebase(() => collection(firestore, 'cards'), [firestore]);
   const transactionsQuery = useMemoFirebase(() => collection(firestore, 'transactions'), [firestore]);
   const pdvsQuery = useMemoFirebase(() => collection(firestore, 'pdvs'), [firestore]);
   
-  const { data: allCards, isLoading: loadingCards } = useCollection<CardType>(cardsQuery);
-  const { data: allTransactions, isLoading: loadingTransactions } = useCollection<Transaction>(transactionsQuery);
-  const { data: allPdvs, isLoading: loadingPdvs } = useCollection<Pdv>(pdvsQuery);
+  const { data: rawCards, isLoading: loadingCards } = useCollection<CardType>(cardsQuery);
+  const { data: rawTransactions, isLoading: loadingTransactions } = useCollection<Transaction>(transactionsQuery);
+  const { data: rawPdvs, isLoading: loadingPdvs } = useCollection<Pdv>(pdvsQuery);
+
+  // Multi-Tenant Filtering: Filter by active Tenant and active Event
+  const allCards = useMemo(() => {
+    if (!rawCards) return [];
+    if (!currentTenant) return rawCards;
+    return rawCards.filter(c => {
+      const matchTenant = !c.tenant_id || c.tenant_id === currentTenant.id;
+      const matchEvent = !currentEvent || !c.event_id || c.event_id === currentEvent.id;
+      return matchTenant && matchEvent;
+    });
+  }, [rawCards, currentTenant, currentEvent]);
+
+  const allTransactions = useMemo(() => {
+    if (!rawTransactions) return [];
+    if (!currentTenant) return rawTransactions;
+    return rawTransactions.filter(t => {
+      const matchTenant = !t.tenant_id || t.tenant_id === currentTenant.id;
+      const matchEvent = !currentEvent || !t.event_id || t.event_id === currentEvent.id;
+      return matchTenant && matchEvent;
+    });
+  }, [rawTransactions, currentTenant, currentEvent]);
+
+  const allPdvs = useMemo(() => {
+    if (!rawPdvs) return [];
+    if (!currentTenant) return rawPdvs;
+    return rawPdvs.filter(p => !p.tenant_id || p.tenant_id === currentTenant.id);
+  }, [rawPdvs, currentTenant]);
   
   const isLoading = loadingCards || loadingTransactions || loadingPdvs;
 
@@ -82,6 +112,29 @@ export default function DashboardPage() {
     };
   }, [allTransactions]);
 
+  const salesByHour = useMemo(() => {
+    if (!allTransactions) return [];
+    
+    const sales = allTransactions.filter(t => t.tipo === 'VENDA');
+    const hourlyMap = new Map<string, { total: number; count: number }>();
+
+    // Group by HH:00
+    sales.forEach(tx => {
+      const date = formatTimestamp(tx.created_at);
+      const hourStr = `${String(date.getHours()).padStart(2, '0')}:00`;
+      const current = hourlyMap.get(hourStr) || { total: 0, count: 0 };
+      hourlyMap.set(hourStr, {
+        total: current.total + tx.valor_centavos,
+        count: current.count + 1
+      });
+    });
+
+    // Sort by hour
+    return Array.from(hourlyMap.entries())
+      .map(([hour, val]) => ({ hour, ...val }))
+      .sort((a, b) => a.hour.localeCompare(b.hour));
+  }, [allTransactions]);
+
   const activeCardsStat = { title: 'Cartões Ativos', value: allCards?.length ?? 0, icon: Users };
 
   const stats = [
@@ -109,6 +162,24 @@ export default function DashboardPage() {
           </>
         )}
       </div>
+
+      <Card className="w-full">
+        <CardHeader>
+          <CardTitle>Evolução de Vendas por Hora</CardTitle>
+          <CardDescription>Acompanhe o volume financeiro vendido no decorrer do evento</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <Skeleton className="h-[300px] w-full" />
+          ) : salesByHour.length > 0 ? (
+            <SalesChart data={salesByHour} />
+          ) : (
+            <div className="h-[200px] flex items-center justify-center text-muted-foreground text-sm">
+              Nenhuma venda registrada até o momento.
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
