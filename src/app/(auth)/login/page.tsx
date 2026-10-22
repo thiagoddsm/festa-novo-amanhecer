@@ -161,16 +161,20 @@ function LoginPageContent() {
   useEffect(() => {
     setPdvs([]);
     setSelectedPdvId('');
-    if (!firestore || !selectedTenantId) return;
+    if (!firestore || !selectedTenantId || !selectedEventId) return;
     setLoadingPdvs(true);
     getDocs(collection(firestore, 'pdvs'))
       .then((snap) => {
         const all = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Pdv));
-        const filtered = all.filter((p) => {
-          if (p.tenant_id && p.tenant_id !== selectedTenantId) return false;
-          if (selectedEventId && p.event_id && p.event_id !== selectedEventId) return false;
-          return true;
-        });
+        // Apenas barracas do evento escolhido (exclui o Caixa Central)
+        const filtered = all
+          .filter(
+            (p) =>
+              p.tenant_id === selectedTenantId &&
+              p.event_id === selectedEventId &&
+              p.nome !== 'Caixa Central'
+          )
+          .sort((a, b) => a.nome.localeCompare(b.nome));
         setPdvs(filtered);
       })
       .catch(() => {
@@ -242,6 +246,24 @@ function LoginPageContent() {
         variant: 'destructive',
         title: 'Organização obrigatória',
         description: 'Selecione uma organização.',
+      });
+      return;
+    }
+
+    if (!selectedEventId) {
+      toast({
+        variant: 'destructive',
+        title: 'Evento obrigatório',
+        description: 'Selecione o evento em que você vai trabalhar.',
+      });
+      return;
+    }
+
+    if (selectedRole === 'PDV' && pdvs.length > 0 && !selectedPdvId) {
+      toast({
+        variant: 'destructive',
+        title: 'Barraca obrigatória',
+        description: 'Selecione a barraca onde você vai atuar.',
       });
       return;
     }
@@ -455,7 +477,7 @@ function LoginPageContent() {
                   {/* Event select — optional, only shown once a tenant is chosen */}
                   {selectedTenantId && (
                     <div className="space-y-1">
-                      <Label htmlFor="signup-event">Evento (opcional)</Label>
+                      <Label htmlFor="signup-event">Evento</Label>
                       <Select
                         value={selectedEventId}
                         onValueChange={setSelectedEventId}
@@ -502,35 +524,45 @@ function LoginPageContent() {
                   {selectedTenantId && selectedRole === 'PDV' && (
                     <div className="space-y-1">
                       <Label htmlFor="signup-pdv">Barraca / Ponto de Venda</Label>
-                      <Select
-                        value={selectedPdvId}
-                        onValueChange={setSelectedPdvId}
-                        disabled={loadingPdvs}
-                      >
-                        <SelectTrigger id="signup-pdv">
-                          <SelectValue
-                            placeholder={
-                              loadingPdvs
-                                ? 'Carregando barracas...'
-                                : pdvs.length === 0
-                                ? 'Nenhuma barraca encontrada'
-                                : 'Selecione a barraca'
-                            }
-                          />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {pdvs.map((p) => (
-                            <SelectItem key={p.id} value={p.id}>
-                              {p.nome}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <p className="text-[11px] text-muted-foreground">
-                        {pdvs.length === 0
-                          ? 'Cadastre ou aguarde o cadastro de barracas pelo admin.'
-                          : 'Selecione a barraca onde você atuará no evento.'}
-                      </p>
+                      {!selectedEventId ? (
+                        <p className="text-[11px] text-muted-foreground">
+                          Escolha o evento acima para ver as barracas.
+                        </p>
+                      ) : (
+                        <>
+                          <Select
+                            value={selectedPdvId}
+                            onValueChange={setSelectedPdvId}
+                            disabled={loadingPdvs || pdvs.length === 0}
+                          >
+                            <SelectTrigger id="signup-pdv">
+                              <SelectValue
+                                placeholder={
+                                  loadingPdvs
+                                    ? 'Carregando barracas...'
+                                    : pdvs.length === 0
+                                    ? 'Nenhuma barraca neste evento'
+                                    : 'Selecione a barraca'
+                                }
+                              />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {pdvs.map((p) => (
+                                <SelectItem key={p.id} value={p.id}>
+                                  {p.nome}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <p className="text-[11px] text-muted-foreground">
+                            {loadingPdvs
+                              ? ''
+                              : pdvs.length === 0
+                              ? 'Este evento ainda não tem barracas. Você pode enviar o cadastro e o administrador define a sua barraca na aprovação.'
+                              : 'Selecione a barraca onde você atuará no evento.'}
+                          </p>
+                        </>
+                      )}
                     </div>
                   )}
 
