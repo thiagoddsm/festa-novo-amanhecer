@@ -43,6 +43,7 @@ import type { UserProfile, Pdv, Tenant, TenantEvent, TenantRole, UserRole } from
 import { type ColumnDef } from '@tanstack/react-table';
 import type { Firestore } from 'firebase/firestore';
 import CreateUserDialog from '@/components/admin/CreateUserDialog';
+import { useTenant } from '@/hooks/use-tenant-context';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -94,7 +95,7 @@ async function loadEvents(firestore: Firestore, tenantId: string): Promise<Tenan
   if (eventCache[tenantId]) return eventCache[tenantId];
   const snap = await getDocs(collection(firestore, 'tenants', tenantId, 'events'));
   const events = snap.docs.map((d) => ({ id: d.id, ...d.data() } as TenantEvent));
-  eventCache[tenantId] = events;
+  if (events.length > 0) eventCache[tenantId] = events;
   return events;
 }
 
@@ -228,13 +229,13 @@ VisitanteAlert.displayName = 'VisitanteAlert';
 type TenantAccessPanelProps = {
   user: UserProfile;
   tenants: Tenant[];
+  eventsByTenant: Record<string, TenantEvent[]>;
 };
 
-const TenantAccessPanel = memo(({ user, tenants }: TenantAccessPanelProps) => {
+const TenantAccessPanel = memo(({ user, tenants, eventsByTenant }: TenantAccessPanelProps) => {
   const firestore = useFirestore();
   const { toast } = useToast();
   const [expanded, setExpanded] = useState(false);
-  const [eventsByTenant, setEventsByTenant] = useState<Record<string, TenantEvent[]>>({});
   const [pendingTenant, setPendingTenant] = useState<string | null>(null);
   const [addEventSelect, setAddEventSelect] = useState<Record<string, string>>({});
   const [newTenantId, setNewTenantId] = useState('');
@@ -242,24 +243,7 @@ const TenantAccessPanel = memo(({ user, tenants }: TenantAccessPanelProps) => {
   const userTenantIds = Object.keys(user.tenants ?? {});
   const unlinkedTenants = tenants.filter((t) => !userTenantIds.includes(t.id));
 
-  const ensureEvents = useCallback(
-    async (tenantId: string) => {
-      if (eventsByTenant[tenantId]) return;
-      const events = await loadEvents(firestore, tenantId);
-      setEventsByTenant((prev) => ({ ...prev, [tenantId]: events }));
-    },
-    [firestore, eventsByTenant],
-  );
-
-  const handleExpand = () => {
-    setExpanded((v) => {
-      if (!v) {
-        // preload events for all current tenants
-        userTenantIds.forEach((tid) => ensureEvents(tid));
-      }
-      return !v;
-    });
-  };
+  const handleExpand = () => setExpanded((v) => !v);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const mutate = useCallback(async (tenantId: string, payload: Record<string, any>, successMsg: string) => {
@@ -382,7 +366,6 @@ const TenantAccessPanel = memo(({ user, tenants }: TenantAccessPanelProps) => {
                     value={addEventSelect[tenantId] ?? ''}
                     onValueChange={(v) => {
                       setAddEventSelect((prev) => ({ ...prev, [tenantId]: v }));
-                      ensureEvents(tenantId);
                     }}
                   >
                     <SelectTrigger className="h-7 text-xs flex-1">
@@ -452,12 +435,21 @@ TenantAccessPanel.displayName = 'TenantAccessPanel';
 // ---------------------------------------------------------------------------
 // GlobalRoleManager — optimistic global role selector + PDV assignment
 // ---------------------------------------------------------------------------
-const GlobalRoleManager = memo(({ user, pdvs }: { user: UserProfile; pdvs: Pdv[] }) => {
+const GlobalRoleManager = memo(({ user, pdvs, allPdvs }: { user: UserProfile; pdvs: Pdv[]; allPdvs: Pdv[] }) => {
   const [localRole, setLocalRole] = useState<UserRole>(user.role);
   const [localPdvId, setLocalPdvId] = useState<string>(user.pdvId || '');
   const isUpdatingRef = useRef(false);
   const firestore = useFirestore();
   const { toast } = useToast();
+
+  // Opções = PDVs do evento/organização selecionados + (se houver) a barraca já atribuída ao usuário
+  const pdvOptions = useMemo(() => {
+    if (user.pdvId && !pdvs.some((p) => p.id === user.pdvId)) {
+      const assigned = allPdvs.find((p) => p.id === user.pdvId);
+      if (assigned) return [assigned, ...pdvs];
+    }
+    return pdvs;
+  }, [pdvs, allPdvs, user.pdvId]);
 
   useEffect(() => {
     setLocalRole(user.role);
@@ -535,12 +527,18 @@ const GlobalRoleManager = memo(({ user, pdvs }: { user: UserProfile; pdvs: Pdv[]
           <span className="text-[10px] font-bold text-orange-800 uppercase tracking-wider flex items-center gap-1">
             🏪 Barraca / PDV:
           </span>
-          <Select value={localPdvId} onValueChange={handlePdvChange}>
+          <Select value={localPdvId} onValueChange={handlePdvChange} disabled={pdvOptions.length === 0}>
             <SelectTrigger className="h-7 text-xs bg-white border-orange-300 font-semibold text-orange-950">
-              <SelectValue placeholder="Selecione a barraca..." />
+              <SelectValue
+                placeholder={
+                  pdvOptions.length === 0
+                    ? 'Nenhuma barraca neste evento'
+                    : 'Selecione a barraca...'
+                }
+              />
             </SelectTrigger>
             <SelectContent>
-              {pdvs.map((p) => (
+              {pdvOptions.map((p) => (
                 <SelectItem key={p.id} value={p.id} className="text-xs">
                   {p.nome}
                 </SelectItem>
@@ -561,6 +559,7 @@ function useAdminUsersData() {
   const [users, setUsers] = useState<UserProfile[] | null>(null);
   const [tenants, setTenants] = useState<Tenant[] | null>(null);
   const [pdvs, setPdvs] = useState<Pdv[] | null>(null);
+  const [eventsByTenant, setEventsByTenant] = useState<Record<string, TenantEvent[]>>({});
   const firestore = useFirestore();
 
   useEffect(() => {
@@ -609,19 +608,48 @@ function useAdminUsersData() {
     };
   }, [firestore]);
 
-  return { users, tenants, pdvs };
+  // Eventos de cada organização em tempo real (sem cache que possa ficar vazio)
+  const tenantIdsKey = (tenants ?? []).map((t) => t.id).sort().join('|');
+  useEffect(() => {
+    if (!firestore || !tenantIdsKey) return;
+    const unsubs = tenantIdsKey.split('|').map((tid) =>
+      onSnapshot(collection(firestore, 'tenants', tid, 'events'), (snap) => {
+        const evs = snap.docs.map((d) => ({ id: d.id, ...d.data() } as TenantEvent));
+        setEventsByTenant((prev) => ({ ...prev, [tid]: evs }));
+      }),
+    );
+    return () => unsubs.forEach((u) => u());
+  }, [firestore, tenantIdsKey]);
+
+  return { users, tenants, pdvs, eventsByTenant };
 }
 
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 export default function UsersPage() {
-  const { users, tenants, pdvs } = useAdminUsersData();
+  const { users, tenants, pdvs, eventsByTenant } = useAdminUsersData();
+  const { currentTenant, currentEvent } = useTenant();
 
   const isLoading = users === null || tenants === null || pdvs === null;
 
   const stableTenants = useMemo(() => tenants ?? [], [tenants]);
   const stablePdvs = useMemo(() => pdvs ?? [], [pdvs]);
+
+  // PDVs selecionáveis: somente os da organização/evento escolhidos no topo
+  const scopedPdvs = useMemo(
+    () =>
+      stablePdvs
+        .filter(
+          (p) =>
+            !!currentTenant &&
+            p.tenant_id === currentTenant.id &&
+            (!currentEvent || p.event_id === currentEvent.id) &&
+            p.nome !== 'Caixa Central',
+        )
+        .sort((a, b) => a.nome.localeCompare(b.nome)),
+    [stablePdvs, currentTenant, currentEvent],
+  );
 
   const columns: ColumnDef<UserProfile>[] = useMemo(
     () => [
@@ -649,7 +677,7 @@ export default function UsersPage() {
           return (
             <div className="flex flex-col gap-1">
               <RoleBadge role={user.role} />
-              <GlobalRoleManager user={user} pdvs={stablePdvs} />
+              <GlobalRoleManager user={user} pdvs={scopedPdvs} allPdvs={stablePdvs} />
               {user.role === 'VISITANTE' && (
                 <VisitanteAlert user={user} tenants={stableTenants} pdvs={stablePdvs} />
               )}
@@ -663,11 +691,17 @@ export default function UsersPage() {
         header: 'Acesso por Organização',
         cell: ({ row }) => {
           const user = row.original;
-          return <TenantAccessPanel user={user} tenants={stableTenants} />;
+          return (
+            <TenantAccessPanel
+              user={user}
+              tenants={stableTenants}
+              eventsByTenant={eventsByTenant}
+            />
+          );
         },
       },
     ],
-    [stableTenants, stablePdvs],
+    [stableTenants, stablePdvs, scopedPdvs, eventsByTenant],
   );
 
   const userFilterColumns = useMemo(
