@@ -41,6 +41,10 @@ export type UserProfile = {
   requestedTenantId?: string;
   /** Preenchido no auto-cadastro: evento que o usuário solicitou. */
   requestedEventId?: string;
+  /** Preenchido no auto-cadastro: função desejada (CAIXA ou PDV). */
+  requestedRole?: 'CAIXA' | 'PDV';
+  /** Preenchido no auto-cadastro: PDV específico se solicitou PDV. */
+  requestedPdvId?: string;
 };
 
 // ---------------------------------------------------------------------------

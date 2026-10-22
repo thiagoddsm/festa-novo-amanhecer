@@ -102,12 +102,27 @@ async function loadEvents(firestore: Firestore, tenantId: string): Promise<Tenan
 // VisitanteAlert — show pending request and approve button
 // ---------------------------------------------------------------------------
 const VisitanteAlert = memo(
-  ({ user, tenants }: { user: UserProfile; tenants: Tenant[] }) => {
+  ({ user, tenants, pdvs }: { user: UserProfile; tenants: Tenant[]; pdvs: Pdv[] }) => {
     const firestore = useFirestore();
     const { toast } = useToast();
     const [isApproving, setIsApproving] = useState(false);
+    const [eventName, setEventName] = useState<string | null>(null);
 
     const requestedTenant = tenants.find((t) => t.id === user.requestedTenantId);
+    const requestedPdv = user.requestedPdvId ? pdvs.find((p) => p.id === user.requestedPdvId) : null;
+
+    useEffect(() => {
+      if (!firestore || !user.requestedTenantId || !user.requestedEventId) return;
+
+      loadEvents(firestore, user.requestedTenantId)
+        .then((events) => {
+          const found = events.find((e) => e.id === user.requestedEventId);
+          if (found) {
+            setEventName(found.name);
+          }
+        })
+        .catch((err) => console.warn('Erro ao carregar nome do evento solicitado:', err));
+    }, [firestore, user.requestedTenantId, user.requestedEventId]);
 
     if (!user.requestedTenantId) return null;
 
@@ -117,8 +132,22 @@ const VisitanteAlert = memo(
       try {
         const tenantId = user.requestedTenantId!;
         const eventId = user.requestedEventId;
-        const newGlobalRole: UserRole = eventId ? 'ADMIN_EVENTO' : 'ADMIN_ORGANIZACAO';
-        const newTenantRole: TenantRole = eventId ? 'CAIXA' : 'ADMIN';
+        const reqRole = user.requestedRole;
+
+        let newGlobalRole: UserRole = 'CAIXA';
+        let newTenantRole: TenantRole = 'CAIXA';
+
+        if (reqRole === 'PDV') {
+          newGlobalRole = 'PDV';
+          newTenantRole = 'PDV';
+        } else if (reqRole === 'CAIXA') {
+          newGlobalRole = 'CAIXA';
+          newTenantRole = 'CAIXA';
+        } else {
+          // Fallback legacy
+          newGlobalRole = eventId ? 'ADMIN_EVENTO' : 'ADMIN_ORGANIZACAO';
+          newTenantRole = eventId ? 'CAIXA' : 'ADMIN';
+        }
 
         const tenantEntry = eventId
           ? { role: newTenantRole, allowedEventIds: [eventId] }
@@ -130,10 +159,16 @@ const VisitanteAlert = memo(
           [`tenants.${tenantId}`]: tenantEntry,
           requestedTenantId: deleteField(),
           requestedEventId: deleteField(),
+          requestedRole: deleteField(),
+          requestedPdvId: deleteField(),
         };
 
+        if (reqRole === 'PDV' && user.requestedPdvId) {
+          updatePayload.pdvId = user.requestedPdvId;
+        }
+
         await updateDoc(doc(firestore, 'users', user.id), updatePayload);
-        toast({ title: 'Acesso aprovado!', description: `${user.name} recebeu acesso.` });
+        toast({ title: 'Acesso aprovado!', description: `${user.name} aprovado como ${ROLE_LABELS[newGlobalRole] || newGlobalRole}.` });
       } catch (err) {
         console.error(err);
         toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível aprovar o acesso.' });
@@ -143,26 +178,43 @@ const VisitanteAlert = memo(
     };
 
     return (
-      <div className="flex flex-col gap-1 mt-1 p-2 rounded-md bg-yellow-50 border border-yellow-200">
-        <div className="flex items-center gap-1 text-yellow-700 text-xs font-medium">
-          <AlertTriangle className="h-3 w-3" />
-          Solicitação Pendente
+      <div className="flex flex-col gap-1 mt-1 p-2.5 rounded-lg bg-amber-50/80 border border-amber-200 shadow-2xs">
+        <div className="flex items-center gap-1.5 text-amber-800 text-xs font-bold">
+          <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
+          Solicitação de Cadastro Pendente
         </div>
         {requestedTenant && (
-          <p className="text-xs text-yellow-600">
-            Org: <strong>{requestedTenant.name}</strong>
-            {user.requestedEventId && ` | Evento ID: ${user.requestedEventId}`}
-          </p>
+          <div className="text-xs text-amber-900 space-y-0.5">
+            <p>
+              Org: <strong>{requestedTenant.name}</strong>
+              {user.requestedEventId && (
+                <>
+                  {' • '}Evento: <strong>{eventName || 'Carregando...'}</strong>
+                </>
+              )}
+            </p>
+            <p className="flex items-center gap-1.5 pt-0.5">
+              <span>Função Desejada:</span>
+              <span className="font-bold text-primary px-1.5 py-0.2 bg-background rounded border border-border">
+                {user.requestedRole === 'PDV' ? 'PDV (Barraca)' : 'Caixa Central'}
+              </span>
+              {user.requestedRole === 'PDV' && (
+                <span className="text-muted-foreground text-[11px]">
+                  {requestedPdv ? `(${requestedPdv.nome})` : user.requestedPdvId ? `(ID: ${user.requestedPdvId})` : '(Nenhuma barraca pré-selecionada)'}
+                </span>
+              )}
+            </p>
+          </div>
         )}
         <Button
           size="sm"
           variant="outline"
-          className="self-start text-green-700 border-green-400 hover:bg-green-50 text-xs h-7 mt-1"
+          className="self-start text-green-700 border-green-500 hover:bg-green-100/60 text-xs h-7 mt-1.5 font-bold shadow-2xs"
           onClick={handleApprove}
           disabled={isApproving}
         >
-          <CheckCircle className="h-3 w-3 mr-1" />
-          {isApproving ? 'Aprovando…' : 'Aprovar Acesso'}
+          <CheckCircle className="h-3.5 w-3.5 mr-1" />
+          {isApproving ? 'Aprovando…' : `Aprovar como ${user.requestedRole === 'PDV' ? 'PDV' : 'Caixa'}`}
         </Button>
       </div>
     );
@@ -486,6 +538,8 @@ function useAdminUsersData() {
             tenants: data.tenants || {},
             requestedTenantId: data.requestedTenantId,
             requestedEventId: data.requestedEventId,
+            requestedRole: data.requestedRole,
+            requestedPdvId: data.requestedPdvId,
           } as UserProfile;
         }),
       );
@@ -518,6 +572,7 @@ export default function UsersPage() {
   const isLoading = users === null || tenants === null || pdvs === null;
 
   const stableTenants = useMemo(() => tenants ?? [], [tenants]);
+  const stablePdvs = useMemo(() => pdvs ?? [], [pdvs]);
 
   const columns: ColumnDef<UserProfile>[] = useMemo(
     () => [
@@ -547,7 +602,7 @@ export default function UsersPage() {
               <RoleBadge role={user.role} />
               <GlobalRoleManager user={user} />
               {user.role === 'VISITANTE' && (
-                <VisitanteAlert user={user} tenants={stableTenants} />
+                <VisitanteAlert user={user} tenants={stableTenants} pdvs={stablePdvs} />
               )}
             </div>
           );

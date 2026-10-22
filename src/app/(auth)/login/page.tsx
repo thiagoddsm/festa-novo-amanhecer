@@ -45,6 +45,13 @@ interface TenantEvent {
   name: string;
 }
 
+interface Pdv {
+  id: string;
+  nome: string;
+  event_id?: string;
+  tenant_id?: string;
+}
+
 // ---------------------------------------------------------------------------
 // Google icon SVG
 // ---------------------------------------------------------------------------
@@ -89,10 +96,14 @@ function LoginPageContent() {
   const [signupConfirm, setSignupConfirm] = useState('');
   const [selectedTenantId, setSelectedTenantId] = useState('');
   const [selectedEventId, setSelectedEventId] = useState('');
+  const [selectedRole, setSelectedRole] = useState<'CAIXA' | 'PDV'>('CAIXA');
+  const [selectedPdvId, setSelectedPdvId] = useState('');
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [events, setEvents] = useState<TenantEvent[]>([]);
+  const [pdvs, setPdvs] = useState<Pdv[]>([]);
   const [loadingTenants, setLoadingTenants] = useState(false);
   const [loadingEvents, setLoadingEvents] = useState(false);
+  const [loadingPdvs, setLoadingPdvs] = useState(false);
   const [signupSuccess, setSignupSuccess] = useState(false);
 
   // ---- Redirect authenticated users ----
@@ -126,6 +137,8 @@ function LoginPageContent() {
   useEffect(() => {
     setEvents([]);
     setSelectedEventId('');
+    setPdvs([]);
+    setSelectedPdvId('');
     if (!firestore || !selectedTenantId) return;
     setLoadingEvents(true);
     getDocs(collection(firestore, 'tenants', selectedTenantId, 'events'))
@@ -143,6 +156,28 @@ function LoginPageContent() {
       })
       .finally(() => setLoadingEvents(false));
   }, [firestore, selectedTenantId, toast]);
+
+  // ---- Load PDVs when event or tenant changes ----
+  useEffect(() => {
+    setPdvs([]);
+    setSelectedPdvId('');
+    if (!firestore || !selectedTenantId) return;
+    setLoadingPdvs(true);
+    getDocs(collection(firestore, 'pdvs'))
+      .then((snap) => {
+        const all = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Pdv));
+        const filtered = all.filter((p) => {
+          if (p.tenant_id && p.tenant_id !== selectedTenantId) return false;
+          if (selectedEventId && p.event_id && p.event_id !== selectedEventId) return false;
+          return true;
+        });
+        setPdvs(filtered);
+      })
+      .catch(() => {
+        console.warn('Erro ao carregar PDVs.');
+      })
+      .finally(() => setLoadingPdvs(false));
+  }, [firestore, selectedTenantId, selectedEventId]);
 
   // ---- Handlers ----
 
@@ -226,6 +261,8 @@ function LoginPageContent() {
         role: 'VISITANTE',
         requestedTenantId: selectedTenantId,
         requestedEventId: selectedEventId || null,
+        requestedRole: selectedRole,
+        requestedPdvId: selectedRole === 'PDV' ? selectedPdvId || null : null,
       });
 
       // Sign out immediately so they wait for admin approval
@@ -439,6 +476,61 @@ function LoginPageContent() {
                           ))}
                         </SelectContent>
                       </Select>
+                    </div>
+                  )}
+
+                  {/* Role select — Caixa or PDV */}
+                  {selectedTenantId && (
+                    <div className="space-y-1 pt-1">
+                      <Label htmlFor="signup-role">Função Desejada</Label>
+                      <Select
+                        value={selectedRole}
+                        onValueChange={(val) => setSelectedRole(val as 'CAIXA' | 'PDV')}
+                      >
+                        <SelectTrigger id="signup-role">
+                          <SelectValue placeholder="Selecione a função" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="CAIXA">Operador de Caixa Central</SelectItem>
+                          <SelectItem value="PDV">Operador de PDV (Barraca / Comida / Bebida)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  {/* PDV / Barraca select — only shown if PDV is selected */}
+                  {selectedTenantId && selectedRole === 'PDV' && (
+                    <div className="space-y-1">
+                      <Label htmlFor="signup-pdv">Barraca / Ponto de Venda</Label>
+                      <Select
+                        value={selectedPdvId}
+                        onValueChange={setSelectedPdvId}
+                        disabled={loadingPdvs}
+                      >
+                        <SelectTrigger id="signup-pdv">
+                          <SelectValue
+                            placeholder={
+                              loadingPdvs
+                                ? 'Carregando barracas...'
+                                : pdvs.length === 0
+                                ? 'Nenhuma barraca encontrada'
+                                : 'Selecione a barraca'
+                            }
+                          />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {pdvs.map((p) => (
+                            <SelectItem key={p.id} value={p.id}>
+                              {p.nome}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-[11px] text-muted-foreground">
+                        {pdvs.length === 0
+                          ? 'Cadastre ou aguarde o cadastro de barracas pelo admin.'
+                          : 'Selecione a barraca onde você atuará no evento.'}
+                      </p>
                     </div>
                   )}
 
