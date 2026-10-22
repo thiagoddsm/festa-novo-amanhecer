@@ -11,7 +11,7 @@ import { useFirestore } from '@/firebase';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { MessageSquare, CheckCircle, WalletCards, ShieldCheck } from 'lucide-react';
+import { MessageSquare, CheckCircle, WalletCards, ShieldCheck, PlusCircle, ArrowUpCircle, Search, ArrowRightLeft } from 'lucide-react';
 import type { TenantEvent } from '@/lib/definitions';
 import { checkEventWhatsappStatus } from '@/lib/actions';
 import { getPdvInstanceName } from '@/lib/whatsapp';
@@ -61,48 +61,48 @@ export default function CashierPage() {
   const phoneNumber = liveEvent?.whatsapp?.phoneNumber;
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4 sm:gap-6 min-w-0 w-full max-w-full">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-2 border-b">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-            <WalletCards className="h-6 w-6 text-primary" />
-            Caixa Central
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 pb-2 border-b">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight flex items-center gap-2">
+            <WalletCards className="h-5 w-5 sm:h-6 sm:w-6 text-primary shrink-0" />
+            <span className="truncate">Caixa Central</span>
           </h1>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-xs sm:text-sm text-muted-foreground truncate">
             {currentTenant?.name ? `${currentTenant.name} • ` : ''}
             {currentEvent?.name || 'Selecione um evento'}
           </p>
         </div>
 
         {currentTenant && liveEvent && (
-          <div className="flex items-center gap-3">
+          <div className="w-full sm:w-auto flex items-center gap-2">
             {whatsappStatus === 'CONNECTED' ? (
               <button
                 type="button"
                 onClick={() => setWhatsappDialogOpen(true)}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-green-300 bg-green-50 text-green-800 text-xs font-semibold hover:bg-green-100 transition-colors shadow-sm"
+                className="w-full sm:w-auto flex items-center justify-center gap-2 px-3 py-1.5 rounded-full border border-green-300 bg-green-50 text-green-800 text-xs font-semibold hover:bg-green-100 transition-colors shadow-sm"
                 title="Clique para gerenciar ou desconectar o WhatsApp"
               >
-                <span className="relative flex h-2.5 w-2.5">
+                <span className="relative flex h-2 w-2 shrink-0">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-600"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-green-600"></span>
                 </span>
-                <MessageSquare className="h-3.5 w-3.5 text-green-700" />
-                <span>WhatsApp Conectado</span>
-                {phoneNumber && <span className="font-mono font-normal opacity-90">({phoneNumber})</span>}
+                <MessageSquare className="h-3.5 w-3.5 text-green-700 shrink-0" />
+                <span className="truncate">WhatsApp Conectado</span>
+                {phoneNumber && <span className="font-mono font-normal opacity-90 hidden xs:inline">({phoneNumber})</span>}
               </button>
             ) : (
-              <div className="flex items-center gap-2">
+              <div className="w-full sm:w-auto flex items-center gap-2">
                 <Button
                   size="sm"
                   onClick={() => setWhatsappDialogOpen(true)}
-                  className="bg-green-600 hover:bg-green-700 text-white text-xs shadow-sm"
+                  className="w-full sm:w-auto bg-green-600 hover:bg-green-700 text-white text-xs shadow-sm h-8"
                 >
-                  <MessageSquare className="h-3.5 w-3.5 mr-1.5" />
+                  <MessageSquare className="h-3.5 w-3.5 mr-1.5 shrink-0" />
                   Conectar WhatsApp do Evento
                 </Button>
-                <Badge variant="outline" className="text-[11px] text-muted-foreground hidden sm:flex items-center gap-1">
+                <Badge variant="outline" className="text-[11px] text-muted-foreground hidden sm:flex items-center gap-1 shrink-0">
                   <ShieldCheck className="h-3 w-3 text-blue-600" /> Fallback IBM
                 </Badge>
               </div>
@@ -112,26 +112,31 @@ export default function CashierPage() {
       </div>
 
       {/* Mobile Operation Selector */}
-      <div className="md:hidden flex items-center p-1 bg-muted rounded-xl gap-1">
+      <div className="md:hidden grid grid-cols-4 p-1 bg-muted rounded-xl gap-1">
         {[
-          { id: 'novo', label: 'Novo Cartão' },
-          { id: 'recarga', label: 'Recarregar' },
-          { id: 'saldo', label: 'Consultar' },
-          { id: 'transferir', label: 'Transferir' },
-        ].map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => setActiveCashierTab(tab.id as any)}
-            className={`flex-1 py-2 px-1 text-xs font-bold rounded-lg transition-all ${
-              activeCashierTab === tab.id
-                ? 'bg-background text-foreground shadow-xs'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
+          { id: 'novo', label: 'Novo', icon: PlusCircle },
+          { id: 'recarga', label: 'Recarga', icon: ArrowUpCircle },
+          { id: 'saldo', label: 'Saldo', icon: Search },
+          { id: 'transferir', label: 'Transferir', icon: ArrowRightLeft },
+        ].map((tab) => {
+          const Icon = tab.icon;
+          const isActive = activeCashierTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveCashierTab(tab.id as any)}
+              className={`flex flex-col items-center justify-center py-2 px-1 rounded-lg transition-all min-w-0 ${
+                isActive
+                  ? 'bg-background text-foreground shadow-xs font-bold'
+                  : 'text-muted-foreground hover:text-foreground font-medium'
+              }`}
+            >
+              <Icon className={`h-4 w-4 mb-0.5 shrink-0 ${isActive ? 'text-primary' : ''}`} />
+              <span className="text-[11px] xs:text-xs truncate max-w-full">{tab.label}</span>
+            </button>
+          );
+        })}
       </div>
 
       {/* Mobile Form Active View */}

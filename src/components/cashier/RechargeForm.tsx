@@ -131,7 +131,7 @@ export default function RechargeForm() {
 
   return (
     <>
-      <Card>
+      <Card className="w-full min-w-0">
         <CardHeader>
           <CardTitle>Recarregar Saldo</CardTitle>
           <CardDescription>
@@ -150,8 +150,9 @@ export default function RechargeForm() {
                   required
                   value={qrCodeId}
                   onChange={(e) => setQrCodeId(e.target.value)}
+                  className="h-10 text-sm"
                 />
-                <Button type="button" variant="outline" size="icon" onClick={() => setIsScannerOpen(true)}>
+                <Button type="button" variant="outline" size="icon" className="shrink-0 h-10 w-10" onClick={() => setIsScannerOpen(true)}>
                   <QrCode className="h-4 w-4" />
                 </Button>
               </div>
@@ -169,9 +170,9 @@ export default function RechargeForm() {
                 required
                 value={rechargeValue}
                 onChange={(e) => setRechargeValue(e.target.value)}
-                className="h-10 text-lg font-bold"
+                className="h-10 text-base sm:text-lg font-bold"
               />
-              <div className="grid grid-cols-4 gap-1.5 pt-1">
+              <div className="grid grid-cols-4 gap-1 sm:gap-1.5 pt-1">
                 {[10, 20, 50, 100].map((val) => (
                   <Button
                     key={val}
@@ -179,7 +180,7 @@ export default function RechargeForm() {
                     variant="outline"
                     size="sm"
                     onClick={() => setRechargeValue(val.toString())}
-                    className="h-8 text-xs font-bold hover:bg-primary/10 hover:border-primary/50"
+                    className="h-8 px-1 text-[11px] xs:text-xs font-bold hover:bg-primary/10 hover:border-primary/50 truncate"
                   >
                     + R$ {val}
                   </Button>

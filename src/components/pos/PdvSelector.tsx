@@ -19,20 +19,20 @@ export default function PdvSelector({ pdvs, onPdvSelect }: PdvSelectorProps) {
   const isAdmin = ['SUPERADMIN', 'ADMIN_ORGANIZACAO', 'ADMIN_EVENTO'].includes(user?.role ?? '');
 
   return (
-    <div className="mx-auto max-w-2xl">
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <Store className="h-5 w-5" />
-              Selecionar Ponto de Venda
+    <div className="mx-auto max-w-2xl w-full min-w-0">
+      <Card className="w-full min-w-0">
+        <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 sm:p-6">
+          <div className="min-w-0">
+            <CardTitle className="flex items-center gap-2 text-lg sm:text-xl font-bold">
+              <Store className="h-5 w-5 text-primary shrink-0" />
+              <span className="truncate">Selecionar Ponto de Venda</span>
             </CardTitle>
-            <CardDescription>
+            <CardDescription className="text-xs sm:text-sm mt-1">
               {currentEvent ? `PDVs disponíveis em ${currentEvent.name}` : 'Escolha o PDV que você está operando para iniciar as vendas.'}
             </CardDescription>
           </div>
           {isAdmin && (
-            <Button variant="outline" size="sm" asChild>
+            <Button variant="outline" size="sm" asChild className="shrink-0 w-full sm:w-auto h-8 text-xs">
               <Link href="/admin/pdvs">
                 <Settings className="mr-1.5 h-3.5 w-3.5" />
                 Gerenciar PDVs
@@ -40,15 +40,13 @@ export default function PdvSelector({ pdvs, onPdvSelect }: PdvSelectorProps) {
             </Button>
           )}
         </CardHeader>
-        <CardContent className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <CardContent className="grid grid-cols-2 md:grid-cols-3 gap-2 sm:gap-4 p-3 sm:p-6 pt-0">
           {pdvs === null && (
             <>
-              <Skeleton className="h-24 w-full" />
-              <Skeleton className="h-24 w-full" />
-              <Skeleton className="h-24 w-full" />
-              <Skeleton className="h-24 w-full" />
-              <Skeleton className="h-24 w-full" />
-              <Skeleton className="h-24 w-full" />
+              <Skeleton className="h-20 sm:h-24 w-full rounded-xl" />
+              <Skeleton className="h-20 sm:h-24 w-full rounded-xl" />
+              <Skeleton className="h-20 sm:h-24 w-full rounded-xl" />
+              <Skeleton className="h-20 sm:h-24 w-full rounded-xl" />
             </>
           )}
           {pdvs && pdvs.length === 0 && (
@@ -72,11 +70,11 @@ export default function PdvSelector({ pdvs, onPdvSelect }: PdvSelectorProps) {
               <Button
                 key={pdv.id}
                 variant="outline"
-                className="h-24 text-lg font-medium shadow-sm hover:border-primary hover:bg-primary/5 transition-all flex flex-col justify-center items-center gap-1"
+                className="h-20 sm:h-24 text-sm sm:text-base font-semibold shadow-xs hover:border-primary hover:bg-primary/5 transition-all flex flex-col justify-center items-center gap-1.5 p-2 text-center whitespace-normal break-words rounded-xl"
                 onClick={() => onPdvSelect(pdv)}
               >
-                <Store className="h-5 w-5 text-primary opacity-80" />
-                <span>{pdv.nome}</span>
+                <Store className="h-5 w-5 text-primary opacity-80 shrink-0" />
+                <span className="line-clamp-2 leading-tight text-xs sm:text-sm">{pdv.nome}</span>
               </Button>
             ))}
         </CardContent>

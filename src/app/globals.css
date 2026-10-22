@@ -82,7 +82,10 @@ body {
   * {
     @apply border-border;
   }
+  html {
+    @apply max-w-full overflow-x-hidden;
+  }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground max-w-full overflow-x-hidden;
   }
 }

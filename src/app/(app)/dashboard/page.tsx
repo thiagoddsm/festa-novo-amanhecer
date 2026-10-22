@@ -36,7 +36,7 @@ const formatTimestamp = (ts: unknown): Date => {
 
 export default function DashboardPage() {
   const firestore = useFirestore();
-  const { currentTenant, currentEvent } = useTenant();
+  const { currentTenant, currentEvent, isLoadingTenants } = useTenant();
 
   const cardsQuery = useMemoFirebase(() => collection(firestore, 'cards'), [firestore]);
   const transactionsQuery = useMemoFirebase(() => collection(firestore, 'transactions'), [firestore]);
@@ -48,46 +48,42 @@ export default function DashboardPage() {
   const { data: allPdvs, isLoading: loadingPdvs } = useCollection<Pdv>(pdvsQuery);
   const { data: allOrders, isLoading: loadingOrders } = useCollection<Order>(ordersQuery);
   
-  const isLoading = loadingCards || loadingTransactions || loadingPdvs || loadingOrders;
+  const isLoading = loadingCards || loadingTransactions || loadingPdvs || loadingOrders || isLoadingTenants;
 
-  // Filter cards by current tenant and event
+  // Filter cards strictly by current tenant and event
   const filteredCards = useMemo(() => {
-    if (!allCards) return [];
-    return allCards.filter((card) => {
-      if (currentTenant && card.tenant_id !== currentTenant.id) return false;
-      if (currentEvent && card.event_id !== currentEvent.id) return false;
-      return true;
-    });
+    if (!allCards || !currentTenant) return [];
+    if (currentEvent) {
+      return allCards.filter((card) => card.tenant_id === currentTenant.id && card.event_id === currentEvent.id);
+    }
+    return allCards.filter((card) => card.tenant_id === currentTenant.id && !card.event_id);
   }, [allCards, currentTenant, currentEvent]);
 
-  // Filter transactions by current tenant and event
+  // Filter transactions strictly by current tenant and event
   const filteredTransactions = useMemo(() => {
-    if (!allTransactions) return [];
-    return allTransactions.filter((tx) => {
-      if (currentTenant && tx.tenant_id !== currentTenant.id) return false;
-      if (currentEvent && tx.event_id !== currentEvent.id) return false;
-      return true;
-    });
+    if (!allTransactions || !currentTenant) return [];
+    if (currentEvent) {
+      return allTransactions.filter((tx) => tx.tenant_id === currentTenant.id && tx.event_id === currentEvent.id);
+    }
+    return allTransactions.filter((tx) => tx.tenant_id === currentTenant.id && !tx.event_id);
   }, [allTransactions, currentTenant, currentEvent]);
 
-  // Filter PDVs by current tenant and event
+  // Filter PDVs strictly by current tenant and event
   const filteredPdvs = useMemo(() => {
-    if (!allPdvs) return [];
-    return allPdvs.filter((pdv) => {
-      if (currentTenant && pdv.tenant_id !== currentTenant.id) return false;
-      if (currentEvent && pdv.event_id !== currentEvent.id) return false;
-      return true;
-    });
+    if (!allPdvs || !currentTenant) return [];
+    if (currentEvent) {
+      return allPdvs.filter((pdv) => pdv.tenant_id === currentTenant.id && pdv.event_id === currentEvent.id);
+    }
+    return allPdvs.filter((pdv) => pdv.tenant_id === currentTenant.id && !pdv.event_id);
   }, [allPdvs, currentTenant, currentEvent]);
 
-  // Filter Orders by current tenant and event
+  // Filter Orders strictly by current tenant and event
   const filteredOrders = useMemo(() => {
-    if (!allOrders) return [];
-    return allOrders.filter((order) => {
-      if (currentTenant && order.tenant_id !== currentTenant.id) return false;
-      if (currentEvent && order.event_id !== currentEvent.id) return false;
-      return true;
-    });
+    if (!allOrders || !currentTenant) return [];
+    if (currentEvent) {
+      return allOrders.filter((order) => order.tenant_id === currentTenant.id && order.event_id === currentEvent.id);
+    }
+    return allOrders.filter((order) => order.tenant_id === currentTenant.id && !order.event_id);
   }, [allOrders, currentTenant, currentEvent]);
 
   // Calculate WhatsApp Operational Metrics

@@ -87,11 +87,14 @@ export default function AdminPdvsPage() {
     const unsubscribe = onSnapshot(pdvCol, async (snapshot) => {
       const allPdvs = snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as Pdv));
 
-      // Filter by current tenant and event
+      // Filter strictly by current tenant and event
       const filtered = allPdvs.filter((p) => {
-        if (currentTenant && p.tenant_id !== currentTenant.id) return false;
-        if (currentEvent && p.event_id !== currentEvent.id) return false;
-        return true;
+        if (!currentTenant) return false;
+        if (p.tenant_id !== currentTenant.id) return false;
+        if (currentEvent) {
+          return p.event_id === currentEvent.id;
+        }
+        return !p.event_id;
       });
 
       setPdvs(filtered);
@@ -198,36 +201,36 @@ export default function AdminPdvsPage() {
   };
 
   return (
-    <div className="flex flex-col gap-6">
-      <Card>
-        <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0 pb-4">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <Store className="h-5 w-5" />
-              Gerenciar Pontos de Venda (PDVs)
+    <div className="flex flex-col gap-4 sm:gap-6 min-w-0 w-full max-w-full">
+      <Card className="w-full min-w-0">
+        <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 sm:p-6 pb-4">
+          <div className="min-w-0">
+            <CardTitle className="flex items-center gap-2 text-lg sm:text-xl font-bold">
+              <Store className="h-5 w-5 text-primary shrink-0" />
+              <span className="truncate">Gerenciar Pontos de Venda (PDVs)</span>
             </CardTitle>
-            <CardDescription className="flex items-center gap-2 mt-1">
-              <span>Configuração de barracas e cardápios para:</span>
-              <Badge variant="outline" className="font-normal text-xs gap-1">
-                <Building2 className="h-3 w-3" />
-                {currentTenant?.name || 'Todas as Organizações'}
+            <div className="flex flex-wrap items-center gap-1.5 mt-1.5 text-xs sm:text-sm text-muted-foreground">
+              <span>Configuração para:</span>
+              <Badge variant="outline" className="font-normal text-xs gap-1 max-w-[170px] truncate">
+                <Building2 className="h-3 w-3 shrink-0" />
+                <span className="truncate">{currentTenant?.name || 'Todas as Organizações'}</span>
               </Badge>
               {currentEvent && (
-                <Badge variant="secondary" className="font-normal text-xs gap-1">
-                  <Calendar className="h-3 w-3" />
-                  {currentEvent.name}
+                <Badge variant="secondary" className="font-normal text-xs gap-1 max-w-[150px] truncate">
+                  <Calendar className="h-3 w-3 shrink-0" />
+                  <span className="truncate">{currentEvent.name}</span>
                 </Badge>
               )}
-            </CardDescription>
+            </div>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
             {(!pdvs || pdvs.length === 0) && (
               <Button
                 variant="outline"
                 onClick={handleSeedDefaults}
                 disabled={isSeeding || !currentTenant || !currentEvent}
-                className="text-xs"
+                className="text-xs flex-1 sm:flex-initial"
               >
                 <Sparkles className="mr-1.5 h-3.5 w-3.5 text-primary" />
                 {isSeeding ? 'Criando…' : 'Criar Barracas Padrão'}
@@ -236,7 +239,7 @@ export default function AdminPdvsPage() {
 
             <Dialog open={newPdvOpen} onOpenChange={setNewPdvOpen}>
               <DialogTrigger asChild>
-                <Button>
+                <Button className="flex-1 sm:flex-initial">
                   <Plus className="mr-2 h-4 w-4" />
                   Novo PDV
                 </Button>
@@ -279,25 +282,25 @@ export default function AdminPdvsPage() {
           </div>
         </CardHeader>
 
-        <CardContent>
+        <CardContent className="p-3 sm:p-6 pt-0">
           {isLoading ? (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              <Skeleton className="h-44 w-full" />
-              <Skeleton className="h-44 w-full" />
-              <Skeleton className="h-44 w-full" />
+            <div className="grid gap-3 sm:gap-4 md:grid-cols-2 lg:grid-cols-3">
+              <Skeleton className="h-44 w-full rounded-xl" />
+              <Skeleton className="h-44 w-full rounded-xl" />
+              <Skeleton className="h-44 w-full rounded-xl" />
             </div>
           ) : pdvs && pdvs.length > 0 ? (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-3 sm:gap-4 md:grid-cols-2 lg:grid-cols-3">
               {pdvs.map((pdv) => {
                 const items = menuItemsByPdv[pdv.id] || [];
 
                 return (
-                  <Card key={pdv.id} className="border bg-card flex flex-col justify-between">
-                    <CardHeader className="pb-3 flex flex-row items-start justify-between space-y-0">
-                      <div>
-                        <CardTitle className="text-base font-semibold flex items-center gap-2">
-                          <Store className="h-4 w-4 text-primary" />
-                          {pdv.nome}
+                  <Card key={pdv.id} className="border bg-card flex flex-col justify-between w-full min-w-0 shadow-xs">
+                    <CardHeader className="p-3 sm:p-4 pb-2 flex flex-row items-start justify-between space-y-0 gap-2">
+                      <div className="min-w-0 flex-1">
+                        <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-2 min-w-0">
+                          <Store className="h-4 w-4 text-primary shrink-0" />
+                          <span className="truncate">{pdv.nome}</span>
                         </CardTitle>
                         <CardDescription className="text-xs mt-0.5">
                           {items.length} {items.length === 1 ? 'item no cardápio' : 'itens no cardápio'}
@@ -308,7 +311,7 @@ export default function AdminPdvsPage() {
                           {pdv.whatsapp?.status === 'CONNECTED' ? (
                             <Badge
                               variant="outline"
-                              className="border-green-300 bg-green-50 text-green-700 text-[11px] gap-1 cursor-pointer hover:bg-green-100 shadow-2xs"
+                              className="border-green-300 bg-green-50 text-green-700 text-[11px] gap-1 cursor-pointer hover:bg-green-100 shadow-2xs max-w-full truncate"
                               onClick={() => {
                                 setSelectedPdvForWhatsapp(pdv);
                                 setWhatsappDialogOpen(true);
@@ -316,15 +319,15 @@ export default function AdminPdvsPage() {
                             >
                               <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse shrink-0" />
                               <MessageSquare className="h-3 w-3 shrink-0" />
-                              <span>WPP Conectado</span>
+                              <span className="truncate">WPP Conectado</span>
                               {pdv.whatsapp.phoneNumber && (
-                                <span className="font-mono text-[10px] opacity-75">+{pdv.whatsapp.phoneNumber}</span>
+                                <span className="font-mono text-[10px] opacity-75 hidden xs:inline">+{pdv.whatsapp.phoneNumber}</span>
                               )}
                             </Badge>
                           ) : (
                             <Badge
                               variant="outline"
-                              className="border-amber-200 bg-amber-50/70 text-amber-800 text-[11px] gap-1 cursor-pointer hover:bg-amber-100 shadow-2xs"
+                              className="border-amber-200 bg-amber-50/70 text-amber-800 text-[11px] gap-1 cursor-pointer hover:bg-amber-100 shadow-2xs max-w-full truncate"
                               onClick={() => {
                                 setSelectedPdvForWhatsapp(pdv);
                                 setWhatsappDialogOpen(true);
@@ -332,13 +335,13 @@ export default function AdminPdvsPage() {
                             >
                               <span className="h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0" />
                               <MessageSquare className="h-3 w-3 shrink-0" />
-                              <span>WPP Desconectado (Fallback IBM)</span>
+                              <span className="truncate">WPP Desconectado</span>
                             </Badge>
                           )}
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-0.5 shrink-0">
                         <Button
                           variant="ghost"
                           size="icon"
@@ -385,13 +388,13 @@ export default function AdminPdvsPage() {
                       </div>
                     </CardHeader>
 
-                    <CardContent className="flex flex-col gap-3 pt-0">
+                    <CardContent className="p-3 sm:p-4 pt-0 flex flex-col gap-3">
                       {/* Menu preview */}
                       <div className="space-y-1">
                         {items.length > 0 ? (
                           <div className="flex flex-wrap gap-1">
                             {items.slice(0, 4).map((item) => (
-                              <Badge key={item.id} variant="secondary" className="text-xs font-normal">
+                              <Badge key={item.id} variant="secondary" className="text-xs font-normal max-w-full truncate">
                                 {item.nome}
                               </Badge>
                             ))}
@@ -419,14 +422,14 @@ export default function AdminPdvsPage() {
                             setMenuSheetOpen(true);
                           }}
                         >
-                          <UtensilsCrossed className="mr-1.5 h-3.5 w-3.5" />
-                          Cardápio
+                          <UtensilsCrossed className="mr-1.5 h-3.5 w-3.5 shrink-0" />
+                          <span>Cardápio</span>
                         </Button>
 
                         <Button
                           size="sm"
                           variant="outline"
-                          className={`text-xs h-8 gap-1.5 ${
+                          className={`text-xs h-8 gap-1.5 shrink-0 ${
                             pdv.whatsapp?.status === 'CONNECTED'
                               ? 'border-green-300 bg-green-50 text-green-700 hover:bg-green-100'
                               : 'border-amber-200 bg-amber-50/70 text-amber-800 hover:bg-amber-100'
@@ -436,8 +439,8 @@ export default function AdminPdvsPage() {
                             setWhatsappDialogOpen(true);
                           }}
                         >
-                          <MessageSquare className="h-3.5 w-3.5" />
-                          {pdv.whatsapp?.status === 'CONNECTED' ? 'WhatsApp' : 'Conectar'}
+                          <MessageSquare className="h-3.5 w-3.5 shrink-0" />
+                          <span>{pdv.whatsapp?.status === 'CONNECTED' ? 'WhatsApp' : 'Conectar'}</span>
                         </Button>
                       </div>
                     </CardContent>

@@ -111,9 +111,9 @@ function AppContent({ children }: { children: React.ReactNode }) {
             </Sidebar>
             <SidebarInset>
                 <Header />
-                <main className="flex-grow p-2.5 sm:p-4 lg:p-6 bg-background max-w-full overflow-x-hidden">
+                <div className="flex-grow p-2.5 sm:p-4 lg:p-6 bg-background max-w-full overflow-x-hidden min-w-0 w-full">
                     {children}
-                </main>
+                </div>
             </SidebarInset>
         </SidebarProvider>
     );

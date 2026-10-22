@@ -35,11 +35,14 @@ export default function PosPage() {
     return () => unsubscribe();
   }, [firestore]);
 
-  // Filter PDVs by active tenant & event
+  // Filter PDVs strictly by active tenant & event
   const pdvs = (allPdvs || []).filter((p) => {
-    if (currentTenant && p.tenant_id !== currentTenant.id) return false;
-    if (currentEvent && p.event_id !== currentEvent.id) return false;
-    return true;
+    if (!currentTenant) return false;
+    if (p.tenant_id !== currentTenant.id) return false;
+    if (currentEvent) {
+      return p.event_id === currentEvent.id;
+    }
+    return !p.event_id;
   });
 
   // Automatically select assigned PDV for PDV role

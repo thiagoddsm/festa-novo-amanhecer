@@ -53,10 +53,10 @@ export function Header() {
     const title = getTitleFromPathname(pathname || '');
     
     return (
-        <header className="flex h-14 items-center gap-2 sm:gap-4 border-b bg-card px-2.5 sm:px-4 lg:h-[60px] lg:px-6 max-w-full overflow-hidden">
-            <SidebarTrigger className="md:hidden shrink-0" />
-            <div className="flex-1 min-w-0 flex items-center gap-2">
-                 <h1 className="text-sm sm:text-base md:text-lg font-semibold truncate">
+        <header className="flex h-14 items-center gap-1.5 sm:gap-3 border-b bg-card px-2 sm:px-4 lg:h-[60px] lg:px-6 w-full max-w-full overflow-hidden">
+            <SidebarTrigger className="md:hidden shrink-0 h-8 w-8" />
+            <div className="flex-1 min-w-0 flex items-center gap-1.5 sm:gap-2">
+                 <h1 className="text-xs sm:text-base md:text-lg font-semibold truncate">
                    <span className="sm:hidden">{pathname === '/pos' ? 'PDV' : title}</span>
                    <span className="hidden sm:inline">{title}</span>
                  </h1>
@@ -78,7 +78,7 @@ export function Header() {
                             if (found) setCurrentTenant(found);
                           }}
                         >
-                          <SelectTrigger className="h-8 text-[11px] sm:text-xs max-w-[85px] xs:max-w-[110px] sm:max-w-[150px] md:max-w-[200px] px-2 bg-background truncate">
+                          <SelectTrigger className="h-8 text-[11px] sm:text-xs w-[76px] xs:w-[100px] sm:w-[130px] md:w-[170px] px-1.5 sm:px-2 bg-background truncate">
                             <SelectValue placeholder="Org" />
                           </SelectTrigger>
                           <SelectContent>
@@ -103,7 +103,7 @@ export function Header() {
                             if (found) setCurrentEvent(found);
                           }}
                         >
-                          <SelectTrigger className="h-8 text-[11px] sm:text-xs max-w-[85px] xs:max-w-[110px] sm:max-w-[150px] md:max-w-[200px] px-2 bg-background truncate">
+                          <SelectTrigger className="h-8 text-[11px] sm:text-xs w-[76px] xs:w-[100px] sm:w-[130px] md:w-[170px] px-1.5 sm:px-2 bg-background truncate">
                             <SelectValue placeholder="Evento" />
                           </SelectTrigger>
                           <SelectContent>

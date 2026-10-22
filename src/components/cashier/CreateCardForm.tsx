@@ -244,7 +244,7 @@ export default function CreateCardForm() {
 
   return (
     <>
-      <Card className="screen-only">
+      <Card className="screen-only w-full min-w-0">
         <CardHeader>
           <CardTitle>Novo Cartão</CardTitle>
           <CardDescription>
@@ -269,12 +269,13 @@ export default function CreateCardForm() {
                 id="telefone_cliente"
                 name="telefone_cliente"
                 type="tel"
-                placeholder="Ex: (11) 99999-8888 ou 11999998888"
+                placeholder="Ex: (11) 99999-8888"
                 required
-                className="h-10 text-base sm:text-sm"
+                className="h-10 text-sm"
               />
-              <p className="text-[11px] text-green-700 font-medium flex items-center gap-1">
-                <span>📲</span> O cliente recebe o QR Code e comprovante direto no WhatsApp!
+              <p className="text-[11px] text-green-700 font-medium flex items-start gap-1.5 leading-tight">
+                <span className="shrink-0">📲</span>
+                <span>O cliente recebe o QR Code e comprovante direto no WhatsApp!</span>
               </p>
             </div>
             <div className="space-y-2">
@@ -286,6 +287,7 @@ export default function CreateCardForm() {
                 placeholder="Ex: 50.00"
                 step="0.01"
                 required
+                className="h-10 text-sm"
               />
             </div>
             <SubmitButton isPending={isPending} />

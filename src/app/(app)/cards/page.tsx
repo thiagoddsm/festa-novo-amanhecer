@@ -96,15 +96,18 @@ import { useTenant } from '@/hooks/use-tenant-context';
 
 export default function CardsPage() {
   const { user } = useAuth();
-  const { currentTenant, currentEvent } = useTenant();
+  const { currentTenant, currentEvent, isLoadingTenants } = useTenant();
   const allCards = useCollection<CardType>('cards');
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
 
   const filteredCards = (allCards || []).filter((card) => {
-    if (currentTenant && card.tenant_id !== currentTenant.id) return false;
-    if (currentEvent && card.event_id !== currentEvent.id) return false;
-    return true;
+    if (!currentTenant) return false;
+    if (card.tenant_id !== currentTenant.id) return false;
+    if (currentEvent) {
+      return card.event_id === currentEvent.id;
+    }
+    return !card.event_id;
   });
 
   useEffect(() => {
@@ -112,6 +115,8 @@ export default function CardsPage() {
       setIsLoading(false);
     }
   }, [allCards]);
+
+  const isPageLoading = isLoading || isLoadingTenants;
 
   const handleDeleteSelected = async (selectedData: CardType[]) => {
     const cardIds = selectedData.map(card => card.id);
@@ -135,7 +140,7 @@ export default function CardsPage() {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        {isLoading ? (
+        {isPageLoading ? (
           <div className="space-y-2">
             <Skeleton className="h-12 w-full" />
             <Skeleton className="h-12 w-full" />

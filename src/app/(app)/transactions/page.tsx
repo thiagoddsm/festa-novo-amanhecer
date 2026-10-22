@@ -275,27 +275,30 @@ import { useTenant } from '@/hooks/use-tenant-context';
 
 export default function TransactionsPage() {
   const { user } = useAuth();
-  const { currentTenant, currentEvent } = useTenant();
+  const { currentTenant, currentEvent, isLoadingTenants } = useTenant();
   const { transactions: allTransactions, pdvs, isLoading } = useTransactionDetails();
   const { toast } = useToast();
   
   const columns = useMemo(() => getColumns(user), [user]);
 
   const filteredTransactions = useMemo(() => {
-    if (!allTransactions) return [];
-    return allTransactions.filter((tx) => {
-      if (currentTenant && tx.tenant_id !== currentTenant.id) return false;
-      if (currentEvent && tx.event_id !== currentEvent.id) return false;
-      return true;
-    });
+    if (!allTransactions || !currentTenant) return [];
+    if (currentEvent) {
+      return allTransactions.filter(
+        (tx) => tx.tenant_id === currentTenant.id && tx.event_id === currentEvent.id
+      );
+    }
+    return allTransactions.filter((tx) => tx.tenant_id === currentTenant.id && !tx.event_id);
   }, [allTransactions, currentTenant, currentEvent]);
 
   const filteredPdvs = useMemo(() => {
-    return (pdvs || []).filter((p) => {
-      if (currentTenant && p.tenant_id !== currentTenant.id) return false;
-      if (currentEvent && p.event_id !== currentEvent.id) return false;
-      return true;
-    });
+    if (!pdvs || !currentTenant) return [];
+    if (currentEvent) {
+      return pdvs.filter(
+        (p) => p.tenant_id === currentTenant.id && p.event_id === currentEvent.id
+      );
+    }
+    return pdvs.filter((p) => p.tenant_id === currentTenant.id && !p.event_id);
   }, [pdvs, currentTenant, currentEvent]);
 
   const pdvOptions = useMemo(() => {
@@ -317,6 +320,8 @@ export default function TransactionsPage() {
     });
   }
 
+  const isPageLoading = isLoading || isLoadingTenants;
+
   return (
     <Card>
       <CardHeader>
@@ -329,7 +334,7 @@ export default function TransactionsPage() {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        {isLoading ? (
+        {isPageLoading ? (
           <div className="space-y-2">
             <Skeleton className="h-12 w-full" />
             <Skeleton className="h-12 w-full" />

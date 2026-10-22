@@ -481,7 +481,7 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv; onGoBack?: (
                     <Button 
                       key={item.id} 
                       variant="outline" 
-                      className="min-h-[82px] sm:h-24 flex-col justify-between items-stretch p-2 sm:p-3 text-left hover:border-primary/50 hover:bg-primary/5 transition-all duration-200 group relative overflow-hidden rounded-xl border-border/80 shadow-xs" 
+                      className="min-h-[82px] sm:h-24 flex-col justify-between items-stretch p-2 sm:p-3 text-left hover:border-primary/50 hover:bg-primary/5 transition-all duration-200 group relative overflow-hidden rounded-xl border-border/80 shadow-xs whitespace-normal break-words" 
                       onClick={() => addToCart(item)}
                     >
                         <span className="text-xs sm:text-sm font-semibold text-foreground line-clamp-2 leading-tight group-hover:text-primary transition-colors">{item.nome}</span>

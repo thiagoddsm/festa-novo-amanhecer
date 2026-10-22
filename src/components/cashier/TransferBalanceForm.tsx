@@ -149,7 +149,7 @@ export default function TransferBalanceForm() {
 
   return (
     <>
-      <Card>
+      <Card className="w-full min-w-0">
         <CardHeader>
           <CardTitle>Transferir Saldo</CardTitle>
           <CardDescription>
@@ -168,15 +168,16 @@ export default function TransferBalanceForm() {
                   required
                   value={originQr}
                   onChange={(e) => setOriginQr(e.target.value)}
+                  className="h-10 text-sm"
                 />
-                <Button type="button" variant="outline" size="icon" onClick={() => openScanner('origin')}>
+                <Button type="button" variant="outline" size="icon" className="shrink-0 h-10 w-10" onClick={() => openScanner('origin')}>
                   <QrCode className="h-4 w-4" />
                 </Button>
               </div>
             </div>
 
-            <div className="flex justify-center">
-              <ArrowRightLeft className="h-5 w-5 text-muted-foreground" />
+            <div className="flex justify-center py-0.5">
+              <ArrowRightLeft className="h-4 w-4 text-muted-foreground" />
             </div>
 
             <div className="space-y-2">
@@ -189,8 +190,9 @@ export default function TransferBalanceForm() {
                   required
                   value={destQr}
                   onChange={(e) => setDestQr(e.target.value)}
+                  className="h-10 text-sm"
                 />
-                <Button type="button" variant="outline" size="icon" onClick={() => openScanner('destination')}>
+                <Button type="button" variant="outline" size="icon" className="shrink-0 h-10 w-10" onClick={() => openScanner('destination')}>
                   <QrCode className="h-4 w-4" />
                 </Button>
               </div>
@@ -205,6 +207,7 @@ export default function TransferBalanceForm() {
                 placeholder="Ex: 25.50"
                 step="0.01"
                 required
+                className="h-10 text-sm"
               />
             </div>
             <SubmitButton isPending={isPending} />

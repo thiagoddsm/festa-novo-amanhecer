@@ -693,7 +693,7 @@ export default function UsersPage() {
   return (
     <div className="flex flex-col gap-4">
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+        <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4">
           <div>
             <CardTitle className="flex items-center gap-2">
               <UserCog />

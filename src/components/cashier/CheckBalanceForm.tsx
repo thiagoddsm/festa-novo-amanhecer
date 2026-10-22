@@ -100,7 +100,7 @@ export default function CheckBalanceForm() {
 
   return (
     <>
-      <Card>
+      <Card className="w-full min-w-0">
         <CardHeader>
           <CardTitle>Consultar Saldo</CardTitle>
           <CardDescription>
@@ -119,8 +119,9 @@ export default function CheckBalanceForm() {
                   required
                   value={qrCodeId}
                   onChange={(e) => setQrCodeId(e.target.value)}
+                  className="h-10 text-sm"
                 />
-                <Button type='button' variant="outline" size="icon" onClick={() => setIsScannerOpen(true)}>
+                <Button type='button' variant="outline" size="icon" className="shrink-0 h-10 w-10" onClick={() => setIsScannerOpen(true)}>
                   <QrCode className="h-4 w-4" />
                 </Button>
               </div>
@@ -129,20 +130,20 @@ export default function CheckBalanceForm() {
           </form>
         </CardContent>
         {result?.status === 'success' && result.data && (
-          <CardFooter className="flex flex-col items-start space-y-4 border-t px-6 py-4">
-            <div className="flex w-full justify-between items-center">
-              <h3 className="font-semibold text-lg">Detalhes do Cartão</h3>
-              <Badge variant={getStatusVariant(result.data.status)}>{result.data.status}</Badge>
+          <CardFooter className="flex flex-col items-start space-y-3 sm:space-y-4 border-t px-4 sm:px-6 py-4">
+            <div className="flex w-full justify-between items-center gap-2">
+              <h3 className="font-semibold text-base sm:text-lg">Detalhes do Cartão</h3>
+              <Badge variant={getStatusVariant(result.data.status)} className="shrink-0">{result.data.status}</Badge>
             </div>
             {result.data.nome_cliente && (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <User className="h-4 w-4" />
-                <span>{result.data.nome_cliente}</span>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground min-w-0 w-full">
+                <User className="h-4 w-4 shrink-0" />
+                <span className="truncate">{result.data.nome_cliente}</span>
               </div>
             )}
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Hash className="h-4 w-4" />
-              <span className="truncate">{result.data.qr_code_id}</span>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground min-w-0 w-full">
+              <Hash className="h-4 w-4 shrink-0" />
+              <span className="truncate text-xs font-mono">{result.data.qr_code_id}</span>
             </div>
             <div className="flex items-center gap-2 text-2xl font-bold text-primary">
               <Wallet className="h-6 w-6" />
