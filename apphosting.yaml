@@ -2,6 +2,18 @@
 # https://firebase.google.com/docs/app-hosting/configure
 
 runConfig:
-  # Increase this value if you'd like to automatically spin up
-  # more instances in response to increased traffic.
   maxInstances: 1
+
+env:
+  - variable: EVOLUTION_API_URL
+    value: https://api.ibmanha.com.br
+  - variable: EVOLUTION_API_KEY
+    value: 554C767EA3D2-4221-AB6A-C126C68A657E
+  - variable: EVOLUTION_DEFAULT_INSTANCE
+    value: IBM
+  - variable: FIREBASE_PROJECT_ID
+    value: fiscalflow-zetbu
+  - variable: GCLOUD_PROJECT
+    value: fiscalflow-zetbu
+  - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
+    value: fiscalflow-zetbu
