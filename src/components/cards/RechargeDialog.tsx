@@ -91,8 +91,8 @@ export default function RechargeDialog({ card }: { card: Card }) {
             valor_centavos: valor_recarga_centavos,
             created_at: Timestamp.now(),
             usuario_responsavel: user.name || 'Caixa',
-            tenant_id: currentTenant?.id ?? null,
-            event_id: currentEvent?.id ?? null,
+            tenant_id: currentTenant?.id ?? card.tenant_id ?? null,
+            event_id: currentEvent?.id ?? card.event_id ?? null,
         });
         
         await batch.commit();

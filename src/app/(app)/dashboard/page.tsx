@@ -3,10 +3,10 @@ import { formatCurrency, formatDateTime } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { DollarSign, CreditCard, TrendingUp, Users } from 'lucide-react';
+import { DollarSign, CreditCard, TrendingUp, Users, MessageSquare, CheckCircle, AlertCircle, Smartphone } from 'lucide-react';
 import StatCard from '@/components/dashboard/StatCard';
 import { useState, useEffect, useMemo } from 'react';
-import type { Card as CardType, Pdv, Transaction } from '@/lib/definitions';
+import type { Card as CardType, Pdv, Transaction, Order } from '@/lib/definitions';
 import { useFirestore } from '@/firebase';
 import { collection, onSnapshot, Timestamp } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -41,19 +41,21 @@ export default function DashboardPage() {
   const cardsQuery = useMemoFirebase(() => collection(firestore, 'cards'), [firestore]);
   const transactionsQuery = useMemoFirebase(() => collection(firestore, 'transactions'), [firestore]);
   const pdvsQuery = useMemoFirebase(() => collection(firestore, 'pdvs'), [firestore]);
+  const ordersQuery = useMemoFirebase(() => collection(firestore, 'orders'), [firestore]);
   
   const { data: allCards, isLoading: loadingCards } = useCollection<CardType>(cardsQuery);
   const { data: allTransactions, isLoading: loadingTransactions } = useCollection<Transaction>(transactionsQuery);
   const { data: allPdvs, isLoading: loadingPdvs } = useCollection<Pdv>(pdvsQuery);
+  const { data: allOrders, isLoading: loadingOrders } = useCollection<Order>(ordersQuery);
   
-  const isLoading = loadingCards || loadingTransactions || loadingPdvs;
+  const isLoading = loadingCards || loadingTransactions || loadingPdvs || loadingOrders;
 
   // Filter cards by current tenant and event
   const filteredCards = useMemo(() => {
     if (!allCards) return [];
     return allCards.filter((card) => {
-      if (currentTenant && card.tenant_id && card.tenant_id !== currentTenant.id) return false;
-      if (currentEvent && card.event_id && card.event_id !== currentEvent.id) return false;
+      if (currentTenant && card.tenant_id !== currentTenant.id) return false;
+      if (currentEvent && card.event_id !== currentEvent.id) return false;
       return true;
     });
   }, [allCards, currentTenant, currentEvent]);
@@ -62,11 +64,50 @@ export default function DashboardPage() {
   const filteredTransactions = useMemo(() => {
     if (!allTransactions) return [];
     return allTransactions.filter((tx) => {
-      if (currentTenant && tx.tenant_id && tx.tenant_id !== currentTenant.id) return false;
-      if (currentEvent && tx.event_id && tx.event_id !== currentEvent.id) return false;
+      if (currentTenant && tx.tenant_id !== currentTenant.id) return false;
+      if (currentEvent && tx.event_id !== currentEvent.id) return false;
       return true;
     });
   }, [allTransactions, currentTenant, currentEvent]);
+
+  // Filter PDVs by current tenant and event
+  const filteredPdvs = useMemo(() => {
+    if (!allPdvs) return [];
+    return allPdvs.filter((pdv) => {
+      if (currentTenant && pdv.tenant_id !== currentTenant.id) return false;
+      if (currentEvent && pdv.event_id !== currentEvent.id) return false;
+      return true;
+    });
+  }, [allPdvs, currentTenant, currentEvent]);
+
+  // Filter Orders by current tenant and event
+  const filteredOrders = useMemo(() => {
+    if (!allOrders) return [];
+    return allOrders.filter((order) => {
+      if (currentTenant && order.tenant_id !== currentTenant.id) return false;
+      if (currentEvent && order.event_id !== currentEvent.id) return false;
+      return true;
+    });
+  }, [allOrders, currentTenant, currentEvent]);
+
+  // Calculate WhatsApp Operational Metrics
+  const whatsappStats = useMemo(() => {
+    const totalSent = filteredOrders.filter(o => o.notification_status === 'SENT').length;
+    const sentByPdv = filteredOrders.filter(o => o.notification_status === 'SENT' && o.notification_route === 'PDV').length;
+    const sentByFallback = filteredOrders.filter(o => o.notification_status === 'SENT' && o.notification_route === 'EVENT_FALLBACK').length;
+    const totalFailed = filteredOrders.filter(o => o.notification_status === 'FAILED').length;
+    const connectedPdvsCount = filteredPdvs.filter(p => p.whatsapp?.status === 'CONNECTED').length;
+    const totalPdvsCount = filteredPdvs.length;
+
+    return {
+      totalSent,
+      sentByPdv,
+      sentByFallback,
+      totalFailed,
+      connectedPdvsCount,
+      totalPdvsCount,
+    };
+  }, [filteredOrders, filteredPdvs]);
 
   const pdvNameMap = useMemo(() => {
     if (!allPdvs) return new Map<string, string>();
@@ -213,7 +254,57 @@ export default function DashboardPage() {
             )}
             </CardContent>
         </Card>
-        <BulkNotifier />
+
+        <div className="flex flex-col gap-6">
+          {/* WhatsApp Operational Metrics */}
+          <Card className="border-border/70 shadow-xs">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base font-semibold flex items-center gap-2">
+                  <MessageSquare className="h-4 w-4 text-green-600" />
+                  WhatsApp Operacional do Evento
+                </CardTitle>
+                <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-300">
+                  Evolution API
+                </Badge>
+              </div>
+              <CardDescription className="text-xs">
+                Métricas de disparo de pedidos prontos e status das conexões
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div className="p-3 bg-muted/40 rounded-lg border text-center">
+                  <p className="text-[11px] text-muted-foreground font-medium">Total Enviadas</p>
+                  <p className="text-lg font-bold text-foreground mt-0.5">{whatsappStats.totalSent}</p>
+                </div>
+                <div className="p-3 bg-green-50/70 border border-green-200/80 rounded-lg text-center">
+                  <p className="text-[11px] text-green-800 font-medium">Via Barracas</p>
+                  <p className="text-lg font-bold text-green-700 mt-0.5">{whatsappStats.sentByPdv}</p>
+                </div>
+                <div className="p-3 bg-blue-50/70 border border-blue-200/80 rounded-lg text-center">
+                  <p className="text-[11px] text-blue-800 font-medium">Fallback IBM</p>
+                  <p className="text-lg font-bold text-blue-700 mt-0.5">{whatsappStats.sentByFallback}</p>
+                </div>
+                <div className="p-3 bg-amber-50/70 border border-amber-200/80 rounded-lg text-center">
+                  <p className="text-[11px] text-amber-800 font-medium">Barracas On</p>
+                  <p className="text-lg font-bold text-amber-900 mt-0.5">
+                    {whatsappStats.connectedPdvsCount}/{whatsappStats.totalPdvsCount}
+                  </p>
+                </div>
+              </div>
+
+              {whatsappStats.totalFailed > 0 && (
+                <div className="flex items-center gap-2 p-2.5 bg-red-50 border border-red-200 rounded-md text-xs text-red-700">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span>{whatsappStats.totalFailed} notificações falharam (ex: telefone ausente/inválido).</span>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <BulkNotifier />
+        </div>
       </div>
     </div>
   );

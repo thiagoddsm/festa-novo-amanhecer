@@ -38,6 +38,7 @@ export default function RechargeForm() {
   const formRef = useRef<HTMLFormElement>(null);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [qrCodeId, setQrCodeId] = useState('');
+  const [rechargeValue, setRechargeValue] = useState('');
   const [isPending, setIsPending] = useState(false);
 
   const handleScan = useCallback((data: string) => {
@@ -99,8 +100,8 @@ export default function RechargeForm() {
         valor_centavos: valor_recarga_centavos,
         created_at: Timestamp.now(),
         usuario_responsavel: user.name || 'Caixa',
-        tenant_id: currentTenant?.id ?? null,
-        event_id: currentEvent?.id ?? null,
+        tenant_id: currentTenant?.id ?? card.tenant_id ?? null,
+        event_id: currentEvent?.id ?? card.event_id ?? null,
       });
 
       await batch.commit();
@@ -114,6 +115,7 @@ export default function RechargeForm() {
 
       formRef.current?.reset();
       setQrCodeId('');
+      setRechargeValue('');
 
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Ocorreu um erro desconhecido.';
@@ -155,15 +157,34 @@ export default function RechargeForm() {
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="valor_recarga">Valor da Recarga (R$)</Label>
+              <Label htmlFor="valor_recarga" className="font-semibold text-sm">
+                Valor da Recarga (R$)
+              </Label>
               <Input
                 id="valor_recarga"
                 name="valor_recarga"
                 type="number"
-                placeholder="Ex: 20.00"
+                placeholder="Ex: 20,00"
                 step="0.01"
                 required
+                value={rechargeValue}
+                onChange={(e) => setRechargeValue(e.target.value)}
+                className="h-10 text-lg font-bold"
               />
+              <div className="grid grid-cols-4 gap-1.5 pt-1">
+                {[10, 20, 50, 100].map((val) => (
+                  <Button
+                    key={val}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setRechargeValue(val.toString())}
+                    className="h-8 text-xs font-bold hover:bg-primary/10 hover:border-primary/50"
+                  >
+                    + R$ {val}
+                  </Button>
+                ))}
+              </div>
             </div>
             <SubmitButton isPending={isPending} />
           </form>

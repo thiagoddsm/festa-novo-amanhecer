@@ -78,30 +78,29 @@ export default function EditMenuSheet({ pdv, menuItems, isOpen, onOpenChange }: 
     formData.append('pdvId', pdv.id);
     formData.append('itemId', editingItem.id);
     
-    startTransition(() => {
-        updateAction(formData);
-        if (updateState.status === 'success') {
-            toast({ title: 'Sucesso', description: updateState.message });
-            setEditingItem(null);
-        } else {
-            toast({ variant: 'destructive', title: 'Erro', description: updateState.message });
-        }
-    })
-    setEditingItem(null);
-  }
+    startTransition(async () => {
+      const res = await updateMenuItem(undefined, formData);
+      if (res.status === 'success') {
+        toast({ title: 'Sucesso!', description: res.message });
+        setEditingItem(null);
+      } else {
+        toast({ variant: 'destructive', title: 'Erro!', description: res.message });
+      }
+    });
+  };
 
   const handleAddSubmit = (formData: FormData) => {
-      formData.append('pdvId', pdv.id);
-      startTransition(() => {
-        addAction(formData);
-        if (addState.status === 'success') {
-            toast({ title: 'Sucesso!', description: addState.message });
-            addFormRef.current?.reset();
-        } else {
-            toast({ variant: 'destructive', title: 'Erro!', description: addState.message });
-        }
-      })
-  }
+    formData.append('pdvId', pdv.id);
+    startTransition(async () => {
+      const res = await addMenuItem(undefined, formData);
+      if (res.status === 'success') {
+        toast({ title: 'Sucesso!', description: res.message });
+        addFormRef.current?.reset();
+      } else {
+        toast({ variant: 'destructive', title: 'Erro!', description: res.message });
+      }
+    });
+  };
 
   return (
     <Sheet open={isOpen} onOpenChange={onOpenChange}>

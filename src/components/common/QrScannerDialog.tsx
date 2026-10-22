@@ -7,13 +7,11 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
-  DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { useToast } from '@/hooks/use-toast';
-import { Camera, AlertCircle } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Camera, CreditCard, ArrowRight, X } from 'lucide-react';
 import { QrScanner } from './QrScanner';
-import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 
 interface QrScannerDialogProps {
   open: boolean;
@@ -22,60 +20,87 @@ interface QrScannerDialogProps {
 }
 
 export default function QrScannerDialog({ open, onOpenChange, onScan }: QrScannerDialogProps) {
-  const { toast } = useToast();
-  const [scanError, setScanError] = useState<string | null>(null);
+  const [manualCode, setManualCode] = useState('');
 
   const handleScanSuccess = (decodedText: string) => {
-    onScan(decodedText);
-    onOpenChange(false); // Close dialog on success
+    onScan(decodedText.trim());
+    onOpenChange(false);
   };
 
-  const handleScanFailure = (error: string) => {
-     // Ignore "QR code not found" and "NotFoundException" errors, which are frequent and expected during scanning.
-     // We only care about critical errors like camera permission issues.
-    if (!error.includes('No QR code found') && !error.includes('NotFoundException')) {
-        console.error(`QR Scan Error: ${error}`);
-        setScanError("Não foi possível ler o QR code. Tente novamente ou verifique as permissões da câmera.");
+  const handleManualSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (manualCode.trim()) {
+      onScan(manualCode.trim());
+      setManualCode('');
+      onOpenChange(false);
     }
   };
 
-  // Reset error when dialog opens
-  if (open && scanError) {
-      setScanError(null);
-  }
+  const handleClose = () => {
+    setManualCode('');
+    onOpenChange(false);
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Camera /> Escanear QR Code
+      <DialogContent className="sm:max-w-md p-5 gap-4">
+        <DialogHeader className="text-left space-y-1">
+          <DialogTitle className="flex items-center gap-2 text-lg sm:text-xl font-bold">
+            <div className="p-2 rounded-xl bg-primary/10 text-primary">
+              <Camera className="w-5 h-5" />
+            </div>
+            Ler Cartão
           </DialogTitle>
-          <DialogDescription>
-            Aponte a câmera para o QR code do cartão do cliente.
+          <DialogDescription className="text-xs sm:text-sm text-muted-foreground">
+            Aponte a câmera para o QR code ou digite o código abaixo.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="relative overflow-hidden rounded-md border">
-            {scanError ? (
-                 <Alert variant="destructive" className="m-4">
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertTitle>Erro no Scanner</AlertTitle>
-                    <AlertDescription>{scanError}</AlertDescription>
-                </Alert>
-            ) : (
-                <QrScanner
-                    onScanSuccess={handleScanSuccess}
-                    onScanFailure={handleScanFailure}
-                />
-            )}
+        {/* Scanner Viewport */}
+        <div className="flex flex-col items-center">
+          {open && (
+            <QrScanner
+              onScanSuccess={handleScanSuccess}
+            />
+          )}
         </div>
 
-        <DialogFooter>
-          <Button variant="secondary" onClick={() => onOpenChange(false)} className="w-full">
-            Cancelar
-          </Button>
-        </DialogFooter>
+        {/* Manual Code Fallback Input */}
+        <div className="rounded-xl border border-dashed border-border/80 bg-muted/30 p-3 space-y-2">
+          <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+            <CreditCard className="w-3.5 h-3.5" />
+            <span>Não conseguiu ler? Digite o código:</span>
+          </div>
+          <form onSubmit={handleManualSubmit} className="flex gap-2">
+            <Input
+              type="text"
+              placeholder="Ex: festa-2025-..."
+              value={manualCode}
+              onChange={(e) => setManualCode(e.target.value)}
+              className="h-10 text-sm font-mono bg-background"
+            />
+            <Button 
+              type="submit" 
+              size="sm" 
+              disabled={!manualCode.trim()} 
+              className="h-10 px-3 font-semibold gap-1 shrink-0"
+            >
+              Usar
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Button>
+          </form>
+        </div>
+
+        {/* Footer */}
+        <Button 
+          type="button" 
+          variant="outline" 
+          onClick={handleClose} 
+          className="w-full h-11 text-sm font-medium gap-1.5"
+        >
+          <X className="w-4 h-4" />
+          Cancelar
+        </Button>
       </DialogContent>
     </Dialog>
   );

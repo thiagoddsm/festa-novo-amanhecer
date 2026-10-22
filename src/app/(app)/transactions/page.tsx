@@ -58,6 +58,8 @@ function useTransactionDetails() {
       const card = trans.cartao_id ? cardMap.get(trans.cartao_id) : undefined;
       return {
         ...trans,
+        tenant_id: trans.tenant_id || card?.tenant_id,
+        event_id: trans.event_id || card?.event_id,
         pdv_nome: pdvMap.get(trans.pdv_id) || `PDV ID: ${trans.pdv_id}`,
         card_qr_code_id: card?.qr_code_id || 'Desconhecido',
         nome_cliente: card?.nome_cliente || 'N/A',
@@ -282,20 +284,28 @@ export default function TransactionsPage() {
   const filteredTransactions = useMemo(() => {
     if (!allTransactions) return [];
     return allTransactions.filter((tx) => {
-      if (currentTenant && tx.tenant_id && tx.tenant_id !== currentTenant.id) return false;
-      if (currentEvent && tx.event_id && tx.event_id !== currentEvent.id) return false;
+      if (currentTenant && tx.tenant_id !== currentTenant.id) return false;
+      if (currentEvent && tx.event_id !== currentEvent.id) return false;
       return true;
     });
   }, [allTransactions, currentTenant, currentEvent]);
 
+  const filteredPdvs = useMemo(() => {
+    return (pdvs || []).filter((p) => {
+      if (currentTenant && p.tenant_id !== currentTenant.id) return false;
+      if (currentEvent && p.event_id !== currentEvent.id) return false;
+      return true;
+    });
+  }, [pdvs, currentTenant, currentEvent]);
+
   const pdvOptions = useMemo(() => {
-    const options = pdvs.map(pdv => ({ value: pdv.nome, label: pdv.nome }));
+    const options = filteredPdvs.map(pdv => ({ value: pdv.nome, label: pdv.nome }));
     // Add Caixa Central if not already present
     if (!options.some(opt => opt.value === 'Caixa Central')) {
       options.push({ value: 'Caixa Central', label: 'Caixa Central' });
     }
     return options;
-  }, [pdvs]);
+  }, [filteredPdvs]);
   
   const handleDeleteSelected = async (selectedData: TransactionDetails[]) => {
     const transactionIds = selectedData.map(t => t.id);

@@ -102,8 +102,8 @@ export default function CardsPage() {
   const { toast } = useToast();
 
   const filteredCards = (allCards || []).filter((card) => {
-    if (currentTenant && card.tenant_id && card.tenant_id !== currentTenant.id) return false;
-    if (currentEvent && card.event_id && card.event_id !== currentEvent.id) return false;
+    if (currentTenant && card.tenant_id !== currentTenant.id) return false;
+    if (currentEvent && card.event_id !== currentEvent.id) return false;
     return true;
   });
 

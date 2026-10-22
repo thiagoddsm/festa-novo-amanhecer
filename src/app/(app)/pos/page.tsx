@@ -37,8 +37,8 @@ export default function PosPage() {
 
   // Filter PDVs by active tenant & event
   const pdvs = (allPdvs || []).filter((p) => {
-    if (currentTenant && p.tenant_id && p.tenant_id !== currentTenant.id) return false;
-    if (currentEvent && p.event_id && p.event_id !== currentEvent.id) return false;
+    if (currentTenant && p.tenant_id !== currentTenant.id) return false;
+    if (currentEvent && p.event_id !== currentEvent.id) return false;
     return true;
   });
 
@@ -67,6 +67,17 @@ export default function PosPage() {
 
   }, [user, allPdvs]);
 
+  // Reset selected PDV if it does not belong to the active tenant/event
+  useEffect(() => {
+    if (selectedPdv) {
+      if (currentTenant && selectedPdv.tenant_id !== currentTenant.id) {
+        setSelectedPdv(null);
+      }
+      if (currentEvent && selectedPdv.event_id !== currentEvent.id) {
+        setSelectedPdv(null);
+      }
+    }
+  }, [currentTenant, currentEvent, selectedPdv]);
 
   const handlePdvSelect = (pdv: Pdv) => {
     setSelectedPdv(pdv);

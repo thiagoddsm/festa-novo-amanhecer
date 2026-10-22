@@ -42,10 +42,11 @@ import {
 } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { useTenant } from '@/hooks/use-tenant-context';
-import { Store, Plus, Trash2, Pencil, UtensilsCrossed, Sparkles, Building2, Calendar } from 'lucide-react';
+import { Store, Plus, Trash2, Pencil, UtensilsCrossed, Sparkles, Building2, Calendar, MessageSquare } from 'lucide-react';
 import type { Pdv, MenuItem } from '@/lib/definitions';
 import { createPdv, updatePdv, deletePdv, seedDefaultPdvs } from '@/lib/actions';
 import EditMenuSheet from '@/components/pos/EditMenuSheet';
+import PdvWhatsappDialog from '@/components/pos/PdvWhatsappDialog';
 
 export default function AdminPdvsPage() {
   const firestore = useFirestore();
@@ -71,6 +72,10 @@ export default function AdminPdvsPage() {
   const [menuSheetOpen, setMenuSheetOpen] = useState(false);
   const [selectedPdvForMenu, setSelectedPdvForMenu] = useState<Pdv | null>(null);
 
+  // WhatsApp Dialog
+  const [whatsappDialogOpen, setWhatsappDialogOpen] = useState(false);
+  const [selectedPdvForWhatsapp, setSelectedPdvForWhatsapp] = useState<Pdv | null>(null);
+
   // Seeding
   const [isSeeding, startSeeding] = useTransition();
 
@@ -84,8 +89,8 @@ export default function AdminPdvsPage() {
 
       // Filter by current tenant and event
       const filtered = allPdvs.filter((p) => {
-        if (currentTenant && p.tenant_id && p.tenant_id !== currentTenant.id) return false;
-        if (currentEvent && p.event_id && p.event_id !== currentEvent.id) return false;
+        if (currentTenant && p.tenant_id !== currentTenant.id) return false;
+        if (currentEvent && p.event_id !== currentEvent.id) return false;
         return true;
       });
 
@@ -297,6 +302,40 @@ export default function AdminPdvsPage() {
                         <CardDescription className="text-xs mt-0.5">
                           {items.length} {items.length === 1 ? 'item no cardápio' : 'itens no cardápio'}
                         </CardDescription>
+
+                        {/* WhatsApp Status Badge */}
+                        <div className="mt-2">
+                          {pdv.whatsapp?.status === 'CONNECTED' ? (
+                            <Badge
+                              variant="outline"
+                              className="border-green-300 bg-green-50 text-green-700 text-[11px] gap-1 cursor-pointer hover:bg-green-100 shadow-2xs"
+                              onClick={() => {
+                                setSelectedPdvForWhatsapp(pdv);
+                                setWhatsappDialogOpen(true);
+                              }}
+                            >
+                              <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse shrink-0" />
+                              <MessageSquare className="h-3 w-3 shrink-0" />
+                              <span>WPP Conectado</span>
+                              {pdv.whatsapp.phoneNumber && (
+                                <span className="font-mono text-[10px] opacity-75">+{pdv.whatsapp.phoneNumber}</span>
+                              )}
+                            </Badge>
+                          ) : (
+                            <Badge
+                              variant="outline"
+                              className="border-amber-200 bg-amber-50/70 text-amber-800 text-[11px] gap-1 cursor-pointer hover:bg-amber-100 shadow-2xs"
+                              onClick={() => {
+                                setSelectedPdvForWhatsapp(pdv);
+                                setWhatsappDialogOpen(true);
+                              }}
+                            >
+                              <span className="h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0" />
+                              <MessageSquare className="h-3 w-3 shrink-0" />
+                              <span>WPP Desconectado (Fallback IBM)</span>
+                            </Badge>
+                          )}
+                        </div>
                       </div>
 
                       <div className="flex items-center gap-1">
@@ -369,19 +408,36 @@ export default function AdminPdvsPage() {
                         )}
                       </div>
 
-                      {/* Action to edit menu */}
-                      <div className="pt-2 border-t flex justify-end">
+                      {/* Actions */}
+                      <div className="pt-2 border-t flex items-center gap-2">
                         <Button
                           size="sm"
                           variant="outline"
-                          className="w-full text-xs h-8"
+                          className="flex-1 text-xs h-8"
                           onClick={() => {
                             setSelectedPdvForMenu(pdv);
                             setMenuSheetOpen(true);
                           }}
                         >
                           <UtensilsCrossed className="mr-1.5 h-3.5 w-3.5" />
-                          Gerenciar Cardápio
+                          Cardápio
+                        </Button>
+
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className={`text-xs h-8 gap-1.5 ${
+                            pdv.whatsapp?.status === 'CONNECTED'
+                              ? 'border-green-300 bg-green-50 text-green-700 hover:bg-green-100'
+                              : 'border-amber-200 bg-amber-50/70 text-amber-800 hover:bg-amber-100'
+                          }`}
+                          onClick={() => {
+                            setSelectedPdvForWhatsapp(pdv);
+                            setWhatsappDialogOpen(true);
+                          }}
+                        >
+                          <MessageSquare className="h-3.5 w-3.5" />
+                          {pdv.whatsapp?.status === 'CONNECTED' ? 'WhatsApp' : 'Conectar'}
                         </Button>
                       </div>
                     </CardContent>
@@ -446,6 +502,18 @@ export default function AdminPdvsPage() {
           onOpenChange={(open) => {
             setMenuSheetOpen(open);
             if (!open) setSelectedPdvForMenu(null);
+          }}
+        />
+      )}
+
+      {/* PDV WhatsApp Dialog */}
+      {selectedPdvForWhatsapp && (
+        <PdvWhatsappDialog
+          pdv={selectedPdvForWhatsapp}
+          open={whatsappDialogOpen}
+          onOpenChange={(open) => {
+            setWhatsappDialogOpen(open);
+            if (!open) setSelectedPdvForWhatsapp(null);
           }}
         />
       )}

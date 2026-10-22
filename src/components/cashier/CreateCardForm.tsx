@@ -26,6 +26,8 @@ import { formatCurrency } from '@/lib/utils';
 import { Loader2, QrCode } from 'lucide-react';
 import type { Card as CardType } from '@/lib/definitions';
 import { toDataURL as generateQrCodeDataUrl } from 'qrcode';
+import { notifyCardCreation } from '@/lib/flows/notify-flow';
+import { sanitizeSlug, formatWhatsAppNumber } from '@/lib/whatsapp';
 
 
 // Schema for client-side validation
@@ -172,15 +174,17 @@ export default function CreateCardForm() {
 
     try {
         const { saldo_inicial, nome_cliente, telefone_cliente } = validatedFields.data;
+        const normalizedPhone = formatWhatsAppNumber(telefone_cliente);
         const saldo_centavos = saldo_inicial * 100;
-        const qr_code_id = `festa-2025-${generateRandomId().slice(0, 18)}`;
+        const eventSlug = currentEvent?.name ? sanitizeSlug(currentEvent.name, 18) : 'festa-2026';
+        const qr_code_id = `${eventSlug}-${generateRandomId().slice(0, 16)}`;
         const now = Timestamp.now();
 
         const cardData: Record<string, any> = {
             qr_code_id,
             saldo_centavos,
             nome_cliente: nome_cliente ?? '',
-            telefone_cliente: telefone_cliente ?? '',
+            telefone_cliente: normalizedPhone,
             status: 'ATIVO' as const,
             created_at: now,
             updated_at: now,
@@ -217,8 +221,12 @@ export default function CreateCardForm() {
         // Delay print slightly
         setTimeout(() => handlePrint(createdCard as CardType), 100);
 
-        // TODO: Re-implement notification by calling a server action here.
-        // For now, focusing on core functionality.
+        // Trigger WhatsApp welcome notification with QR Code
+        if (telefone_cliente) {
+          notifyCardCreation(cardDocRef.id).catch((err) => {
+            console.error('Falha ao disparar boas-vindas do WhatsApp:', err);
+          });
+        }
 
     } catch (error) {
         console.error("Client-side card creation failed:", error);
@@ -254,13 +262,20 @@ export default function CreateCardForm() {
               />
             </div>
              <div className="space-y-2">
-              <Label htmlFor="telefone_cliente">Telefone (para notificações via WhatsApp)</Label>
+              <Label htmlFor="telefone_cliente" className="font-semibold text-sm">
+                WhatsApp do Cliente (DDD + Número)
+              </Label>
               <Input
                 id="telefone_cliente"
                 name="telefone_cliente"
-                placeholder="Ex: 5511999998888"
+                type="tel"
+                placeholder="Ex: (11) 99999-8888 ou 11999998888"
                 required
+                className="h-10 text-base sm:text-sm"
               />
+              <p className="text-[11px] text-green-700 font-medium flex items-center gap-1">
+                <span>📲</span> O cliente recebe o QR Code e comprovante direto no WhatsApp!
+              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="saldo_inicial">Saldo Inicial (R$)</Label>

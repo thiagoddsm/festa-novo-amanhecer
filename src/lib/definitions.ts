@@ -62,6 +62,7 @@ export type TenantEvent = {
   name: string;
   date?: Timestamp;
   active?: boolean;
+  whatsapp?: PdvWhatsappConfig;
 };
 
 // ---------------------------------------------------------------------------
@@ -119,6 +120,22 @@ export type TransactionDetails = Transaction & {
 };
 
 // ---------------------------------------------------------------------------
+// PDV WhatsApp Config
+// ---------------------------------------------------------------------------
+
+export type PdvWhatsappConfig = {
+  enabled?: boolean;
+  instanceName?: string;
+  token?: string;
+  phoneNumber?: string;
+  status: 'DISCONNECTED' | 'CONNECTING' | 'CONNECTED' | 'ERROR';
+  lastConnectedAt?: Timestamp | null;
+  lastDisconnectedAt?: Timestamp | null;
+  lastError?: string;
+  updatedAt?: Timestamp;
+};
+
+// ---------------------------------------------------------------------------
 // PDV (Firestore: /pdvs/{pdvId})
 // ---------------------------------------------------------------------------
 
@@ -127,6 +144,7 @@ export type Pdv = {
   nome: string;
   tenant_id?: string;
   event_id?: string;
+  whatsapp?: PdvWhatsappConfig;
 };
 
 // ---------------------------------------------------------------------------
@@ -157,4 +175,10 @@ export type Order = {
   pdv_nome: string;
   tenant_id?: string;
   event_id?: string;
+
+  /** Idempotência e Auditoria de Notificação WhatsApp */
+  notification_status?: 'PENDING' | 'SENDING' | 'SENT' | 'FAILED';
+  notification_route?: 'PDV' | 'EVENT_FALLBACK';
+  notification_error?: string;
+  notified_at?: Timestamp;
 };

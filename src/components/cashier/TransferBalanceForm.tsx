@@ -119,13 +119,15 @@ export default function TransferBalanceForm() {
             transaction.set(originTxRef, {
                 cartao_id: originCardDoc.id, pdv_id: 'caixa_central', tipo: 'TRANSFER_OUT',
                 valor_centavos, created_at: Timestamp.now(), usuario_responsavel: user.name,
-                tenant_id: currentTenant?.id ?? null, event_id: currentEvent?.id ?? null,
+                tenant_id: currentTenant?.id ?? originCard.tenant_id ?? null,
+                event_id: currentEvent?.id ?? originCard.event_id ?? null,
             });
             const destTxRef = doc(transactionsRef);
             transaction.set(destTxRef, {
                 cartao_id: destCardDoc.id, pdv_id: 'caixa_central', tipo: 'TRANSFER_IN',
                 valor_centavos, created_at: Timestamp.now(), usuario_responsavel: user.name,
-                tenant_id: currentTenant?.id ?? null, event_id: currentEvent?.id ?? null,
+                tenant_id: currentTenant?.id ?? destCard.tenant_id ?? null,
+                event_id: currentEvent?.id ?? destCard.event_id ?? null,
             });
         });
 

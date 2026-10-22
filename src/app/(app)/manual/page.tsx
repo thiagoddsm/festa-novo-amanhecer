@@ -83,8 +83,8 @@ export default function ManualPage() {
             />
             <Step 
                 icon={<BookText size={16}/>}
-                title="3. Acompanhar Pedidos (Kanban)"
-                description="Vá para a aba 'Pedidos'. Os novos pedidos aparecerão na coluna 'Em Preparo'. Quando um pedido estiver pronto, arraste-o para a coluna 'Pronto p/ Retirada' (no computador) ou clique no botão com a seta (no celular). Isso notifica o cliente via WhatsApp!"
+                title="3. Acompanhar e Entregar Pedidos"
+                description="Vá para a aba 'Pedidos'. Os novos pedidos aparecerão em 'Preparo'. Quando a comida/bebida ficar pronta, basta clicar no botão verde 'Marcar como Pronto' (no celular ou computador). O sistema avisa o cliente no WhatsApp que o pedido está pronto! Ao entregar, clique em 'Marcar Entregue'."
             />
           </AccordionContent>
         </AccordionItem>

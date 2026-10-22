@@ -7,6 +7,7 @@ import {
   onSnapshot,
   doc,
   addDoc,
+  updateDoc,
   deleteDoc,
   getDocs,
   Timestamp,
@@ -32,8 +33,9 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
-import { Building2, Calendar, Plus, Trash2, Layers } from 'lucide-react';
+import { Building2, Calendar, Plus, Trash2, Pencil, Layers, MessageSquare } from 'lucide-react';
 import type { Tenant, TenantEvent } from '@/lib/definitions';
+import EventWhatsappDialog from '@/components/cashier/EventWhatsappDialog';
 
 export default function TenantsPage() {
   const firestore = useFirestore();
@@ -48,11 +50,31 @@ export default function TenantsPage() {
   const [newOrgName, setNewOrgName] = useState('');
   const [isCreatingOrg, setIsCreatingOrg] = useState(false);
 
+  // Edit Organization Dialog
+  const [editOrgOpen, setEditOrgOpen] = useState(false);
+  const [selectedTenantForEdit, setSelectedTenantForEdit] = useState<Tenant | null>(null);
+  const [editOrgName, setEditOrgName] = useState('');
+  const [isUpdatingOrg, setIsUpdatingOrg] = useState(false);
+
   // New Event Dialog
   const [newEventOpen, setNewEventOpen] = useState(false);
   const [selectedTenantForEvent, setSelectedTenantForEvent] = useState<Tenant | null>(null);
   const [newEventName, setNewEventName] = useState('');
   const [isCreatingEvent, setIsCreatingEvent] = useState(false);
+
+  // Edit Event Dialog
+  const [editEventOpen, setEditEventOpen] = useState(false);
+  const [selectedTenantIdForEditEvent, setSelectedTenantIdForEditEvent] = useState<string | null>(null);
+  const [selectedEventForEdit, setSelectedEventForEdit] = useState<TenantEvent | null>(null);
+  const [editEventName, setEditEventName] = useState('');
+  const [isUpdatingEvent, setIsUpdatingEvent] = useState(false);
+
+  // WhatsApp Dialog for Event
+  const [whatsappEventDialog, setWhatsappEventDialog] = useState<{
+    tenantId: string;
+    tenantName: string;
+    event: TenantEvent;
+  } | null>(null);
 
   // Load tenants
   useEffect(() => {
@@ -106,6 +128,28 @@ export default function TenantsPage() {
     }
   };
 
+  // Edit Organization Name
+  const handleEditOrg = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editOrgName.trim() || !selectedTenantForEdit || isUpdatingOrg) return;
+
+    setIsUpdatingOrg(true);
+    try {
+      await updateDoc(doc(firestore, 'tenants', selectedTenantForEdit.id), {
+        name: editOrgName.trim(),
+        updated_at: Timestamp.now(),
+      });
+      toast({ title: 'Atualizada!', description: `Organização alterada para "${editOrgName.trim()}".` });
+      setEditOrgOpen(false);
+      setSelectedTenantForEdit(null);
+    } catch (error) {
+      console.error(error);
+      toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível renomear a organização.' });
+    } finally {
+      setIsUpdatingOrg(false);
+    }
+  };
+
   // Delete Organization
   const handleDeleteOrg = async (tenant: Tenant) => {
     if (!confirm(`Tem certeza que deseja excluir a organização "${tenant.name}"?`)) return;
@@ -135,17 +179,18 @@ export default function TenantsPage() {
         title: 'Sucesso!',
         description: `Evento "${newEventName}" adicionado à ${selectedTenantForEvent.name}.`,
       });
+      const tenantId = selectedTenantForEvent.id;
       setNewEventName('');
       setNewEventOpen(false);
       setSelectedTenantForEvent(null);
 
       // Refresh events for this tenant
       const eventsSnap = await getDocs(
-        collection(firestore, 'tenants', selectedTenantForEvent.id, 'events'),
+        collection(firestore, 'tenants', tenantId, 'events'),
       );
       setEventsByTenant((prev) => ({
         ...prev,
-        [selectedTenantForEvent.id]: eventsSnap.docs.map(
+        [tenantId]: eventsSnap.docs.map(
           (ed) => ({ id: ed.id, ...ed.data() } as TenantEvent),
         ),
       }));
@@ -154,6 +199,40 @@ export default function TenantsPage() {
       toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível criar o evento.' });
     } finally {
       setIsCreatingEvent(false);
+    }
+  };
+
+  // Edit Event Name
+  const handleEditEvent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editEventName.trim() || !selectedTenantIdForEditEvent || !selectedEventForEdit || isUpdatingEvent) return;
+
+    setIsUpdatingEvent(true);
+    try {
+      await updateDoc(doc(firestore, 'tenants', selectedTenantIdForEditEvent, 'events', selectedEventForEdit.id), {
+        name: editEventName.trim(),
+        updated_at: Timestamp.now(),
+      });
+      toast({ title: 'Atualizado!', description: `Evento renomeado para "${editEventName.trim()}".` });
+      
+      const tenantId = selectedTenantIdForEditEvent;
+      setEditEventOpen(false);
+      setSelectedEventForEdit(null);
+      setSelectedTenantIdForEditEvent(null);
+
+      // Refresh events list
+      const eventsSnap = await getDocs(collection(firestore, 'tenants', tenantId, 'events'));
+      setEventsByTenant((prev) => ({
+        ...prev,
+        [tenantId]: eventsSnap.docs.map(
+          (ed) => ({ id: ed.id, ...ed.data() } as TenantEvent),
+        ),
+      }));
+    } catch (error) {
+      console.error(error);
+      toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível renomear o evento.' });
+    } finally {
+      setIsUpdatingEvent(false);
     }
   };
 
@@ -248,7 +327,20 @@ export default function TenantsPage() {
                       <div>
                         <CardTitle className="text-base font-semibold flex items-center gap-2">
                           <Building2 className="h-4 w-4 text-primary" />
-                          {tenant.name}
+                          <span>{tenant.name}</span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 text-muted-foreground hover:text-primary"
+                            onClick={() => {
+                              setSelectedTenantForEdit(tenant);
+                              setEditOrgName(tenant.name);
+                              setEditOrgOpen(true);
+                            }}
+                            title="Editar Nome da Organização"
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </Button>
                         </CardTitle>
                         <CardDescription className="text-xs">
                           {events.length} evento(s) cadastrado(s)
@@ -279,17 +371,54 @@ export default function TenantsPage() {
                               <Badge
                                 key={ev.id}
                                 variant="secondary"
-                                className="flex items-center gap-1 text-xs py-1 px-2.5 font-normal"
+                                className="flex items-center gap-1.5 text-xs py-1 px-2.5 font-normal group hover:bg-secondary/80 transition-colors"
                               >
-                                {ev.name}
-                                <button
-                                  type="button"
-                                  className="ml-1 text-muted-foreground hover:text-destructive"
-                                  onClick={() => handleDeleteEvent(tenant.id, ev)}
-                                  title="Remover Evento"
-                                >
-                                  ×
-                                </button>
+                                <span>{ev.name}</span>
+                                <div className="flex items-center gap-0.5 border-l pl-1 ml-0.5 border-border/60">
+                                  <button
+                                    type="button"
+                                    className={`p-0.5 rounded transition-colors ${
+                                      ev.whatsapp?.status === 'CONNECTED'
+                                        ? 'text-green-600 hover:text-green-700'
+                                        : 'text-muted-foreground hover:text-green-600'
+                                    }`}
+                                    onClick={() =>
+                                      setWhatsappEventDialog({
+                                        tenantId: tenant.id,
+                                        tenantName: tenant.name,
+                                        event: ev,
+                                      })
+                                    }
+                                    title={
+                                      ev.whatsapp?.status === 'CONNECTED'
+                                        ? `WhatsApp do Evento Conectado (${ev.whatsapp.phoneNumber || 'Ativo'}). Clique para gerenciar.`
+                                        : 'Conectar WhatsApp do Evento (Caixa / Recargas)'
+                                    }
+                                  >
+                                    <MessageSquare className="h-2.5 w-2.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="text-muted-foreground hover:text-primary p-0.5 rounded transition-colors"
+                                    onClick={() => {
+                                      setSelectedTenantIdForEditEvent(tenant.id);
+                                      setSelectedEventForEdit(ev);
+                                      setEditEventName(ev.name);
+                                      setEditEventOpen(true);
+                                    }}
+                                    title="Editar Nome do Evento"
+                                  >
+                                    <Pencil className="h-2.5 w-2.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="text-muted-foreground hover:text-destructive p-0.5 rounded transition-colors text-xs font-bold leading-none"
+                                    onClick={() => handleDeleteEvent(tenant.id, ev)}
+                                    title="Remover Evento"
+                                  >
+                                    ×
+                                  </button>
+                                </div>
                               </Badge>
                             ))}
                           </div>
@@ -368,6 +497,103 @@ export default function TenantsPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Edit Organization Dialog */}
+      <Dialog open={editOrgOpen} onOpenChange={setEditOrgOpen}>
+        <DialogContent>
+          <form onSubmit={handleEditOrg}>
+            <DialogHeader>
+              <DialogTitle>Editar Nome da Organização</DialogTitle>
+              <DialogDescription>
+                Altere o nome da organização cadastrada.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4">
+              <label className="text-sm font-medium">Nome da Organização</label>
+              <Input
+                value={editOrgName}
+                onChange={(e) => setEditOrgName(e.target.value)}
+                className="mt-1"
+                autoFocus
+                required
+              />
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setEditOrgOpen(false)}
+              >
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={isUpdatingOrg || !editOrgName.trim()}>
+                {isUpdatingOrg ? 'Salvando…' : 'Salvar Alterações'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Event Dialog */}
+      <Dialog open={editEventOpen} onOpenChange={setEditEventOpen}>
+        <DialogContent>
+          <form onSubmit={handleEditEvent}>
+            <DialogHeader>
+              <DialogTitle>Editar Nome do Evento</DialogTitle>
+              <DialogDescription>
+                Altere o nome do evento selecionado.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4">
+              <label className="text-sm font-medium">Nome do Evento</label>
+              <Input
+                value={editEventName}
+                onChange={(e) => setEditEventName(e.target.value)}
+                className="mt-1"
+                autoFocus
+                required
+              />
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setEditEventOpen(false)}
+              >
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={isUpdatingEvent || !editEventName.trim()}>
+                {isUpdatingEvent ? 'Salvando…' : 'Salvar Alterações'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Event WhatsApp Dialog */}
+      {whatsappEventDialog && (
+        <EventWhatsappDialog
+          tenantId={whatsappEventDialog.tenantId}
+          tenantName={whatsappEventDialog.tenantName}
+          event={whatsappEventDialog.event}
+          open={!!whatsappEventDialog}
+          onOpenChange={(open) => {
+            if (!open) setWhatsappEventDialog(null);
+          }}
+          onStatusChange={async () => {
+            if (!firestore) return;
+            const eventsSnap = await getDocs(
+              collection(firestore, 'tenants', whatsappEventDialog.tenantId, 'events'),
+            );
+            setEventsByTenant((prev) => ({
+              ...prev,
+              [whatsappEventDialog.tenantId]: eventsSnap.docs.map(
+                (ed) => ({ id: ed.id, ...ed.data() } as TenantEvent),
+              ),
+            }));
+          }}
+        />
+      )}
     </div>
   );
 }

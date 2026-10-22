@@ -9,6 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, MessageSquare, Send } from 'lucide-react';
+import { useTenant } from '@/hooks/use-tenant-context';
 import type { ActionState } from '@/lib/actions';
 
 
@@ -22,12 +23,13 @@ function SubmitButton() {
   return (
     <Button type="submit" disabled={pending}>
       {pending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
-      Enviar para Todos
+      Enviar para Participantes do Evento
     </Button>
   );
 }
 
 export default function BulkNotifier() {
+  const { currentTenant, currentEvent } = useTenant();
   const [state, formAction] = useActionState(sendBulkNotification, initialState);
   const { toast } = useToast();
   const formRef = useRef<HTMLFormElement>(null);
@@ -65,11 +67,13 @@ export default function BulkNotifier() {
             <Textarea
               id="message"
               name="message"
-              placeholder="Digite sua mensagem aqui. Ela será enviada para todos os participantes."
+              placeholder="Digite sua mensagem aqui. Ela será enviada para os participantes do evento selecionado."
               required
               rows={5}
             />
           </div>
+          <input type="hidden" name="tenant_id" value={currentTenant?.id || ''} />
+          <input type="hidden" name="event_id" value={currentEvent?.id || ''} />
           <SubmitButton />
         </form>
       </CardContent>

@@ -53,19 +53,24 @@ export function Header() {
     const title = getTitleFromPathname(pathname || '');
     
     return (
-        <header className="flex h-14 items-center gap-4 border-b bg-card px-4 lg:h-[60px] lg:px-6">
-            <SidebarTrigger className="md:hidden" />
-            <div className="flex-1 flex items-center gap-3">
-                 <h1 className="text-lg font-semibold whitespace-nowrap">{title}</h1>
-                 <NetworkStatusIndicator />
+        <header className="flex h-14 items-center gap-2 sm:gap-4 border-b bg-card px-2.5 sm:px-4 lg:h-[60px] lg:px-6 max-w-full overflow-hidden">
+            <SidebarTrigger className="md:hidden shrink-0" />
+            <div className="flex-1 min-w-0 flex items-center gap-2">
+                 <h1 className="text-sm sm:text-base md:text-lg font-semibold truncate">
+                   <span className="sm:hidden">{pathname === '/pos' ? 'PDV' : title}</span>
+                   <span className="hidden sm:inline">{title}</span>
+                 </h1>
+                 <div className="shrink-0 hidden xs:block">
+                   <NetworkStatusIndicator />
+                 </div>
             </div>
 
             {user && (
-                 <div className="flex items-center gap-2 md:gap-3">
+                 <div className="flex items-center gap-1 sm:gap-2 shrink-0">
                     {/* Tenant Selector */}
                     {tenantsList.length > 0 && (
-                      <div className="flex items-center gap-1.5">
-                        <Building2 className="h-4 w-4 text-muted-foreground hidden sm:inline" />
+                      <div className="flex items-center gap-1">
+                        <Building2 className="h-3.5 w-3.5 text-muted-foreground hidden md:inline shrink-0" />
                         <Select
                           value={currentTenant?.id ?? ''}
                           onValueChange={(val) => {
@@ -73,8 +78,8 @@ export function Header() {
                             if (found) setCurrentTenant(found);
                           }}
                         >
-                          <SelectTrigger className="h-8 text-xs max-w-[170px] md:max-w-[210px] bg-background">
-                            <SelectValue placeholder="Selecione a Organização" />
+                          <SelectTrigger className="h-8 text-[11px] sm:text-xs max-w-[85px] xs:max-w-[110px] sm:max-w-[150px] md:max-w-[200px] px-2 bg-background truncate">
+                            <SelectValue placeholder="Org" />
                           </SelectTrigger>
                           <SelectContent>
                             {tenantsList.map((tenant) => (
@@ -89,8 +94,8 @@ export function Header() {
 
                     {/* Event Selector */}
                     {currentTenant && eventsList.length > 0 && (
-                      <div className="flex items-center gap-1.5">
-                        <Calendar className="h-4 w-4 text-muted-foreground hidden sm:inline" />
+                      <div className="flex items-center gap-1">
+                        <Calendar className="h-3.5 w-3.5 text-muted-foreground hidden md:inline shrink-0" />
                         <Select
                           value={currentEvent?.id ?? ''}
                           onValueChange={(val) => {
@@ -98,8 +103,8 @@ export function Header() {
                             if (found) setCurrentEvent(found);
                           }}
                         >
-                          <SelectTrigger className="h-8 text-xs max-w-[170px] md:max-w-[210px] bg-background">
-                            <SelectValue placeholder="Selecione o Evento" />
+                          <SelectTrigger className="h-8 text-[11px] sm:text-xs max-w-[85px] xs:max-w-[110px] sm:max-w-[150px] md:max-w-[200px] px-2 bg-background truncate">
+                            <SelectValue placeholder="Evento" />
                           </SelectTrigger>
                           <SelectContent>
                             {eventsList.map((event) => (
@@ -115,7 +120,7 @@ export function Header() {
                     <span className="text-sm text-muted-foreground hidden lg:inline ml-2 border-l pl-3">
                         Olá, {user.name}
                     </span>
-                    <Button variant="ghost" size="icon" onClick={signOut} title="Sair">
+                    <Button variant="ghost" size="icon" onClick={signOut} title="Sair" className="h-8 w-8 shrink-0">
                         <LogOut className="h-4 w-4" />
                     </Button>
                 </div>

@@ -1,23 +1,49 @@
 'use server';
 
 import { z } from 'zod';
-import { Firestore, Timestamp } from '@google-cloud/firestore';
 import { initializeApp, getApps } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
-import type { Card, Order, Transaction, OrderItem } from './definitions';
+import type { Card, Order, Transaction, OrderItem, Pdv, TenantEvent } from './definitions';
 import { notifySale, notifyCustomMessage, notifyReversal } from './flows/notify-flow';
 import { notifyOrderReady } from './flows/notify-order-flow';
+import {
+  getPdvInstanceName,
+  getEvolutionQrCode,
+  getEvolutionConnectionState,
+  logoutEvolutionInstance,
+  formatWhatsAppNumber,
+} from './whatsapp';
 
-function getDb() {
-  if (getApps().length === 0) {
-    initializeApp();
-  }
-  return new Firestore();
+import { initializeApp as initClientApp, getApps as getClientApps, getApp as getClientApp } from 'firebase/app';
+import {
+  getFirestore as getClientFirestore,
+  doc as clientDoc,
+  getDoc as clientGetDoc,
+  updateDoc as clientUpdateDoc,
+  setDoc as clientSetDoc,
+  addDoc as clientAddDoc,
+  deleteDoc as clientDeleteDoc,
+  writeBatch as clientWriteBatch,
+  collection as clientCollection,
+  getDocs as clientGetDocs,
+  query as clientQuery,
+  where as clientWhere,
+  limit as clientLimit,
+  runTransaction as clientRunTransaction,
+  Timestamp as ClientTimestamp,
+} from 'firebase/firestore';
+import { firebaseConfig } from '@/firebase/config';
+
+const PROJECT_ID = process.env.FIREBASE_PROJECT_ID || process.env.GCLOUD_PROJECT || 'fiscalflow-zetbu';
+
+function getWebDb() {
+  const app = !getClientApps().length ? initClientApp(firebaseConfig) : getClientApp();
+  return getClientFirestore(app);
 }
 
 function getFirebaseAuth() {
   if (getApps().length === 0) {
-    initializeApp();
+    initializeApp({ projectId: PROJECT_ID });
   }
   return getAuth();
 }
@@ -40,7 +66,7 @@ export async function updateCardDetails(
     prevState: ActionState | undefined,
     formData: FormData
 ): Promise<ActionState> {
-    const db = getDb();
+    const db = getWebDb();
     try {
         const validatedFields = UpdateCardDetailsSchema.safeParse({
             cardId: formData.get('cardId'),
@@ -57,12 +83,13 @@ export async function updateCardDetails(
         }
 
         const { cardId, nome_cliente, telefone_cliente } = validatedFields.data;
+        const normalizedPhone = formatWhatsAppNumber(telefone_cliente);
 
-        const cardRef = db.collection('cards').doc(cardId);
-        await cardRef.update({
+        const cardRef = clientDoc(db, 'cards', cardId);
+        await clientUpdateDoc(cardRef, {
             nome_cliente: nome_cliente ?? '',
-            telefone_cliente: telefone_cliente,
-            updated_at: Timestamp.now(),
+            telefone_cliente: normalizedPhone,
+            updated_at: ClientTimestamp.now(),
         });
         
         return { status: 'success', message: 'Dados do cartão atualizados.' };
@@ -99,7 +126,7 @@ export async function processSale(
     prevState: ActionState | undefined,
     formData: FormData
 ): Promise<ActionState> {
-    const db = getDb();
+    const db = getWebDb();
     try {
         const items = JSON.parse(formData.get('items') as string);
         const total_venda = parseFloat(formData.get('total_venda') as string);
@@ -126,78 +153,92 @@ export async function processSale(
 
         const { qr_code_id, pdv_id, pdv_nome, total_venda: valor_venda_centavos, usuario_responsavel, tenant_id, event_id } = validatedFields.data;
 
-        const cardsRef = db.collection('cards');
-        const q = cardsRef.where('qr_code_id', '==', qr_code_id);
-        const querySnapshot = await q.get();
+        // Query card first to get document ID
+        const cardsRef = clientCollection(db, 'cards');
+        const q = clientQuery(cardsRef, clientWhere('qr_code_id', '==', qr_code_id), clientLimit(1));
+        const querySnapshot = await clientGetDocs(q);
 
         if (querySnapshot.empty) {
             return { status: 'error', message: 'Cartão não encontrado.' };
         }
         
         const cardDoc = querySnapshot.docs[0];
-        const card = cardDoc.data() as Card;
+        const cardDocRef = clientDoc(db, 'cards', cardDoc.id);
 
-        if (card.status !== 'ATIVO') {
-            return { status: 'error', message: `Cartão com status ${card.status}` };
-        }
+        // ATOMIC TRANSACTION: guarantees balance consistency under concurrent scans
+        const saleResult = await clientRunTransaction(db, async (t) => {
+            const freshCardSnap = await t.get(cardDocRef);
+            if (!freshCardSnap.exists()) {
+                throw new Error('Cartão não encontrado.');
+            }
 
-        if(card.saldo_centavos < valor_venda_centavos) {
-            return { status: 'error', message: 'Saldo insuficiente.' };
-        }
+            const card = freshCardSnap.data() as Card;
 
-        const novo_saldo_centavos = card.saldo_centavos - valor_venda_centavos;
-        
-        const batch = db.batch();
+            if (card.status !== 'ATIVO') {
+                throw new Error(`Cartão com status ${card.status}`);
+            }
 
-        // 1. Update card balance
-        const cardDocRef = db.collection('cards').doc(cardDoc.id);
-        batch.update(cardDocRef, {
-            saldo_centavos: novo_saldo_centavos,
-            updated_at: Timestamp.now()
+            if (card.saldo_centavos < valor_venda_centavos) {
+                throw new Error('Saldo insuficiente.');
+            }
+
+            const novo_saldo_centavos = card.saldo_centavos - valor_venda_centavos;
+            const now = ClientTimestamp.now();
+
+            const effectiveTenantId = tenant_id || card.tenant_id || null;
+            const effectiveEventId = event_id || card.event_id || null;
+
+            // 1. Update card balance
+            t.update(cardDocRef, {
+                saldo_centavos: novo_saldo_centavos,
+                updated_at: now,
+            });
+
+            // 2. Create transaction record
+            const transactionRef = clientDoc(clientCollection(db, 'transactions'));
+            t.set(transactionRef, {
+                cartao_id: cardDoc.id,
+                pdv_id: pdv_id,
+                tipo: 'VENDA',
+                valor_centavos: valor_venda_centavos,
+                created_at: now,
+                items: validatedFields.data.items,
+                usuario_responsavel: usuario_responsavel,
+                tenant_id: effectiveTenantId,
+                event_id: effectiveEventId,
+            });
+
+            // 3. Create order record
+            const orderRef = clientDoc(clientCollection(db, 'orders'));
+            const orderId = orderRef.id;
+            t.set(orderRef, {
+                pdv_id: pdv_id,
+                pdv_nome: pdv_nome,
+                transaction_id: transactionRef.id,
+                cliente_nome: card.nome_cliente || 'Cliente',
+                status: 'EM_PREPARO',
+                created_at: now,
+                updated_at: now,
+                items: validatedFields.data.items,
+                order_number: `#${orderId.substring(0, 4).toUpperCase()}`,
+                tenant_id: effectiveTenantId,
+                event_id: effectiveEventId,
+            });
+
+            return {
+                novo_saldo_centavos,
+                cardId: cardDoc.id,
+            };
         });
-        
-        // 2. Create transaction record
-        const transactionRef = db.collection("transactions").doc();
-        batch.set(transactionRef, {
-          cartao_id: cardDoc.id,
-          pdv_id: pdv_id,
-          tipo: 'VENDA',
-          valor_centavos: valor_venda_centavos,
-          created_at: Timestamp.now(),
-          items: validatedFields.data.items, // This now includes observations
-          usuario_responsavel: usuario_responsavel,
-          tenant_id: tenant_id || null,
-          event_id: event_id || null,
-        });
-
-        // 3. Create order record
-        const orderRef = db.collection('orders').doc();
-        const orderId = orderRef.id;
-        batch.set(orderRef, {
-            pdv_id: pdv_id,
-            pdv_nome: pdv_nome,
-            transaction_id: transactionRef.id,
-            cliente_nome: card.nome_cliente || 'Cliente',
-            status: 'EM_PREPARO', // Initial status
-            created_at: Timestamp.now(),
-            updated_at: Timestamp.now(),
-            items: validatedFields.data.items, // This now includes observations
-            order_number: `#${orderId.substring(0, 4).toUpperCase()}`,
-            tenant_id: tenant_id || null,
-            event_id: event_id || null,
-        });
-
-        await batch.commit();
 
         // Trigger notification flow (non-blocking)
-        notifySale(cardDoc.id, valor_venda_centavos, pdv_nome).catch(console.error);
-
+        notifySale(saleResult.cardId, valor_venda_centavos, pdv_nome).catch(console.error);
 
         return {
             status: 'success',
             message: 'Venda aprovada!',
-            data: { novo_saldo_centavos }
-        }
+            data: { novo_saldo_centavos: saleResult.novo_saldo_centavos }
+        };
 
     } catch (error) {
         console.error(error);
@@ -208,45 +249,54 @@ export async function processSale(
 
 // --- Transaction Reversal ---
 export async function reverseTransaction(transactionId: string, responsibleUser: string): Promise<ActionState> {
-    const db = getDb();
+    const db = getWebDb();
     try {
-        const reversalResult = await db.runTransaction(async (t) => {
+        // Pre-check 1: Check if this transaction was already reversed
+        const reversalsQuery = clientQuery(
+            clientCollection(db, 'transactions'),
+            clientWhere('reversed_tx_id', '==', transactionId)
+        );
+        const reversalsSnapshot = await clientGetDocs(reversalsQuery);
+        if (!reversalsSnapshot.empty) {
+            return { status: 'error', message: 'Esta transação já foi estornada.' };
+        }
+
+        // Pre-check 2: Find associated order if it is a sale
+        const ordersQuery = clientQuery(
+            clientCollection(db, 'orders'),
+            clientWhere('transaction_id', '==', transactionId),
+            clientLimit(1)
+        );
+        const ordersSnapshot = await clientGetDocs(ordersQuery);
+        const orderToCancelId = !ordersSnapshot.empty ? ordersSnapshot.docs[0].id : null;
+
+        const reversalResult = await clientRunTransaction(db, async (t) => {
             // --- 1. READ PHASE ---
-            const txRef = db.collection('transactions').doc(transactionId);
+            const txRef = clientDoc(db, 'transactions', transactionId);
             const txDoc = await t.get(txRef);
-            if (!txDoc.exists) {
+            if (!txDoc.exists()) {
                 throw new Error("Transação original não encontrada.");
             }
             const originalTx = txDoc.data() as Transaction;
 
-            const cardRef = db.collection('cards').doc(originalTx.cartao_id);
+            const cardRef = clientDoc(db, 'cards', originalTx.cartao_id);
             const cardDoc = await t.get(cardRef);
-            if (!cardDoc.exists) {
+            if (!cardDoc.exists()) {
                 throw new Error("Cartão associado não encontrado.");
             }
             const cardData = cardDoc.data() as Card;
 
-            const reversalsQuery = db.collection('transactions').where('reversed_tx_id', '==', transactionId);
-            const reversalsSnapshot = await t.get(reversalsQuery);
-            
-            let orderToCancelRef: FirebaseFirestore.DocumentReference | null = null;
-            if (originalTx.tipo === 'VENDA') {
-                const ordersQuery = db.collection('orders').where('transaction_id', '==', transactionId).limit(1);
-                const ordersSnapshot = await t.get(ordersQuery);
-                if (!ordersSnapshot.empty) {
-                    orderToCancelRef = ordersSnapshot.docs[0].ref;
-                }
+            let orderToCancelRef: ReturnType<typeof clientDoc> | null = null;
+            if (orderToCancelId) {
+                orderToCancelRef = clientDoc(db, 'orders', orderToCancelId);
             }
             
             // --- 2. VALIDATION PHASE ---
             if (originalTx.tipo === 'REEMBOLSO') {
                 throw new Error("Não é possível estornar um estorno.");
             }
-            if (!reversalsSnapshot.empty) {
-                throw new Error("Esta transação já foi estornada.");
-            }
 
-            let newBalance;
+            let newBalance: number;
             if (originalTx.tipo === 'VENDA') {
                 newBalance = cardData.saldo_centavos + originalTx.valor_centavos;
             } else if (originalTx.tipo === 'RECARGA') {
@@ -259,22 +309,25 @@ export async function reverseTransaction(transactionId: string, responsibleUser:
             }
 
             // --- 3. WRITE PHASE ---
-            t.update(cardRef, { saldo_centavos: newBalance, updated_at: Timestamp.now() });
+            const now = ClientTimestamp.now();
+            t.update(cardRef, { saldo_centavos: newBalance, updated_at: now });
 
             if (orderToCancelRef) {
-                t.update(orderToCancelRef, { status: 'CANCELADO', updated_at: Timestamp.now() });
+                t.update(orderToCancelRef, { status: 'CANCELADO', updated_at: now });
             }
 
-            const reversalTxRef = db.collection('transactions').doc();
-             const reversalData: Partial<Transaction> = {
+            const reversalTxRef = clientDoc(clientCollection(db, 'transactions'));
+            const reversalData: Partial<Transaction> = {
                 cartao_id: originalTx.cartao_id,
                 pdv_id: originalTx.pdv_id,
                 tipo: 'REEMBOLSO',
                 valor_centavos: originalTx.valor_centavos,
-                created_at: Timestamp.now() as any,
+                created_at: now as any,
                 usuario_responsavel: responsibleUser,
                 reversed_tx_id: transactionId,
                 items: originalTx.items || [],
+                tenant_id: originalTx.tenant_id || cardData.tenant_id || undefined,
+                event_id: originalTx.event_id || cardData.event_id || undefined,
             };
             t.set(reversalTxRef, reversalData);
 
@@ -295,11 +348,11 @@ export async function reverseTransaction(transactionId: string, responsibleUser:
 
 // --- PDV / Menu ---
 export async function getPdvNameById(pdvId: string): Promise<string> {
-    const db = getDb();
+    const db = getWebDb();
     if (pdvId === 'caixa_central') return 'Caixa Central';
-    const pdvRef = db.collection('pdvs').doc(pdvId);
-    const pdvSnap = await pdvRef.get();
-    if (pdvSnap.exists) {
+    const pdvRef = clientDoc(db, 'pdvs', pdvId);
+    const pdvSnap = await clientGetDoc(pdvRef);
+    if (pdvSnap.exists()) {
         return (pdvSnap.data() as any).nome;
     }
     return `PDV ID: ${pdvId}`;
@@ -314,7 +367,7 @@ const MenuItemSchema = z.object({
 });
 
 export async function addMenuItem( prevState: ActionState | undefined, formData: FormData): Promise<ActionState> {
-  const db = getDb();
+  const db = getWebDb();
   const validatedFields = MenuItemSchema.safeParse({
     nome: formData.get('nome'),
     preco_reais: formData.get('preco_reais'),
@@ -331,17 +384,18 @@ export async function addMenuItem( prevState: ActionState | undefined, formData:
     const preco_centavos = Math.round(preco_reais * 100);
     const ingredientesList = ingredientes ? ingredientes.split(',').map(i => i.trim()).filter(Boolean) : [];
     
-    const menuItemsCollection = db.collection('pdvs').doc(pdvId).collection('menuItems');
-    await menuItemsCollection.add({ nome, preco_centavos, ingredientes: ingredientesList });
+    const menuItemsCollection = clientCollection(db, 'pdvs', pdvId, 'menuItems');
+    await clientAddDoc(menuItemsCollection, { nome, preco_centavos, ingredientes: ingredientesList });
 
     return { status: 'success', message: 'Item adicionado com sucesso!' };
   } catch (error) {
-    return { status: 'error', message: 'Erro ao adicionar item.' };
+    const msg = error instanceof Error ? error.message : 'Erro ao adicionar item.';
+    return { status: 'error', message: msg };
   }
 }
 
 export async function updateMenuItem(prevState: ActionState | undefined, formData: FormData): Promise<ActionState> {
-  const db = getDb();
+  const db = getWebDb();
   const validatedFields = MenuItemSchema.safeParse({
     nome: formData.get('nome'),
     preco_reais: formData.get('preco_reais'),
@@ -359,28 +413,30 @@ export async function updateMenuItem(prevState: ActionState | undefined, formDat
     const preco_centavos = Math.round(preco_reais * 100);
     const ingredientesList = ingredientes ? ingredientes.split(',').map(i => i.trim()).filter(Boolean) : [];
 
-    const itemRef = db.collection('pdvs').doc(pdvId).collection('menuItems').doc(itemId);
-    await itemRef.update({ nome, preco_centavos, ingredientes: ingredientesList });
+    const itemRef = clientDoc(db, 'pdvs', pdvId, 'menuItems', itemId);
+    await clientUpdateDoc(itemRef, { nome, preco_centavos, ingredientes: ingredientesList });
 
     return { status: 'success', message: 'Item atualizado com sucesso!' };
   } catch (error) {
-    return { status: 'error', message: 'Erro ao atualizar item.' };
+    const msg = error instanceof Error ? error.message : 'Erro ao atualizar item.';
+    return { status: 'error', message: msg };
   }
 }
 
 export async function deleteMenuItem(pdvId: string, itemId: string): Promise<ActionState> {
-  const db = getDb();
+  const db = getWebDb();
   if (!pdvId || !itemId) {
     return { status: 'error', message: 'IDs inválidos.' };
   }
 
   try {
-    const itemRef = db.collection('pdvs').doc(pdvId).collection('menuItems').doc(itemId);
-    await itemRef.delete();
+    const itemRef = clientDoc(db, 'pdvs', pdvId, 'menuItems', itemId);
+    await clientDeleteDoc(itemRef);
 
     return { status: 'success', message: 'Item excluído com sucesso!' };
   } catch (error) {
-    return { status: 'error', message: 'Erro ao excluir item.' };
+    const msg = error instanceof Error ? error.message : 'Erro ao excluir item.';
+    return { status: 'error', message: msg };
   }
 }
 
@@ -392,7 +448,7 @@ const CreatePdvSchema = z.object({
 });
 
 export async function createPdv(prevState: ActionState | undefined, formData: FormData): Promise<ActionState> {
-  const db = getDb();
+  const db = getWebDb();
   const validated = CreatePdvSchema.safeParse({
     nome: formData.get('nome'),
     tenant_id: formData.get('tenant_id') || undefined,
@@ -405,60 +461,61 @@ export async function createPdv(prevState: ActionState | undefined, formData: Fo
 
   try {
     const { nome, tenant_id, event_id } = validated.data;
-    const pdvRef = await db.collection('pdvs').add({
+    const pdvRef = await clientAddDoc(clientCollection(db, 'pdvs'), {
       nome,
       tenant_id: tenant_id || null,
       event_id: event_id || null,
-      created_at: Timestamp.now(),
+      created_at: ClientTimestamp.now(),
     });
 
     return { status: 'success', message: `PDV "${nome}" criado com sucesso!`, data: { id: pdvRef.id } };
   } catch (error) {
-    console.error(error);
-    return { status: 'error', message: 'Erro ao criar PDV.' };
+    const msg = error instanceof Error ? error.message : 'Erro ao criar PDV.';
+    return { status: 'error', message: msg };
   }
 }
 
 export async function updatePdv(pdvId: string, nome: string): Promise<ActionState> {
-  const db = getDb();
+  const db = getWebDb();
   if (!pdvId || !nome.trim()) {
     return { status: 'error', message: 'Dados inválidos.' };
   }
 
   try {
-    await db.collection('pdvs').doc(pdvId).update({
+    await clientUpdateDoc(clientDoc(db, 'pdvs', pdvId), {
       nome: nome.trim(),
-      updated_at: Timestamp.now(),
+      updated_at: ClientTimestamp.now(),
     });
     return { status: 'success', message: 'PDV atualizado com sucesso!' };
   } catch (error) {
-    return { status: 'error', message: 'Erro ao atualizar PDV.' };
+    const msg = error instanceof Error ? error.message : 'Erro ao atualizar PDV.';
+    return { status: 'error', message: msg };
   }
 }
 
 export async function deletePdv(pdvId: string): Promise<ActionState> {
-  const db = getDb();
+  const db = getWebDb();
   if (!pdvId) {
     return { status: 'error', message: 'ID inválido.' };
   }
 
   try {
     // Delete all menu items inside pdv
-    const menuItemsSnap = await db.collection('pdvs').doc(pdvId).collection('menuItems').get();
-    const batch = db.batch();
+    const menuItemsSnap = await clientGetDocs(clientCollection(db, 'pdvs', pdvId, 'menuItems'));
+    const batch = clientWriteBatch(db);
     menuItemsSnap.docs.forEach((doc) => batch.delete(doc.ref));
-    batch.delete(db.collection('pdvs').doc(pdvId));
+    batch.delete(clientDoc(db, 'pdvs', pdvId));
     await batch.commit();
 
     return { status: 'success', message: 'PDV e seu cardápio excluídos com sucesso!' };
   } catch (error) {
-    console.error(error);
-    return { status: 'error', message: 'Erro ao excluir PDV.' };
+    const msg = error instanceof Error ? error.message : 'Erro ao excluir PDV.';
+    return { status: 'error', message: msg };
   }
 }
 
 export async function seedDefaultPdvs(tenantId: string, eventId: string): Promise<ActionState> {
-  const db = getDb();
+  const db = getWebDb();
   if (!tenantId || !eventId) {
     return { status: 'error', message: 'Organização e Evento são obrigatórios para inicializar barracas.' };
   }
@@ -503,26 +560,307 @@ export async function seedDefaultPdvs(tenantId: string, eventId: string): Promis
       },
     ];
 
-    for (const pdvData of defaultPdvs) {
-      const pdvRef = await db.collection('pdvs').add({
-        nome: pdvData.nome,
+    for (const p of defaultPdvs) {
+      const pdvRef = await clientAddDoc(clientCollection(db, 'pdvs'), {
+        nome: p.nome,
         tenant_id: tenantId,
         event_id: eventId,
-        created_at: Timestamp.now(),
+        created_at: ClientTimestamp.now(),
       });
 
-      const menuBatch = db.batch();
-      for (const item of pdvData.menu) {
-        const itemRef = pdvRef.collection('menuItems').doc();
-        menuBatch.set(itemRef, item);
+      const menuRef = clientCollection(db, 'pdvs', pdvRef.id, 'menuItems');
+      for (const item of p.menu) {
+        await clientAddDoc(menuRef, item);
       }
-      await menuBatch.commit();
     }
 
     return { status: 'success', message: '4 barracas padrão e seus cardápios foram criados com sucesso!' };
   } catch (error) {
-    console.error(error);
-    return { status: 'error', message: 'Erro ao inicializar barracas.' };
+    const msg = error instanceof Error ? error.message : 'Erro ao inicializar barracas.';
+    return { status: 'error', message: msg };
+  }
+}
+
+// --- PDV WhatsApp Instance Management ---
+
+export async function connectPdvWhatsapp(
+  pdvId: string,
+  eventId?: string | null,
+  customInstanceName?: string,
+  customToken?: string
+): Promise<{
+  success: boolean;
+  instanceName?: string;
+  base64?: string;
+  code?: string;
+  pairingCode?: string;
+  state?: string;
+  error?: string;
+}> {
+  const db = getWebDb();
+  if (!pdvId) return { success: false, error: 'PDV ID é obrigatório.' };
+
+  try {
+    const pdvRef = clientDoc(db, 'pdvs', pdvId);
+    const pdvSnap = await clientGetDoc(pdvRef);
+    if (!pdvSnap.exists()) {
+      return { success: false, error: 'PDV não encontrado.' };
+    }
+
+    const pdvData = pdvSnap.data() as Pdv;
+    // Preferred instance name order: customInstanceName -> saved instanceName -> pdv.nome -> generated name
+    const instanceName =
+      customInstanceName?.trim() ||
+      pdvData.whatsapp?.instanceName ||
+      pdvData.nome ||
+      getPdvInstanceName(eventId || pdvData.event_id, pdvId);
+
+    const token = customToken?.trim() || pdvData.whatsapp?.token;
+
+    // Get or generate QR code from Evolution API
+    const qrResult = await getEvolutionQrCode(instanceName, token);
+
+    if (!qrResult.success) {
+      await clientUpdateDoc(pdvRef, {
+        'whatsapp.status': 'ERROR',
+        'whatsapp.instanceName': instanceName,
+        ...(token ? { 'whatsapp.token': token } : {}),
+        'whatsapp.lastError': qrResult.error,
+        'whatsapp.updatedAt': ClientTimestamp.now(),
+      }).catch(() => {});
+
+      return { success: false, instanceName, error: qrResult.error };
+    }
+
+    // Update PDV state in Firestore
+    await clientUpdateDoc(pdvRef, {
+      'whatsapp.enabled': true,
+      'whatsapp.instanceName': instanceName,
+      ...(token ? { 'whatsapp.token': token } : {}),
+      'whatsapp.status': qrResult.state === 'open' ? 'CONNECTED' : 'CONNECTING',
+      'whatsapp.updatedAt': ClientTimestamp.now(),
+    });
+
+    return {
+      success: true,
+      instanceName,
+      base64: qrResult.base64,
+      code: qrResult.code,
+      pairingCode: qrResult.pairingCode,
+      state: qrResult.state,
+    };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Erro ao iniciar conexão com WhatsApp.';
+    console.error(`[connectPdvWhatsapp] Error:`, msg);
+    return { success: false, error: msg };
+  }
+}
+
+export async function checkPdvWhatsappStatus(
+  pdvId: string,
+  instanceName: string,
+  token?: string
+): Promise<{
+  status: 'CONNECTED' | 'CONNECTING' | 'DISCONNECTED' | 'ERROR';
+  phoneNumber?: string;
+  error?: string;
+}> {
+  const db = getWebDb();
+  if (!pdvId || !instanceName) return { status: 'DISCONNECTED' };
+
+  try {
+    const stateResult = await getEvolutionConnectionState(instanceName, token);
+    const pdvRef = clientDoc(db, 'pdvs', pdvId);
+
+    if (stateResult.state === 'open') {
+      await clientUpdateDoc(pdvRef, {
+        'whatsapp.status': 'CONNECTED',
+        'whatsapp.phoneNumber': stateResult.phoneNumber || null,
+        'whatsapp.lastConnectedAt': ClientTimestamp.now(),
+        'whatsapp.updatedAt': ClientTimestamp.now(),
+      });
+      return { status: 'CONNECTED', phoneNumber: stateResult.phoneNumber };
+    } else if (stateResult.state === 'connecting') {
+      await clientUpdateDoc(pdvRef, {
+        'whatsapp.status': 'CONNECTING',
+        'whatsapp.updatedAt': ClientTimestamp.now(),
+      });
+      return { status: 'CONNECTING' };
+    } else {
+      await clientUpdateDoc(pdvRef, {
+        'whatsapp.status': 'DISCONNECTED',
+        'whatsapp.updatedAt': ClientTimestamp.now(),
+      });
+      return { status: 'DISCONNECTED' };
+    }
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Erro ao consultar status.';
+    return { status: 'ERROR', error: msg };
+  }
+}
+
+export async function disconnectPdvWhatsapp(
+  pdvId: string,
+  instanceName: string,
+  token?: string
+): Promise<ActionState> {
+  const db = getWebDb();
+  if (!pdvId || !instanceName) return { status: 'error', message: 'Dados inválidos.' };
+
+  try {
+    await logoutEvolutionInstance(instanceName, token);
+    const pdvRef = clientDoc(db, 'pdvs', pdvId);
+    await clientUpdateDoc(pdvRef, {
+      'whatsapp.status': 'DISCONNECTED',
+      'whatsapp.lastDisconnectedAt': ClientTimestamp.now(),
+      'whatsapp.updatedAt': ClientTimestamp.now(),
+    });
+
+    return { status: 'success', message: 'WhatsApp da barraca desconectado.' };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Erro ao desconectar WhatsApp.';
+    return { status: 'error', message: msg };
+  }
+}
+
+// --- Event / Caixa WhatsApp Management ---
+export async function connectEventWhatsapp(
+  tenantId: string,
+  eventId: string,
+  customInstanceName?: string,
+  customToken?: string
+): Promise<{
+  success: boolean;
+  instanceName?: string;
+  base64?: string;
+  code?: string;
+  pairingCode?: string;
+  state?: string;
+  error?: string;
+}> {
+  const db = getWebDb();
+  if (!tenantId || !eventId) return { success: false, error: 'Tenant e Evento são obrigatórios.' };
+
+  try {
+    const eventRef = clientDoc(db, 'tenants', tenantId, 'events', eventId);
+    const eventSnap = await clientGetDoc(eventRef);
+    if (!eventSnap.exists()) {
+      return { success: false, error: 'Evento não encontrado.' };
+    }
+
+    const eventData = eventSnap.data() as TenantEvent;
+    const tSnap = await clientGetDoc(clientDoc(db, 'tenants', tenantId)).catch(() => null);
+    const orgName = tSnap && tSnap.exists() ? tSnap.data().name : tenantId;
+
+    const instanceName =
+      customInstanceName?.trim() ||
+      eventData.whatsapp?.instanceName ||
+      getPdvInstanceName(orgName, eventData.name, 'caixa');
+
+    const token = customToken?.trim() || eventData.whatsapp?.token;
+
+    const qrResult = await getEvolutionQrCode(instanceName, token);
+
+    if (!qrResult.success) {
+      await clientUpdateDoc(eventRef, {
+        'whatsapp.status': 'ERROR',
+        'whatsapp.instanceName': instanceName,
+        ...(token ? { 'whatsapp.token': token } : {}),
+        'whatsapp.lastError': qrResult.error,
+        'whatsapp.updatedAt': ClientTimestamp.now(),
+      }).catch(() => {});
+
+      return { success: false, instanceName, error: qrResult.error };
+    }
+
+    await clientUpdateDoc(eventRef, {
+      'whatsapp.enabled': true,
+      'whatsapp.instanceName': instanceName,
+      ...(token ? { 'whatsapp.token': token } : {}),
+      'whatsapp.status': qrResult.state === 'open' ? 'CONNECTED' : 'CONNECTING',
+      'whatsapp.updatedAt': ClientTimestamp.now(),
+    });
+
+    return {
+      success: true,
+      instanceName,
+      base64: qrResult.base64,
+      code: qrResult.code,
+      pairingCode: qrResult.pairingCode,
+      state: qrResult.state,
+    };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Erro ao conectar WhatsApp do Evento.';
+    return { success: false, error: msg };
+  }
+}
+
+export async function checkEventWhatsappStatus(
+  tenantId: string,
+  eventId: string,
+  instanceName: string,
+  token?: string
+): Promise<{
+  status: 'CONNECTED' | 'CONNECTING' | 'DISCONNECTED' | 'ERROR';
+  phoneNumber?: string;
+  error?: string;
+}> {
+  const db = getWebDb();
+  if (!tenantId || !eventId || !instanceName) return { status: 'DISCONNECTED' };
+
+  try {
+    const stateResult = await getEvolutionConnectionState(instanceName, token);
+    const eventRef = clientDoc(db, 'tenants', tenantId, 'events', eventId);
+
+    if (stateResult.state === 'open') {
+      await clientUpdateDoc(eventRef, {
+        'whatsapp.status': 'CONNECTED',
+        'whatsapp.phoneNumber': stateResult.phoneNumber || null,
+        'whatsapp.lastConnectedAt': ClientTimestamp.now(),
+        'whatsapp.updatedAt': ClientTimestamp.now(),
+      });
+      return { status: 'CONNECTED', phoneNumber: stateResult.phoneNumber };
+    } else if (stateResult.state === 'connecting') {
+      await clientUpdateDoc(eventRef, {
+        'whatsapp.status': 'CONNECTING',
+        'whatsapp.updatedAt': ClientTimestamp.now(),
+      });
+      return { status: 'CONNECTING' };
+    } else {
+      await clientUpdateDoc(eventRef, {
+        'whatsapp.status': 'DISCONNECTED',
+        'whatsapp.updatedAt': ClientTimestamp.now(),
+      });
+      return { status: 'DISCONNECTED' };
+    }
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Erro ao consultar status.';
+    return { status: 'ERROR', error: msg };
+  }
+}
+
+export async function disconnectEventWhatsapp(
+  tenantId: string,
+  eventId: string,
+  instanceName: string,
+  token?: string
+): Promise<ActionState> {
+  const db = getWebDb();
+  if (!tenantId || !eventId || !instanceName) return { status: 'error', message: 'Dados inválidos.' };
+
+  try {
+    await logoutEvolutionInstance(instanceName, token);
+    const eventRef = clientDoc(db, 'tenants', tenantId, 'events', eventId);
+    await clientUpdateDoc(eventRef, {
+      'whatsapp.status': 'DISCONNECTED',
+      'whatsapp.lastDisconnectedAt': ClientTimestamp.now(),
+      'whatsapp.updatedAt': ClientTimestamp.now(),
+    });
+
+    return { status: 'success', message: 'WhatsApp do Evento/Caixa desconectado.' };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Erro ao desconectar WhatsApp do Evento.';
+    return { status: 'error', message: msg };
   }
 }
 
@@ -533,7 +871,7 @@ const UpdateOrderStatusSchema = z.object({
 });
 
 export async function updateOrderStatus(orderId: string, newStatus: Order['status']): Promise<ActionState> {
-    const db = getDb();
+    const db = getWebDb();
     const validated = UpdateOrderStatusSchema.safeParse({ orderId, newStatus });
 
     if (!validated.success) {
@@ -541,10 +879,10 @@ export async function updateOrderStatus(orderId: string, newStatus: Order['statu
     }
 
     try {
-        const orderRef = db.collection('orders').doc(validated.data.orderId);
-        await orderRef.update({
+        const orderRef = clientDoc(db, 'orders', validated.data.orderId);
+        await clientUpdateDoc(orderRef, {
             status: validated.data.newStatus,
-            updated_at: Timestamp.now(),
+            updated_at: ClientTimestamp.now(),
         });
         
         // If the order is ready, trigger a notification
@@ -563,27 +901,41 @@ export async function updateOrderStatus(orderId: string, newStatus: Order['statu
 // --- Bulk Whatsapp ---
 const BulkNotificationSchema = z.object({
   message: z.string().min(1, 'A mensagem não pode estar vazia.'),
+  tenant_id: z.string().optional(),
+  event_id: z.string().optional(),
 });
 
 export async function sendBulkNotification(
   prevState: ActionState | undefined,
   formData: FormData
 ): Promise<ActionState> {
-  const db = getDb();
+  const db = getWebDb();
   const validatedFields = BulkNotificationSchema.safeParse({
     message: formData.get('message'),
+    tenant_id: formData.get('tenant_id') || undefined,
+    event_id: formData.get('event_id') || undefined,
   });
 
   if (!validatedFields.success) {
     return { status: 'error', message: 'Mensagem inválida.' };
   }
   
-  const { message } = validatedFields.data;
+  const { message, tenant_id, event_id } = validatedFields.data;
 
   try {
-    const cardsSnapshot = await db.collection('cards').get();
+    const cardsColl = clientCollection(db, 'cards');
+    let q = clientQuery(cardsColl);
+    if (tenant_id && event_id) {
+      q = clientQuery(cardsColl, clientWhere('tenant_id', '==', tenant_id), clientWhere('event_id', '==', event_id));
+    } else if (tenant_id) {
+      q = clientQuery(cardsColl, clientWhere('tenant_id', '==', tenant_id));
+    } else if (event_id) {
+      q = clientQuery(cardsColl, clientWhere('event_id', '==', event_id));
+    }
+
+    const cardsSnapshot = await clientGetDocs(q);
     if (cardsSnapshot.empty) {
-      return { status: 'error', message: 'Nenhum cartão cadastrado para notificar.' };
+      return { status: 'error', message: 'Nenhum cartão cadastrado para este evento para notificar.' };
     }
 
     const phoneNumbers = new Set<string>();
@@ -623,14 +975,14 @@ export async function sendBulkNotification(
 
 // --- Bulk Deletion ---
 export async function deleteCards(cardIds: string[]): Promise<ActionState> {
-    const db = getDb();
+    const db = getWebDb();
     if (!cardIds || cardIds.length === 0) {
         return { status: 'error', message: 'Nenhum cartão selecionado.' };
     }
     try {
-        const batch = db.batch();
+        const batch = clientWriteBatch(db);
         cardIds.forEach(id => {
-            const docRef = db.collection('cards').doc(id);
+            const docRef = clientDoc(db, 'cards', id);
             batch.delete(docRef);
         });
         await batch.commit();
@@ -642,33 +994,37 @@ export async function deleteCards(cardIds: string[]): Promise<ActionState> {
 }
 
 export async function deleteTransactions(transactionIds: string[]): Promise<ActionState> {
-    const db = getDb();
+    const db = getWebDb();
     if (!transactionIds || transactionIds.length === 0) {
         return { status: 'error', message: 'Nenhuma transação selecionada.' };
     }
 
     try {
-        const batch = db.batch();
+        const batch = clientWriteBatch(db);
         
-        // Find associated orders to delete them as well
-        const ordersRef = db.collection('orders');
-        const ordersQuery = ordersRef.where('transaction_id', 'in', transactionIds);
-        const ordersSnapshot = await ordersQuery.get();
-
-        ordersSnapshot.forEach(doc => {
-            batch.delete(doc.ref);
-        });
+        // Find associated orders to delete them as well (chunked by 10 for 'in' query)
+        for (let i = 0; i < transactionIds.length; i += 10) {
+            const chunk = transactionIds.slice(i, i + 10);
+            const ordersQuery = clientQuery(
+                clientCollection(db, 'orders'),
+                clientWhere('transaction_id', 'in', chunk)
+            );
+            const ordersSnapshot = await clientGetDocs(ordersQuery);
+            ordersSnapshot.forEach(doc => {
+                batch.delete(doc.ref);
+            });
+        }
         
         // Delete the transactions themselves
         transactionIds.forEach(id => {
-            const docRef = db.collection('transactions').doc(id);
+            const docRef = clientDoc(db, 'transactions', id);
             batch.delete(docRef);
         });
 
         await batch.commit();
         return { 
             status: 'success', 
-            message: `${transactionIds.length} transação(ões) e ${ordersSnapshot.size} pedido(s) associado(s) foram excluído(s) com sucesso.` 
+            message: `${transactionIds.length} transação(ões) excluída(s) com sucesso.` 
         };
     } catch (error) {
         console.error("Error deleting transactions:", error);
@@ -678,7 +1034,7 @@ export async function deleteTransactions(transactionIds: string[]): Promise<Acti
  
 export async function createUser(prevState: ActionState | undefined, formData: FormData): Promise<ActionState> {
     const auth = getFirebaseAuth();
-    const db = getDb();
+    const db = getWebDb();
     const UserSchema = z.object({
         email: z.string().email('Email inválido.'),
         password: z.string().min(6, 'A senha deve ter pelo menos 6 caracteres.'),
@@ -733,7 +1089,7 @@ export async function createUser(prevState: ActionState | undefined, formData: F
             userProfile.tenants = tenantsMap;
         }
 
-        await db.collection('users').doc(userRecord.uid).set(userProfile);
+        await clientSetDoc(clientDoc(db, 'users', userRecord.uid), userProfile);
 
         return { status: 'success', message: 'Usuário criado com sucesso!' };
 

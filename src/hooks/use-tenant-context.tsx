@@ -111,12 +111,14 @@ export function TenantProvider({ children }: { children: ReactNode }) {
 
   const setCurrentTenant = useCallback((tenant: Tenant | null) => {
     setCurrentTenantState(tenant);
+    setCurrentEventState(null);
     if (typeof window !== 'undefined') {
       if (tenant) {
         localStorage.setItem('festapay_tenant_id', tenant.id);
       } else {
         localStorage.removeItem('festapay_tenant_id');
       }
+      localStorage.removeItem('festapay_event_id');
     }
   }, []);
 
