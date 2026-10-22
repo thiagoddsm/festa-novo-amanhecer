@@ -176,7 +176,7 @@ function ObservationDialog({ item, onSave }: { item: CartItem; onSave: (observat
     )
 }
 
-export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv, onGoBack: () => void }) {
+export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv; onGoBack?: () => void }) {
   const { user } = useAuth();
   const { currentTenant, currentEvent } = useTenant();
   const { toast } = useToast();
@@ -449,10 +449,12 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv, onGoBack: ()
               )}
             </div>
 
-            <Button variant="ghost" size="sm" onClick={onGoBack} className="h-9 px-2 sm:px-3 text-xs shrink-0 text-muted-foreground hover:text-foreground">
-              <ArrowLeft className="mr-1 h-3.5 w-3.5" />
-              <span className="hidden xs:inline">Trocar PDV</span>
-            </Button>
+            {onGoBack && (
+              <Button variant="ghost" size="sm" onClick={onGoBack} className="h-9 px-2 sm:px-3 text-xs shrink-0 text-muted-foreground hover:text-foreground">
+                <ArrowLeft className="mr-1 h-3.5 w-3.5" />
+                <span className="hidden xs:inline">Trocar PDV</span>
+              </Button>
+            )}
         </div>
         <TabsContent value="venda" className="pb-24 lg:pb-0">
             <div className="flex flex-col lg:flex-row gap-2 md:gap-4 items-start">

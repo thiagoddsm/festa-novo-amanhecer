@@ -9,7 +9,7 @@ import {
 } from 'react';
 import { onIdTokenChanged, type User, signOut as firebaseSignOut, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { useAuth as useFirebaseAuth, useFirestore } from '@/firebase';
-import { doc, getDoc, setDoc, collection, getDocs } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, getDocs, onSnapshot } from 'firebase/firestore';
 import type { AuthenticatedUser } from '@/lib/auth-defs';
 import { mapFirebaseAuthToAuthenticatedUser } from '@/lib/auth-defs';
 import { useToast } from './use-toast';
@@ -72,47 +72,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    let unsubscribeUserDoc: (() => void) | null = null;
+
     const unsubscribe = onIdTokenChanged(auth, async (firebaseUser: User | null) => {
       setLoading(true);
+
+      if (unsubscribeUserDoc) {
+        unsubscribeUserDoc();
+        unsubscribeUserDoc = null;
+      }
+
       if (firebaseUser) {
         await checkAndCreateUserProfile(firestore, firebaseUser);
 
-        try {
-          const userDocRef = doc(firestore, 'users', firebaseUser.uid);
-          const docSnap = await getDoc(userDocRef);
-
+        const userDocRef = doc(firestore, 'users', firebaseUser.uid);
+        unsubscribeUserDoc = onSnapshot(userDocRef, (docSnap) => {
           if (docSnap.exists()) {
             const userProfile = docSnap.data();
-            const authenticatedUser = mapFirebaseAuthToAuthenticatedUser(firebaseUser, userProfile!);
+            const authenticatedUser = mapFirebaseAuthToAuthenticatedUser(firebaseUser, userProfile);
             setUser(authenticatedUser);
           } else {
-             console.error("User profile not found in Firestore after creation attempt. Signing out.");
-             toast({
-                variant: "destructive",
-                title: "Erro de Perfil",
-                description: "Seu perfil não foi encontrado e não pôde ser criado. Tente novamente."
-            });
-            await firebaseSignOut(auth);
+            console.error("User profile not found in Firestore. Signing out.");
+            firebaseSignOut(auth);
             setUser(null);
           }
-        } catch (error) {
-          console.error("Error fetching user profile:", error);
-          toast({
-            variant: "destructive",
-            title: "Erro de Autenticação",
-            description: "Não foi possível verificar seu perfil."
-          });
-          await firebaseSignOut(auth);
-          setUser(null);
-        }
+          setLoading(false);
+        }, (error) => {
+          console.error("Error watching user profile:", error);
+          setLoading(false);
+        });
       } else {
         // No Firebase user found
         setUser(null);
+        setLoading(false);
       }
-       setLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => {
+      if (unsubscribeUserDoc) unsubscribeUserDoc();
+      unsubscribe();
+    };
   }, [auth, firestore, toast]);
 
   const signInWithGoogle = async () => {

@@ -42,42 +42,34 @@ export default function PosPage() {
     return true;
   });
 
+  // Automatically select assigned PDV for PDV role
   useEffect(() => {
-    // Wait for both user and pdvs data to be loaded
     if (!user || allPdvs === null) {
       setIsLoading(true);
       return;
     }
 
-    let pdvToSelect = null;
     if (user.role === 'PDV' && user.pdvId) {
-      const assignedPdv = (allPdvs || []).find(p => p.id === user.pdvId);
+      const assignedPdv = (allPdvs || []).find((p) => p.id === user.pdvId);
       if (assignedPdv) {
-        pdvToSelect = assignedPdv;
+        setSelectedPdv(assignedPdv);
       }
     }
-    
-    // If a PDV was found for the user, select it.
-    if (pdvToSelect) {
-        setSelectedPdv(pdvToSelect);
-    }
-    
-    // Loading is finished once we have user/pdv data and have checked for an assigned pdv.
+
     setIsLoading(false);
+  }, [user, allPdvs, user?.pdvId, user?.role]);
 
-  }, [user, allPdvs]);
-
-  // Reset selected PDV if it does not belong to the active tenant/event
+  // Reset selected PDV if it does not belong to the active tenant/event (only for admin roles)
   useEffect(() => {
-    if (selectedPdv) {
-      if (currentTenant && selectedPdv.tenant_id !== currentTenant.id) {
+    if (user?.role !== 'PDV' && selectedPdv) {
+      if (currentTenant && selectedPdv.tenant_id && selectedPdv.tenant_id !== currentTenant.id) {
         setSelectedPdv(null);
       }
-      if (currentEvent && selectedPdv.event_id !== currentEvent.id) {
+      if (currentEvent && selectedPdv.event_id && selectedPdv.event_id !== currentEvent.id) {
         setSelectedPdv(null);
       }
     }
-  }, [currentTenant, currentEvent, selectedPdv]);
+  }, [currentTenant, currentEvent, selectedPdv, user?.role]);
 
   const handlePdvSelect = (pdv: Pdv) => {
     setSelectedPdv(pdv);
@@ -86,19 +78,20 @@ export default function PosPage() {
   const handleGoBack = () => {
     // Only admin-level roles can go back to the selector
     if (['SUPERADMIN', 'ADMIN_ORGANIZACAO', 'ADMIN_EVENTO'].includes(user?.role ?? '')) {
-        setSelectedPdv(null);
+      setSelectedPdv(null);
     }
-  }
-  
+  };
+
   if (isLoading) {
-    return <FullPageLoader />
+    return <FullPageLoader />;
   }
 
-  // If a PDV is selected (either by role assignment or by admin choice), show the terminal.
+  // If a PDV is assigned to user or chosen by admin, show terminal
   if (selectedPdv) {
-    return <SaleTerminal pdv={selectedPdv} onGoBack={handleGoBack} />;
+    const canChangePdv = ['SUPERADMIN', 'ADMIN_ORGANIZACAO', 'ADMIN_EVENTO'].includes(user?.role ?? '');
+    return <SaleTerminal pdv={selectedPdv} onGoBack={canChangePdv ? handleGoBack : undefined} />;
   }
-  
-  // Otherwise, show the selector (for ADMINS or unassigned PDVs).
+
+  // Otherwise, show the selector (for admins or unassigned PDVs)
   return <PdvSelector pdvs={pdvs} onPdvSelect={handlePdvSelect} />;
 }
