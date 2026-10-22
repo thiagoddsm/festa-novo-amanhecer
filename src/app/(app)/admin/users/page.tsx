@@ -450,26 +450,34 @@ const TenantAccessPanel = memo(({ user, tenants }: TenantAccessPanelProps) => {
 TenantAccessPanel.displayName = 'TenantAccessPanel';
 
 // ---------------------------------------------------------------------------
-// GlobalRoleManager — optimistic global role selector
+// GlobalRoleManager — optimistic global role selector + PDV assignment
 // ---------------------------------------------------------------------------
-const GlobalRoleManager = memo(({ user }: { user: UserProfile }) => {
+const GlobalRoleManager = memo(({ user, pdvs }: { user: UserProfile; pdvs: Pdv[] }) => {
   const [localRole, setLocalRole] = useState<UserRole>(user.role);
+  const [localPdvId, setLocalPdvId] = useState<string>(user.pdvId || '');
   const isUpdatingRef = useRef(false);
   const firestore = useFirestore();
   const { toast } = useToast();
 
   useEffect(() => {
     setLocalRole(user.role);
-  }, [user.role]);
+    setLocalPdvId(user.pdvId || '');
+  }, [user.role, user.pdvId]);
 
-  const handleChange = useCallback(
+  const handleRoleChange = useCallback(
     async (value: string) => {
       if (isUpdatingRef.current) return;
       const newRole = value as UserRole;
       setLocalRole(newRole);
       isUpdatingRef.current = true;
       try {
-        await updateDoc(doc(firestore, 'users', user.id), { role: newRole });
+        const updatePayload: Record<string, any> = { role: newRole };
+        if (newRole !== 'PDV') {
+          // If changed away from PDV, clear pdvId
+          updatePayload.pdvId = deleteField();
+          setLocalPdvId('');
+        }
+        await updateDoc(doc(firestore, 'users', user.id), updatePayload);
         toast({ title: 'Função atualizada!', description: `${user.name} → ${ROLE_LABELS[newRole]}` });
       } catch (err) {
         console.error(err);
@@ -482,25 +490,66 @@ const GlobalRoleManager = memo(({ user }: { user: UserProfile }) => {
     [firestore, user, toast],
   );
 
+  const handlePdvChange = useCallback(
+    async (newPdvId: string) => {
+      setLocalPdvId(newPdvId);
+      try {
+        await updateDoc(doc(firestore, 'users', user.id), {
+          pdvId: newPdvId,
+        });
+        const pdvName = pdvs.find((p) => p.id === newPdvId)?.nome || newPdvId;
+        toast({ title: 'Barraca Vinculada!', description: `${user.name} agora opera: ${pdvName}` });
+      } catch (err) {
+        console.error(err);
+        setLocalPdvId(user.pdvId || '');
+        toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível vincular a barraca.' });
+      }
+    },
+    [firestore, user, pdvs, toast],
+  );
+
   if (user.role === 'SUPERADMIN' || user.email === 'thiagoddsm@gmail.com') {
     return <RoleBadge role={user.role} />;
   }
 
   return (
-    <Select value={localRole} onValueChange={handleChange}>
-      <SelectTrigger className="h-8 text-xs w-44">
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        {(Object.keys(ROLE_LABELS) as UserRole[])
-          .filter((r) => r !== 'SUPERADMIN')
-          .map((r) => (
-            <SelectItem key={r} value={r} className="text-xs">
-              {ROLE_LABELS[r]}
-            </SelectItem>
-          ))}
-      </SelectContent>
-    </Select>
+    <div className="flex flex-col gap-1.5 w-full max-w-[220px]">
+      <Select value={localRole} onValueChange={handleRoleChange}>
+        <SelectTrigger className="h-8 text-xs font-medium">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {(Object.keys(ROLE_LABELS) as UserRole[])
+            .filter((r) => r !== 'SUPERADMIN')
+            .map((r) => (
+              <SelectItem key={r} value={r} className="text-xs">
+                {ROLE_LABELS[r]}
+              </SelectItem>
+            ))}
+        </SelectContent>
+      </Select>
+
+      {/* When role is PDV, show dedicated PDV / Barraca selector */}
+      {localRole === 'PDV' && (
+        <div className="flex flex-col gap-1 p-1.5 bg-orange-50/70 border border-orange-200 rounded-md animate-in fade-in duration-200">
+          <span className="text-[10px] font-bold text-orange-800 uppercase tracking-wider flex items-center gap-1">
+            🏪 Barraca / PDV:
+          </span>
+          <Select value={localPdvId} onValueChange={handlePdvChange}>
+            <SelectTrigger className="h-7 text-xs bg-white border-orange-300 font-semibold text-orange-950">
+              <SelectValue placeholder="Selecione a barraca..." />
+            </SelectTrigger>
+            <SelectContent>
+              {pdvs.map((p) => (
+                <SelectItem key={p.id} value={p.id} className="text-xs">
+                  {p.nome}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+    </div>
   );
 });
 GlobalRoleManager.displayName = 'GlobalRoleManager';
@@ -600,7 +649,7 @@ export default function UsersPage() {
           return (
             <div className="flex flex-col gap-1">
               <RoleBadge role={user.role} />
-              <GlobalRoleManager user={user} />
+              <GlobalRoleManager user={user} pdvs={stablePdvs} />
               {user.role === 'VISITANTE' && (
                 <VisitanteAlert user={user} tenants={stableTenants} pdvs={stablePdvs} />
               )}
@@ -618,7 +667,7 @@ export default function UsersPage() {
         },
       },
     ],
-    [stableTenants],
+    [stableTenants, stablePdvs],
   );
 
   return (
