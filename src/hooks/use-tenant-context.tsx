@@ -35,15 +35,21 @@ export function TenantProvider({ children }: { children: ReactNode }) {
   const [currentEvent, setCurrentEventState] = useState<TenantEvent | null>(null);
   const [isLoadingTenants, setIsLoadingTenants] = useState(true);
 
+  const userUid = user?.uid;
+  const userRole = user?.role;
+  const userEmail = user?.email;
+  const userTenantsKey = JSON.stringify(user?.tenants || {});
+  const currentTenantId = currentTenant?.id;
+
   // 1. Listen to all tenants from Firestore
   useEffect(() => {
-    if (!firestore || !user) {
+    if (!firestore || !userUid) {
       setTenantsList([]);
       setIsLoadingTenants(false);
       return;
     }
 
-    const isSuperAdmin = user.role === 'SUPERADMIN' || user.email === 'thiagoddsm@gmail.com';
+    const isSuperAdmin = userRole === 'SUPERADMIN' || userEmail === 'thiagoddsm@gmail.com';
 
     const unsubscribe = onSnapshot(collection(firestore, 'tenants'), (snapshot) => {
       const allTenants = snapshot.docs.map(
@@ -53,7 +59,7 @@ export function TenantProvider({ children }: { children: ReactNode }) {
       // SuperAdmin sees all tenants; others see only linked tenants
       const visibleTenants = isSuperAdmin
         ? allTenants
-        : allTenants.filter((t) => user.tenants && user.tenants[t.id]);
+        : allTenants.filter((t) => user?.tenants && user.tenants[t.id]);
 
       setTenantsList(visibleTenants);
       setIsLoadingTenants(false);
@@ -69,21 +75,21 @@ export function TenantProvider({ children }: { children: ReactNode }) {
     });
 
     return () => unsubscribe();
-  }, [firestore, user]);
+  }, [firestore, userUid, userRole, userEmail, userTenantsKey]);
 
   // 2. Listen to events of currentTenant
   useEffect(() => {
-    if (!firestore || !currentTenant) {
+    if (!firestore || !currentTenantId) {
       setEventsList([]);
       setCurrentEventState(null);
       return;
     }
 
-    const isSuperAdmin = user?.role === 'SUPERADMIN' || user?.email === 'thiagoddsm@gmail.com';
-    const isTenantAdmin = user?.tenants?.[currentTenant.id]?.role === 'ADMIN';
-    const allowedEventIds = user?.tenants?.[currentTenant.id]?.allowedEventIds;
+    const isSuperAdmin = userRole === 'SUPERADMIN' || userEmail === 'thiagoddsm@gmail.com';
+    const isTenantAdmin = user?.tenants?.[currentTenantId]?.role === 'ADMIN';
+    const allowedEventIds = user?.tenants?.[currentTenantId]?.allowedEventIds;
 
-    const eventsRef = collection(firestore, 'tenants', currentTenant.id, 'events');
+    const eventsRef = collection(firestore, 'tenants', currentTenantId, 'events');
     const unsubscribe = onSnapshot(eventsRef, (snapshot) => {
       const loadedEvents = snapshot.docs.map(
         (doc) => ({ id: doc.id, ...doc.data() } as TenantEvent),
@@ -107,7 +113,7 @@ export function TenantProvider({ children }: { children: ReactNode }) {
     });
 
     return () => unsubscribe();
-  }, [firestore, currentTenant, user]);
+  }, [firestore, currentTenantId, userRole, userEmail, userTenantsKey]);
 
   const setCurrentTenant = useCallback((tenant: Tenant | null) => {
     setCurrentTenantState(tenant);

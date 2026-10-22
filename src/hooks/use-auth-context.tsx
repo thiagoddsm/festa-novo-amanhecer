@@ -72,10 +72,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    let isInitialAuthCheck = true;
     let unsubscribeUserDoc: (() => void) | null = null;
 
     const unsubscribe = onIdTokenChanged(auth, async (firebaseUser: User | null) => {
-      setLoading(true);
+      if (isInitialAuthCheck) {
+        setLoading(true);
+      }
 
       if (unsubscribeUserDoc) {
         unsubscribeUserDoc();
@@ -90,20 +93,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (docSnap.exists()) {
             const userProfile = docSnap.data();
             const authenticatedUser = mapFirebaseAuthToAuthenticatedUser(firebaseUser, userProfile);
-            setUser(authenticatedUser);
+            setUser((prev) => {
+              if (
+                prev &&
+                prev.uid === authenticatedUser.uid &&
+                prev.email === authenticatedUser.email &&
+                prev.role === authenticatedUser.role &&
+                prev.pdvId === authenticatedUser.pdvId &&
+                JSON.stringify(prev.tenants) === JSON.stringify(authenticatedUser.tenants) &&
+                prev.requestedTenantId === authenticatedUser.requestedTenantId &&
+                prev.requestedEventId === authenticatedUser.requestedEventId &&
+                prev.requestedRole === authenticatedUser.requestedRole &&
+                prev.requestedPdvId === authenticatedUser.requestedPdvId
+              ) {
+                return prev;
+              }
+              return authenticatedUser;
+            });
           } else {
             console.error("User profile not found in Firestore. Signing out.");
             firebaseSignOut(auth);
             setUser(null);
           }
+          isInitialAuthCheck = false;
           setLoading(false);
         }, (error) => {
           console.error("Error watching user profile:", error);
+          isInitialAuthCheck = false;
           setLoading(false);
         });
       } else {
         // No Firebase user found
         setUser(null);
+        isInitialAuthCheck = false;
         setLoading(false);
       }
     });

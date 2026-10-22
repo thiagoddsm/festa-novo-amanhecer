@@ -670,6 +670,26 @@ export default function UsersPage() {
     [stableTenants, stablePdvs],
   );
 
+  const userFilterColumns = useMemo(
+    () => [
+      { columnId: 'name', placeholder: 'Buscar por nome…' },
+      { columnId: 'email', placeholder: 'Buscar por email…' },
+      {
+        columnId: 'role',
+        placeholder: 'Filtrar por função…',
+        options: [
+          { value: 'SUPERADMIN', label: 'Super Admin' },
+          { value: 'ADMIN_ORGANIZACAO', label: 'Admin Organização' },
+          { value: 'ADMIN_EVENTO', label: 'Admin Evento' },
+          { value: 'CAIXA', label: 'Caixa' },
+          { value: 'PDV', label: 'PDV' },
+          { value: 'VISITANTE', label: 'Visitante' },
+        ],
+      },
+    ],
+    [],
+  );
+
   return (
     <div className="flex flex-col gap-4">
       <Card>
@@ -692,22 +712,7 @@ export default function UsersPage() {
             <DataTable
               columns={columns}
               data={users ?? []}
-              filterColumns={[
-                { columnId: 'name', placeholder: 'Buscar por nome…' },
-                { columnId: 'email', placeholder: 'Buscar por email…' },
-                {
-                  columnId: 'role',
-                  placeholder: 'Filtrar por função…',
-                  options: [
-                    { value: 'SUPERADMIN', label: 'Super Admin' },
-                    { value: 'ADMIN_ORGANIZACAO', label: 'Admin Organização' },
-                    { value: 'ADMIN_EVENTO', label: 'Admin Evento' },
-                    { value: 'CAIXA', label: 'Caixa' },
-                    { value: 'PDV', label: 'PDV' },
-                    { value: 'VISITANTE', label: 'Visitante' },
-                  ],
-                },
-              ]}
+              filterColumns={userFilterColumns}
             />
           )}
         </CardContent>

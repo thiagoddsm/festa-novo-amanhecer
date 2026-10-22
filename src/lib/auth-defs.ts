@@ -13,6 +13,8 @@ export type AuthenticatedUser = {
   tenants?: { [tenantId: string]: TenantAccess };
   requestedTenantId?: string;
   requestedEventId?: string;
+  requestedRole?: 'CAIXA' | 'PDV';
+  requestedPdvId?: string;
 };
 
 // Maps Firebase Auth user + Firestore profile → AuthenticatedUser
@@ -37,6 +39,8 @@ export const mapFirebaseAuthToAuthenticatedUser = (
     tenants: userProfile?.tenants,
     requestedTenantId: userProfile?.requestedTenantId,
     requestedEventId: userProfile?.requestedEventId,
+    requestedRole: userProfile?.requestedRole,
+    requestedPdvId: userProfile?.requestedPdvId,
   };
 };
 
