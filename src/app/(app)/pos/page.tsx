@@ -16,6 +16,7 @@ export default function PosPage() {
   const { currentTenant, currentEvent } = useTenant();
   const [selectedPdv, setSelectedPdv] = useState<Pdv | null>(null);
   const [allPdvs, setAllPdvs] = useState<Pdv[] | null>(null);
+  const [operatorCounts, setOperatorCounts] = useState<Record<string, number>>({});
   const [isLoading, setIsLoading] = useState(true);
   const firestore = useFirestore();
 
@@ -30,6 +31,28 @@ export default function PosPage() {
     }, (error) => {
       console.error("Error fetching PDVs:", error);
       setAllPdvs([]);
+    });
+
+    return () => unsubscribe();
+  }, [firestore]);
+
+  // Listen to users to count assigned operators per PDV
+  useEffect(() => {
+    if (!firestore) return;
+    const usersCollection = collection(firestore, 'users');
+
+    const unsubscribe = onSnapshot(usersCollection, (snapshot) => {
+      const counts: Record<string, number> = {};
+      snapshot.docs.forEach((doc) => {
+        const data = doc.data();
+        const pId = data.pdvId || data.pdv_id;
+        if (pId) {
+          counts[pId] = (counts[pId] || 0) + 1;
+        }
+      });
+      setOperatorCounts(counts);
+    }, (error) => {
+      console.error("Error fetching users for operator counts:", error);
     });
 
     return () => unsubscribe();
@@ -96,5 +119,5 @@ export default function PosPage() {
   }
 
   // Otherwise, show the selector (for admins or unassigned PDVs)
-  return <PdvSelector pdvs={pdvs} onPdvSelect={handlePdvSelect} />;
+  return <PdvSelector pdvs={pdvs} operatorCounts={operatorCounts} onPdvSelect={handlePdvSelect} />;
 }
