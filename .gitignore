@@ -47,3 +47,8 @@ firestore-debug.log
 # tools
 .agents/
 .vscode/
+
+# exports and temporary scratch reports
+*.csv
+*_10min.json
+export_report_*.js
