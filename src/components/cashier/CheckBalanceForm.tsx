@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/utils';
 import type { Card as CardType } from '@/lib/definitions';
-import { Loader2, User, CircleAlert, Wallet, Hash, QrCode } from 'lucide-react';
+import { Loader2, User, CircleAlert, Wallet, Hash, QrCode, Phone } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import QrScannerDialog from '../common/QrScannerDialog';
 
@@ -138,16 +138,27 @@ export default function CheckBalanceForm() {
             {result.data.nome_cliente && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground min-w-0 w-full">
                 <User className="h-4 w-4 shrink-0" />
-                <span className="truncate">{result.data.nome_cliente}</span>
+                <span className="truncate font-medium text-slate-800">{result.data.nome_cliente}</span>
+              </div>
+            )}
+            {result.data.telefone_cliente && (
+              <div className="flex items-center gap-2 text-sm text-emerald-700 min-w-0 w-full">
+                <Phone className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate font-mono text-xs">WhatsApp: {result.data.telefone_cliente}</span>
               </div>
             )}
             <div className="flex items-center gap-2 text-sm text-muted-foreground min-w-0 w-full">
               <Hash className="h-4 w-4 shrink-0" />
               <span className="truncate text-xs font-mono">{result.data.qr_code_id}</span>
             </div>
-            <div className="flex items-center gap-2 text-2xl font-bold text-primary">
-              <Wallet className="h-6 w-6" />
-              <span>{formatCurrency(result.data.saldo_centavos)}</span>
+            <div className="pt-1 flex items-center justify-between w-full border-t">
+              <div className="flex items-center gap-2 text-2xl font-bold text-primary">
+                <Wallet className="h-6 w-6" />
+                <span>{formatCurrency(result.data.saldo_centavos)}</span>
+              </div>
+              <Badge variant={result.data.saldo_centavos > 0 ? "secondary" : "outline"} className="text-xs">
+                {result.data.saldo_centavos > 0 ? "Saldo Disponível" : "Cartão Zerado"}
+              </Badge>
             </div>
           </CardFooter>
         )}

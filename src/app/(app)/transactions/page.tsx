@@ -165,7 +165,16 @@ const getColumns = (user: any): ColumnDef<TransactionDetails>[] => [
         header: 'Tipo',
         cell: ({ row }) => {
             const tipo: string = row.getValue('tipo');
-            return <Badge variant={getTipoVariant(tipo)}>{tipo.replace('_', ' ')}</Badge>
+            switch (tipo) {
+              case 'VENDA':
+                return <Badge className="bg-purple-100 text-purple-700 hover:bg-purple-200 border-purple-200 font-semibold shadow-2xs">VENDA</Badge>;
+              case 'RECARGA':
+                return <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-200 border-emerald-200 font-semibold shadow-2xs">RECARGA</Badge>;
+              case 'REEMBOLSO':
+                return <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-200 border-amber-200 font-semibold shadow-2xs">REEMBOLSO</Badge>;
+              default:
+                return <Badge variant={getTipoVariant(tipo)}>{tipo.replace('_', ' ')}</Badge>;
+            }
         },
         filterFn: (row, id, value) => {
             return value.includes(row.getValue(id))

@@ -27,6 +27,7 @@ import { Label } from '../ui/label';
 import { useTenant } from '@/hooks/use-tenant-context';
 import { Checkbox } from '../ui/checkbox';
 import { useAuth } from '@/hooks/use-auth-context';
+import { getPdvIconConfig } from '@/lib/pdv-icons';
 
 const initialState: {
     status: 'idle' | 'success' | 'error';
@@ -460,15 +461,36 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv; onGoBack?: (
             <div className="flex flex-col lg:flex-row gap-2 md:gap-4 items-start">
                 <Card className="flex-1 w-full lg:w-3/5 shadow-sm border-border/60">
                 <CardHeader className="p-3 sm:p-4 md:p-6 pb-2">
-                    <div className="flex justify-between items-center">
-                        <div className='flex items-center gap-2'>
-                            <CardTitle className="text-lg sm:text-xl font-bold">Cardápio</CardTitle>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={() => setIsMenuSheetOpen(true)}>
-                                <Pencil className="h-3.5 w-3.5" />
-                            </Button>
+                    {(() => {
+                      const iconConfig = getPdvIconConfig(livePdv.icon, livePdv.nome);
+                      const Icon = iconConfig.icon;
+                      return (
+                        <div className="flex justify-between items-center">
+                          <div className="flex items-center gap-3">
+                            <div className={`h-10 w-10 rounded-2xl ${iconConfig.iconBg} ${iconConfig.iconColor} flex items-center justify-center shrink-0 shadow-xs`}>
+                              <Icon className="h-5 w-5" />
+                            </div>
+                            <div>
+                              <CardTitle className="text-base sm:text-lg font-bold flex items-center gap-1.5">
+                                {livePdv.nome}
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                                  onClick={() => setIsMenuSheetOpen(true)}
+                                  title="Editar Cardápio"
+                                >
+                                  <Pencil className="h-3 w-3" />
+                                </Button>
+                              </CardTitle>
+                              <CardDescription className="text-xs">
+                                Terminal de Vendas Ativo
+                              </CardDescription>
+                            </div>
+                          </div>
                         </div>
-                    </div>
-                    <CardDescription className="text-xs sm:text-sm">Vendendo em: <span className='font-semibold text-primary'>{pdv.nome}</span></CardDescription>
+                      );
+                    })()}
                 </CardHeader>
                 <CardContent className="p-2 sm:p-4 grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
                     {menuItems === null && Array.from({length: 6}).map((_, i) => <Skeleton key={i} className="h-20 sm:h-24 w-full rounded-xl" />)}

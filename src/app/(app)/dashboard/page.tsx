@@ -3,7 +3,7 @@ import { formatCurrency, formatDateTime } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { DollarSign, CreditCard, TrendingUp, Users, MessageSquare, CheckCircle, AlertCircle, Smartphone } from 'lucide-react';
+import { DollarSign, CreditCard, TrendingUp, Users, MessageSquare, CheckCircle, AlertCircle, Smartphone, Wallet, Undo2 } from 'lucide-react';
 import StatCard from '@/components/dashboard/StatCard';
 import { useState, useEffect, useMemo } from 'react';
 import type { Card as CardType, Pdv, Transaction, Order } from '@/lib/definitions';
@@ -133,15 +133,24 @@ export default function DashboardPage() {
       .filter(t => t.tipo === 'VENDA')
       .reduce((sum, t) => sum + t.valor_centavos, 0);
 
+    const total_reembolsado_centavos = filteredTransactions
+      .filter(t => t.tipo === 'REEMBOLSO')
+      .reduce((sum, t) => sum + t.valor_centavos, 0);
+
+    const saldo_em_circulacao_centavos = (filteredCards || [])
+      .reduce((sum, c) => sum + (c.saldo_centavos || 0), 0);
+
     const totalVendasUn = filteredTransactions.filter(t => t.tipo === 'VENDA').length;
     
     return {
       total_recarregado_centavos,
       total_vendido_centavos,
+      total_reembolsado_centavos,
+      saldo_em_circulacao_centavos,
       totalVendasUn,
       ticketMedio: total_vendido_centavos / (totalVendasUn || 1),
     };
-  }, [filteredTransactions]);
+  }, [filteredTransactions, filteredCards]);
 
   const salesByHour = useMemo(() => {
     if (!filteredTransactions) return [];
@@ -171,14 +180,16 @@ export default function DashboardPage() {
   const stats = [
     { title: 'Total Recarregado', value: report ? formatCurrency(report.total_recarregado_centavos) : 'R$ 0,00', icon: CreditCard },
     { title: 'Total Vendido', value: report ? formatCurrency(report.total_vendido_centavos) : 'R$ 0,00', icon: DollarSign },
-    { title: 'Ticket Médio', value: report ? formatCurrency(report.ticketMedio) : 'R$ 0,00', icon: TrendingUp }
+    { title: 'Saldo nos Cartões', value: report ? formatCurrency(report.saldo_em_circulacao_centavos) : 'R$ 0,00', icon: Wallet },
+    { title: 'Ticket Médio', value: report ? formatCurrency(report.ticketMedio) : 'R$ 0,00', icon: TrendingUp },
   ];
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         {isLoading ? (
           <>
+            <Skeleton className="h-28" />
             <Skeleton className="h-28" />
             <Skeleton className="h-28" />
             <Skeleton className="h-28" />
@@ -234,7 +245,30 @@ export default function DashboardPage() {
                         <TableRow key={tx.id}>
                         <TableCell>{pdvNameMap.get(tx.pdv_id) || 'Desconhecido'}</TableCell>
                         <TableCell>
-                            <Badge variant={tx.tipo === 'VENDA' ? 'destructive' : 'secondary'}>{tx.tipo}</Badge>
+                          {(() => {
+                            switch (tx.tipo) {
+                              case 'VENDA':
+                                return (
+                                  <Badge className="bg-purple-100 text-purple-700 hover:bg-purple-200 border-purple-200 font-semibold shadow-2xs">
+                                    VENDA
+                                  </Badge>
+                                );
+                              case 'RECARGA':
+                                return (
+                                  <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-200 border-emerald-200 font-semibold shadow-2xs">
+                                    RECARGA
+                                  </Badge>
+                                );
+                              case 'REEMBOLSO':
+                                return (
+                                  <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-200 border-amber-200 font-semibold shadow-2xs">
+                                    REEMBOLSO
+                                  </Badge>
+                                );
+                              default:
+                                return <Badge variant="secondary">{tx.tipo}</Badge>;
+                            }
+                          })()}
                         </TableCell>
                         <TableCell>{formatCurrency(tx.valor_centavos)}</TableCell>
                         <TableCell>{formatDateTime(formatTimestamp(tx.created_at))}</TableCell>
