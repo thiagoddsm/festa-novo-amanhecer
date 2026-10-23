@@ -153,6 +153,28 @@ export type Pdv = {
 };
 
 // ---------------------------------------------------------------------------
+// Estoque & Insumos (Firestore: /pdvs/{pdvId}/ingredients/{ingredientId})
+// ---------------------------------------------------------------------------
+
+export type StockControlType = 'NONE' | 'PRODUCT' | 'INGREDIENTS';
+
+export type PdvIngredient = {
+  id: string;
+  pdv_id: string;
+  nome: string;
+  quantidade_atual: number;
+  unidade: string;
+  estoque_minimo?: number;
+  updated_at?: Timestamp;
+};
+
+export type RecipeItem = {
+  ingredient_id: string;
+  ingredient_nome: string;
+  quantidade: number;
+};
+
+// ---------------------------------------------------------------------------
 // Menu Item (Firestore: /pdvs/{pdvId}/menuItems/{itemId})
 // ---------------------------------------------------------------------------
 
@@ -161,6 +183,10 @@ export type MenuItem = {
   nome: string;
   preco_centavos: number;
   ingredientes?: string[];
+  stock_control_type?: StockControlType;
+  estoque_atual?: number;
+  estoque_minimo?: number;
+  receita?: RecipeItem[];
 };
 
 // ---------------------------------------------------------------------------

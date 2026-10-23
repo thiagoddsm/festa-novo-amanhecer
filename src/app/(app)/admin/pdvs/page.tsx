@@ -42,10 +42,11 @@ import {
 } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { useTenant } from '@/hooks/use-tenant-context';
-import { Store, Plus, Trash2, Pencil, UtensilsCrossed, Sparkles, Building2, Calendar, MessageSquare } from 'lucide-react';
+import { Store, Plus, Trash2, Pencil, UtensilsCrossed, Sparkles, Building2, Calendar, MessageSquare, PackagePlus } from 'lucide-react';
 import type { Pdv, MenuItem } from '@/lib/definitions';
 import { createPdv, updatePdv, deletePdv, seedDefaultPdvs } from '@/lib/actions';
 import EditMenuSheet from '@/components/pos/EditMenuSheet';
+import ManageIngredientsDialog from '@/components/pos/ManageIngredientsDialog';
 import PdvWhatsappDialog from '@/components/pos/PdvWhatsappDialog';
 import PdvIconPicker from '@/components/pos/PdvIconPicker';
 import { getPdvIconConfig, detectPdvIconId } from '@/lib/pdv-icons';
@@ -79,6 +80,10 @@ export default function AdminPdvsPage() {
   // WhatsApp Dialog
   const [whatsappDialogOpen, setWhatsappDialogOpen] = useState(false);
   const [selectedPdvForWhatsapp, setSelectedPdvForWhatsapp] = useState<Pdv | null>(null);
+
+  // Insumos Dialog
+  const [ingredientsDialogOpen, setIngredientsDialogOpen] = useState(false);
+  const [selectedPdvForIngredients, setSelectedPdvForIngredients] = useState<Pdv | null>(null);
 
   // Seeding
   const [isSeeding, startSeeding] = useTransition();
@@ -454,6 +459,20 @@ export default function AdminPdvsPage() {
                         <Button
                           size="sm"
                           variant="outline"
+                          className="text-xs h-8 gap-1 shrink-0"
+                          title="Gerenciar insumos e estoque deste PDV"
+                          onClick={() => {
+                            setSelectedPdvForIngredients(pdv);
+                            setIngredientsDialogOpen(true);
+                          }}
+                        >
+                          <PackagePlus className="h-3.5 w-3.5 shrink-0 text-primary" />
+                          <span>Insumos</span>
+                        </Button>
+
+                        <Button
+                          size="sm"
+                          variant="outline"
                           className={`text-xs h-8 gap-1.5 shrink-0 ${
                             pdv.whatsapp?.status === 'CONNECTED'
                               ? 'border-green-300 bg-green-50 text-green-700 hover:bg-green-100'
@@ -540,6 +559,18 @@ export default function AdminPdvsPage() {
           onOpenChange={(open) => {
             setMenuSheetOpen(open);
             if (!open) setSelectedPdvForMenu(null);
+          }}
+        />
+      )}
+
+      {/* PDV Insumos Dialog */}
+      {selectedPdvForIngredients && (
+        <ManageIngredientsDialog
+          pdv={selectedPdvForIngredients}
+          open={ingredientsDialogOpen}
+          onOpenChange={(open) => {
+            setIngredientsDialogOpen(open);
+            if (!open) setSelectedPdvForIngredients(null);
           }}
         />
       )}

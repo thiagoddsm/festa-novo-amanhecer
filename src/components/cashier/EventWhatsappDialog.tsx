@@ -14,7 +14,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, MessageSquare, Smartphone, CheckCircle, RefreshCw, LogOut, ShieldAlert, Settings2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Loader2, MessageSquare, Smartphone, CheckCircle, RefreshCw, LogOut, ShieldAlert, ShieldCheck, Settings2, ChevronDown, ChevronUp } from 'lucide-react';
 import type { TenantEvent } from '@/lib/definitions';
 import { connectEventWhatsapp, checkEventWhatsappStatus, disconnectEventWhatsapp } from '@/lib/actions';
 import { getPdvInstanceName } from '@/lib/whatsapp';
@@ -260,6 +260,19 @@ export default function EventWhatsappDialog({
               )}
             </div>
           </div>
+
+          {/* Fallback Notice when Disconnected */}
+          {status !== 'CONNECTED' && (
+            <div className="p-2.5 rounded-lg border bg-blue-50/70 border-blue-200 text-xs text-blue-900 flex items-start gap-2">
+              <ShieldCheck className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold text-blue-950">Envio Garantido: Fallback IBM Ativo</p>
+                <p className="text-[11px] text-blue-800 leading-tight mt-0.5">
+                  Mesmo enquanto o WhatsApp exclusivo deste evento não estiver pareado, todas as mensagens de novos cartões e comprovantes continuam sendo enviadas automaticamente pelo número central da igreja (IBM).
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* QR Code display */}
           {status === 'CONNECTING' && (

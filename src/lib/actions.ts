@@ -3,7 +3,7 @@
 import { z } from 'zod';
 import { initializeApp, getApps } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
-import type { Card, Order, Transaction, OrderItem, Pdv, TenantEvent } from './definitions';
+import type { Card, Order, Transaction, OrderItem, Pdv, TenantEvent, PdvIngredient, RecipeItem, StockControlType, MenuItem } from './definitions';
 import { notifySale, notifyCustomMessage, notifyReversal } from './flows/notify-flow';
 import { notifyOrderReady } from './flows/notify-order-flow';
 import {
@@ -165,8 +165,9 @@ export async function processSale(
         const cardDoc = querySnapshot.docs[0];
         const cardDocRef = clientDoc(db, 'cards', cardDoc.id);
 
-        // ATOMIC TRANSACTION: guarantees balance consistency under concurrent scans
+        // ATOMIC TRANSACTION: guarantees balance & stock consistency under concurrent sales
         const saleResult = await clientRunTransaction(db, async (t) => {
+            // --- 1. READ PHASE (All reads must happen before any writes) ---
             const freshCardSnap = await t.get(cardDocRef);
             if (!freshCardSnap.exists()) {
                 throw new Error('Cartão não encontrado.');
@@ -182,6 +183,88 @@ export async function processSale(
                 throw new Error('Saldo insuficiente.');
             }
 
+            // Read distinct menu items involved in the sale
+            const saleItems = validatedFields.data.items || [];
+            const distinctItemIds = Array.from(new Set(saleItems.map(it => it.id)));
+            const menuItemDocs = new Map<string, { ref: any; data: MenuItem }>();
+
+            for (const itemId of distinctItemIds) {
+                const mRef = clientDoc(db, 'pdvs', pdv_id, 'menuItems', itemId);
+                const mSnap = await t.get(mRef);
+                if (mSnap.exists()) {
+                    menuItemDocs.set(itemId, { ref: mRef, data: mSnap.data() as MenuItem });
+                }
+            }
+
+            // Calculate stock needs
+            const productDeductions = new Map<string, { ref: any; newStock: number }>();
+            const ingredientNeeds = new Map<string, { qtyNeeded: number; nome: string }>();
+
+            // Aggregate item quantities
+            const itemQuantities = new Map<string, number>();
+            for (const it of saleItems) {
+                itemQuantities.set(it.id, (itemQuantities.get(it.id) || 0) + it.quantity);
+            }
+
+            for (const [itemId, totalQty] of itemQuantities.entries()) {
+                const itemInfo = menuItemDocs.get(itemId);
+                if (!itemInfo) continue;
+                const { ref, data } = itemInfo;
+
+                if (data.stock_control_type === 'PRODUCT') {
+                    const currentStock = typeof data.estoque_atual === 'number' ? data.estoque_atual : 0;
+                    if (currentStock < totalQty) {
+                        throw new Error(`Estoque insuficiente de "${data.nome}". Disponível: ${currentStock}, Solicitado: ${totalQty}.`);
+                    }
+                    productDeductions.set(itemId, { ref, newStock: currentStock - totalQty });
+                }
+            }
+
+            // Aggregate ingredient needs per recipe item
+            for (const it of saleItems) {
+                const itemInfo = menuItemDocs.get(it.id);
+                if (!itemInfo) continue;
+                const { data } = itemInfo;
+
+                if (data.stock_control_type === 'INGREDIENTS' && data.receita && data.receita.length > 0) {
+                    const obs = it.observation || '';
+                    const removedMatch = obs.match(/SEM: \[(.*?)\]/);
+                    const removedList = removedMatch
+                        ? removedMatch[1].split(',').map(s => s.trim().toLowerCase())
+                        : [];
+
+                    for (const recipeItem of data.receita) {
+                        // Check if ingredient was removed by customer observation
+                        const isRemoved = removedList.some(r => r && recipeItem.ingredient_nome.toLowerCase().includes(r));
+                        if (isRemoved) continue;
+
+                        const qtyNeededForThis = recipeItem.quantidade * it.quantity;
+                        const prev = ingredientNeeds.get(recipeItem.ingredient_id) || { qtyNeeded: 0, nome: recipeItem.ingredient_nome };
+                        ingredientNeeds.set(recipeItem.ingredient_id, {
+                            qtyNeeded: prev.qtyNeeded + qtyNeededForThis,
+                            nome: recipeItem.ingredient_nome,
+                        });
+                    }
+                }
+            }
+
+            // Read and validate all required ingredients
+            const ingredientDeductions = new Map<string, { ref: any; newQty: number }>();
+            for (const [ingId, need] of ingredientNeeds.entries()) {
+                const ingRef = clientDoc(db, 'pdvs', pdv_id, 'ingredients', ingId);
+                const ingSnap = await t.get(ingRef);
+                if (!ingSnap.exists()) {
+                    throw new Error(`Insumo "${need.nome}" não encontrado no PDV.`);
+                }
+                const ingData = ingSnap.data() as PdvIngredient;
+                const currentQty = typeof ingData.quantidade_atual === 'number' ? ingData.quantidade_atual : 0;
+                if (currentQty < need.qtyNeeded) {
+                    throw new Error(`Estoque insuficiente do insumo "${ingData.nome}". Disponível: ${currentQty} ${ingData.unidade}, Necessário: ${need.qtyNeeded} ${ingData.unidade}.`);
+                }
+                ingredientDeductions.set(ingId, { ref: ingRef, newQty: currentQty - need.qtyNeeded });
+            }
+
+            // --- 2. WRITE PHASE ---
             const novo_saldo_centavos = card.saldo_centavos - valor_venda_centavos;
             const now = ClientTimestamp.now();
 
@@ -194,7 +277,17 @@ export async function processSale(
                 updated_at: now,
             });
 
-            // 2. Create transaction record
+            // 2. Decrement PRODUCT stocks
+            for (const { ref, newStock } of productDeductions.values()) {
+                t.update(ref, { estoque_atual: newStock });
+            }
+
+            // 3. Decrement INGREDIENT stocks
+            for (const { ref, newQty } of ingredientDeductions.values()) {
+                t.update(ref, { quantidade_atual: newQty, updated_at: now });
+            }
+
+            // 4. Create transaction record
             const transactionRef = clientDoc(clientCollection(db, 'transactions'));
             t.set(transactionRef, {
                 cartao_id: cardDoc.id,
@@ -208,7 +301,7 @@ export async function processSale(
                 event_id: effectiveEventId,
             });
 
-            // 3. Create order record
+            // 5. Create order record
             const orderRef = clientDoc(clientCollection(db, 'orders'));
             const orderId = orderRef.id;
             t.set(orderRef, {
@@ -290,6 +383,62 @@ export async function reverseTransaction(transactionId: string, responsibleUser:
             if (orderToCancelId) {
                 orderToCancelRef = clientDoc(db, 'orders', orderToCancelId);
             }
+
+            // Read items & ingredients for stock restoration if reversing a sale
+            const productRestorations = new Map<string, { ref: any; newStock: number }>();
+            const ingredientRestorations = new Map<string, { ref: any; newQty: number }>();
+
+            if (originalTx.tipo === 'VENDA' && originalTx.items && originalTx.items.length > 0) {
+                const distinctRestorationItemIds = Array.from(new Set(originalTx.items.map(it => it.id)));
+                const restoreMenuItemDocs = new Map<string, { ref: any; data: MenuItem }>();
+
+                for (const itemId of distinctRestorationItemIds) {
+                    const mRef = clientDoc(db, 'pdvs', originalTx.pdv_id, 'menuItems', itemId);
+                    const mSnap = await t.get(mRef);
+                    if (mSnap.exists()) {
+                        restoreMenuItemDocs.set(itemId, { ref: mRef, data: mSnap.data() as MenuItem });
+                    }
+                }
+
+                for (const it of originalTx.items) {
+                    const itemInfo = restoreMenuItemDocs.get(it.id);
+                    if (!itemInfo) continue;
+                    const { ref, data } = itemInfo;
+
+                    if (data.stock_control_type === 'PRODUCT') {
+                        const cur = productRestorations.has(it.id)
+                            ? productRestorations.get(it.id)!.newStock
+                            : (data.estoque_atual || 0);
+                        productRestorations.set(it.id, { ref, newStock: cur + it.quantity });
+                    }
+
+                    if (data.stock_control_type === 'INGREDIENTS' && data.receita && data.receita.length > 0) {
+                        const obs = it.observation || '';
+                        const removedMatch = obs.match(/SEM: \[(.*?)\]/);
+                        const removedList = removedMatch
+                            ? removedMatch[1].split(',').map(s => s.trim().toLowerCase())
+                            : [];
+
+                        for (const recipeItem of data.receita) {
+                            const isRemoved = removedList.some(r => r && recipeItem.ingredient_nome.toLowerCase().includes(r));
+                            if (isRemoved) continue;
+
+                            const ingRef = clientDoc(db, 'pdvs', originalTx.pdv_id, 'ingredients', recipeItem.ingredient_id);
+                            const ingSnap = await t.get(ingRef);
+                            if (ingSnap.exists()) {
+                                const ingData = ingSnap.data() as PdvIngredient;
+                                const cur = ingredientRestorations.has(recipeItem.ingredient_id)
+                                    ? ingredientRestorations.get(recipeItem.ingredient_id)!.newQty
+                                    : (ingData.quantidade_atual || 0);
+                                ingredientRestorations.set(recipeItem.ingredient_id, {
+                                    ref: ingRef,
+                                    newQty: cur + (recipeItem.quantidade * it.quantity),
+                                });
+                            }
+                        }
+                    }
+                }
+            }
             
             // --- 2. VALIDATION PHASE ---
             if (originalTx.tipo === 'REEMBOLSO') {
@@ -314,6 +463,16 @@ export async function reverseTransaction(transactionId: string, responsibleUser:
 
             if (orderToCancelRef) {
                 t.update(orderToCancelRef, { status: 'CANCELADO', updated_at: now });
+            }
+
+            // Restore product stocks
+            for (const { ref, newStock } of productRestorations.values()) {
+                t.update(ref, { estoque_atual: newStock });
+            }
+
+            // Restore ingredient stocks
+            for (const { ref, newQty } of ingredientRestorations.values()) {
+                t.update(ref, { quantidade_atual: newQty, updated_at: now });
             }
 
             const reversalTxRef = clientDoc(clientCollection(db, 'transactions'));
@@ -358,12 +517,88 @@ export async function getPdvNameById(pdvId: string): Promise<string> {
     return `PDV ID: ${pdvId}`;
 }
 
+// --- Ingredient / Stock Management ---
+const IngredientSchema = z.object({
+  pdvId: z.string().min(1, 'PDV ID é obrigatório.'),
+  nome: z.string().min(1, 'Nome do insumo é obrigatório.'),
+  quantidade_atual: z.coerce.number().min(0, 'Quantidade não pode ser negativa.'),
+  unidade: z.string().default('un'),
+  estoque_minimo: z.coerce.number().min(0).optional().nullable(),
+});
+
+export async function addIngredient(prevState: ActionState | undefined, formData: FormData): Promise<ActionState> {
+  const db = getWebDb();
+  const validatedFields = IngredientSchema.safeParse({
+    pdvId: formData.get('pdvId'),
+    nome: formData.get('nome'),
+    quantidade_atual: formData.get('quantidade_atual'),
+    unidade: formData.get('unidade') || 'un',
+    estoque_minimo: formData.get('estoque_minimo') || null,
+  });
+
+  if (!validatedFields.success) {
+    return { status: 'error', message: 'Dados do insumo inválidos.' };
+  }
+
+  try {
+    const { pdvId, nome, quantidade_atual, unidade, estoque_minimo } = validatedFields.data;
+    const ingCol = clientCollection(db, 'pdvs', pdvId, 'ingredients');
+    await clientAddDoc(ingCol, {
+      pdv_id: pdvId,
+      nome,
+      quantidade_atual,
+      unidade,
+      estoque_minimo: estoque_minimo ?? null,
+      updated_at: ClientTimestamp.now(),
+    });
+    return { status: 'success', message: 'Insumo adicionado com sucesso!' };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Erro ao adicionar insumo.';
+    return { status: 'error', message: msg };
+  }
+}
+
+export async function updateIngredientStock(
+  pdvId: string,
+  ingredientId: string,
+  novoSaldo: number
+): Promise<ActionState> {
+  const db = getWebDb();
+  try {
+    const ingRef = clientDoc(db, 'pdvs', pdvId, 'ingredients', ingredientId);
+    await clientUpdateDoc(ingRef, {
+      quantidade_atual: Math.max(0, novoSaldo),
+      updated_at: ClientTimestamp.now(),
+    });
+    return { status: 'success', message: 'Estoque do insumo atualizado com sucesso!' };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Erro ao atualizar insumo.';
+    return { status: 'error', message: msg };
+  }
+}
+
+export async function deleteIngredient(pdvId: string, ingredientId: string): Promise<ActionState> {
+  const db = getWebDb();
+  try {
+    const ingRef = clientDoc(db, 'pdvs', pdvId, 'ingredients', ingredientId);
+    await clientDeleteDoc(ingRef);
+    return { status: 'success', message: 'Insumo excluído com sucesso!' };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Erro ao excluir insumo.';
+    return { status: 'error', message: msg };
+  }
+}
+
 const MenuItemSchema = z.object({
   nome: z.string().min(1, 'Nome do item é obrigatório.'),
   preco_reais: z.coerce.number().positive('Preço deve ser positivo.'),
   ingredientes: z.string().optional(),
   pdvId: z.string(),
   itemId: z.string().optional(),
+  stock_control_type: z.enum(['NONE', 'PRODUCT', 'INGREDIENTS']).default('NONE').optional(),
+  estoque_atual: z.coerce.number().min(0, 'Estoque não pode ser negativo.').optional().nullable(),
+  estoque_minimo: z.coerce.number().min(0).optional().nullable(),
+  receita: z.string().optional(),
 });
 
 export async function addMenuItem( prevState: ActionState | undefined, formData: FormData): Promise<ActionState> {
@@ -373,6 +608,10 @@ export async function addMenuItem( prevState: ActionState | undefined, formData:
     preco_reais: formData.get('preco_reais'),
     ingredientes: formData.get('ingredientes'),
     pdvId: formData.get('pdvId'),
+    stock_control_type: formData.get('stock_control_type') || 'NONE',
+    estoque_atual: formData.get('estoque_atual') || null,
+    estoque_minimo: formData.get('estoque_minimo') || null,
+    receita: formData.get('receita') || undefined,
   });
 
   if (!validatedFields.success) {
@@ -380,12 +619,36 @@ export async function addMenuItem( prevState: ActionState | undefined, formData:
   }
 
   try {
-    const { nome, preco_reais, ingredientes, pdvId } = validatedFields.data;
+    const { nome, preco_reais, ingredientes, pdvId, stock_control_type, estoque_atual, estoque_minimo, receita } = validatedFields.data;
     const preco_centavos = Math.round(preco_reais * 100);
     const ingredientesList = ingredientes ? ingredientes.split(',').map(i => i.trim()).filter(Boolean) : [];
     
+    let parsedReceita: RecipeItem[] | undefined = undefined;
+    if (receita) {
+      try {
+        parsedReceita = JSON.parse(receita);
+      } catch (e) {
+        parsedReceita = undefined;
+      }
+    }
+
+    const itemDocData: Partial<MenuItem> = {
+      nome,
+      preco_centavos,
+      ingredientes: ingredientesList,
+      stock_control_type: (stock_control_type as StockControlType) || 'NONE',
+      ...(stock_control_type === 'PRODUCT' ? {
+        estoque_atual: estoque_atual ?? 0,
+        estoque_minimo: estoque_minimo ?? undefined,
+      } : {}),
+      ...(stock_control_type === 'INGREDIENTS' ? {
+        receita: parsedReceita || [],
+        estoque_minimo: estoque_minimo ?? undefined,
+      } : {}),
+    };
+
     const menuItemsCollection = clientCollection(db, 'pdvs', pdvId, 'menuItems');
-    await clientAddDoc(menuItemsCollection, { nome, preco_centavos, ingredientes: ingredientesList });
+    await clientAddDoc(menuItemsCollection, itemDocData);
 
     return { status: 'success', message: 'Item adicionado com sucesso!' };
   } catch (error) {
@@ -402,6 +665,10 @@ export async function updateMenuItem(prevState: ActionState | undefined, formDat
     ingredientes: formData.get('ingredientes'),
     pdvId: formData.get('pdvId'),
     itemId: formData.get('itemId'),
+    stock_control_type: formData.get('stock_control_type') || 'NONE',
+    estoque_atual: formData.get('estoque_atual') || null,
+    estoque_minimo: formData.get('estoque_minimo') || null,
+    receita: formData.get('receita') || undefined,
   });
 
   if (!validatedFields.success || !validatedFields.data.itemId) {
@@ -409,12 +676,40 @@ export async function updateMenuItem(prevState: ActionState | undefined, formDat
   }
   
   try {
-    const { nome, preco_reais, ingredientes, pdvId, itemId } = validatedFields.data;
+    const { nome, preco_reais, ingredientes, pdvId, itemId, stock_control_type, estoque_atual, estoque_minimo, receita } = validatedFields.data;
     const preco_centavos = Math.round(preco_reais * 100);
     const ingredientesList = ingredientes ? ingredientes.split(',').map(i => i.trim()).filter(Boolean) : [];
 
+    let parsedReceita: RecipeItem[] | undefined = undefined;
+    if (receita) {
+      try {
+        parsedReceita = JSON.parse(receita);
+      } catch (e) {
+        parsedReceita = undefined;
+      }
+    }
+
+    const itemDocData: Partial<MenuItem> = {
+      nome,
+      preco_centavos,
+      ingredientes: ingredientesList,
+      stock_control_type: (stock_control_type as StockControlType) || 'NONE',
+      ...(stock_control_type === 'PRODUCT' ? {
+        estoque_atual: estoque_atual ?? 0,
+        estoque_minimo: estoque_minimo ?? undefined,
+      } : {
+        estoque_atual: undefined,
+      }),
+      ...(stock_control_type === 'INGREDIENTS' ? {
+        receita: parsedReceita || [],
+        estoque_minimo: estoque_minimo ?? undefined,
+      } : {
+        receita: undefined,
+      }),
+    };
+
     const itemRef = clientDoc(db, 'pdvs', pdvId, 'menuItems', itemId);
-    await clientUpdateDoc(itemRef, { nome, preco_centavos, ingredientes: ingredientesList });
+    await clientUpdateDoc(itemRef, itemDocData);
 
     return { status: 'success', message: 'Item atualizado com sucesso!' };
   } catch (error) {

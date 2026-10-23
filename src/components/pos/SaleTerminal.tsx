@@ -8,8 +8,8 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/utils';
-import type { Pdv, MenuItem, Card as CardType } from '@/lib/definitions';
-import { CheckCircle2, XCircle, Loader2, ShoppingCart, X, ArrowLeft, Trash2, Pencil, QrCode, MessageSquarePlus, MessageSquare, Camera } from 'lucide-react';
+import type { Pdv, MenuItem, Card as CardType, PdvIngredient } from '@/lib/definitions';
+import { CheckCircle2, XCircle, Loader2, ShoppingCart, X, ArrowLeft, Trash2, Pencil, QrCode, MessageSquarePlus, MessageSquare, Camera, PackagePlus, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useFirestore } from '@/firebase';
 import { collection, onSnapshot, query, orderBy, doc, getDocs, where, limit, getDoc } from 'firebase/firestore';
@@ -18,6 +18,7 @@ import { ScrollArea } from '../ui/scroll-area';
 import { Badge } from '../ui/badge';
 import { Separator } from '../ui/separator';
 import EditMenuSheet from './EditMenuSheet';
+import ManageIngredientsDialog from './ManageIngredientsDialog';
 import QrScannerDialog from '../common/QrScannerDialog';
 import PdvWhatsappDialog from './PdvWhatsappDialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -197,6 +198,8 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv; onGoBack?: (
   const [isMenuSheetOpen, setIsMenuSheetOpen] = useState(false);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [isWhatsappDialogOpen, setIsWhatsappDialogOpen] = useState(false);
+  const [isIngredientsOpen, setIsIngredientsOpen] = useState(false);
+  const [ingredients, setIngredients] = useState<PdvIngredient[]>([]);
 
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -225,6 +228,44 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv; onGoBack?: (
   }, [firestore, pdv.id]);
 
   useEffect(() => {
+    if (!firestore || !pdv.id) return;
+    const colRef = collection(firestore, 'pdvs', pdv.id, 'ingredients');
+    const unsubscribe = onSnapshot(colRef, snapshot => {
+      const list = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as PdvIngredient));
+      setIngredients(list);
+    });
+    return () => unsubscribe();
+  }, [firestore, pdv.id]);
+
+  // Helper to compute available stock taking into account ingredients / recipe
+  const getItemAvailableStock = (item: MenuItem): number => {
+    if (!item.stock_control_type || item.stock_control_type === 'NONE') {
+      return Infinity;
+    }
+    if (item.stock_control_type === 'PRODUCT') {
+      return typeof item.estoque_atual === 'number' ? Math.max(0, item.estoque_atual) : 0;
+    }
+    if (item.stock_control_type === 'INGREDIENTS') {
+      if (!item.receita || item.receita.length === 0) return Infinity;
+      let minPossible = Infinity;
+      for (const recipeItem of item.receita) {
+        const ing = ingredients.find(i => i.id === recipeItem.ingredient_id);
+        if (!ing) {
+          minPossible = 0;
+          break;
+        }
+        const ingStock = typeof ing.quantidade_atual === 'number' ? ing.quantidade_atual : 0;
+        const portions = Math.floor(ingStock / (recipeItem.quantidade || 1));
+        if (portions < minPossible) {
+          minPossible = portions;
+        }
+      }
+      return Math.max(0, minPossible);
+    }
+    return Infinity;
+  };
+
+  useEffect(() => {
     if (!state.message || state.status === 'idle') return;
 
     if (state.status === 'error') {
@@ -249,6 +290,22 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv; onGoBack?: (
   }, [state]);
 
   const addToCart = (item: MenuItem) => {
+    const maxAvailable = getItemAvailableStock(item);
+    const currentInCart = cart
+      .filter(ci => ci.id === item.id)
+      .reduce((sum, ci) => sum + ci.quantity, 0);
+
+    if (currentInCart >= maxAvailable) {
+      toast({
+        variant: 'destructive',
+        title: 'Estoque insuficiente!',
+        description: maxAvailable === 0
+          ? `"${item.nome}" está esgotado.`
+          : `Apenas ${maxAvailable} unidade(s) de "${item.nome}" disponíveis no estoque.`,
+      });
+      return;
+    }
+
     setCart(currentCart => {
       const existingItemIndex = currentCart.findIndex(cartItem => cartItem.id === item.id && !cartItem.observation);
       if (existingItemIndex > -1) {
@@ -482,6 +539,15 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv; onGoBack?: (
                                 >
                                   <Pencil className="h-3 w-3" />
                                 </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6 text-muted-foreground hover:text-primary"
+                                  onClick={() => setIsIngredientsOpen(true)}
+                                  title="Insumos e Estoque"
+                                >
+                                  <PackagePlus className="h-3.5 w-3.5" />
+                                </Button>
                               </CardTitle>
                               <CardDescription className="text-xs">
                                 Terminal de Vendas Ativo
@@ -499,20 +565,66 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv; onGoBack?: (
                         Nenhum item no cardápio para este PDV.
                       </div>
                     )}
-                    {menuItems && menuItems.map(item => (
-                    <Button 
-                      key={item.id} 
-                      variant="outline" 
-                      className="min-h-[82px] sm:h-24 flex-col justify-between items-stretch p-2 sm:p-3 text-left hover:border-primary/50 hover:bg-primary/5 transition-all duration-200 group relative overflow-hidden rounded-xl border-border/80 shadow-xs whitespace-normal break-words" 
-                      onClick={() => addToCart(item)}
-                    >
-                        <span className="text-xs sm:text-sm font-semibold text-foreground line-clamp-2 leading-tight group-hover:text-primary transition-colors">{item.nome}</span>
-                        <div className="flex items-center justify-between mt-auto pt-1 gap-1">
-                          <span className="text-xs sm:text-base font-bold text-primary truncate">{formatCurrency(item.preco_centavos)}</span>
-                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-muted text-muted-foreground group-hover:bg-primary group-hover:text-primary-foreground transition-colors shrink-0">+</span>
-                        </div>
-                    </Button>
-                    ))}
+                    {menuItems && menuItems.map(item => {
+                      const available = getItemAvailableStock(item);
+                      const isOutOfStock = available <= 0;
+                      const isLowStock = available > 0 && available <= (item.estoque_minimo || 5) && available !== Infinity;
+
+                      return (
+                        <Button 
+                          key={item.id} 
+                          variant="outline" 
+                          disabled={isOutOfStock}
+                          className={cn(
+                            "min-h-[88px] sm:h-24 flex-col justify-between items-stretch p-2 sm:p-3 text-left transition-all duration-200 group relative overflow-hidden rounded-xl border-border/80 shadow-xs whitespace-normal break-words",
+                            isOutOfStock 
+                              ? "opacity-60 cursor-not-allowed bg-muted/50 hover:bg-muted/50" 
+                              : "hover:border-primary/50 hover:bg-primary/5"
+                          )}
+                          onClick={() => addToCart(item)}
+                        >
+                          <div className="flex items-start justify-between gap-1 w-full">
+                            <span className={cn(
+                              "text-xs sm:text-sm font-semibold line-clamp-2 leading-tight transition-colors",
+                              isOutOfStock ? "text-muted-foreground line-through" : "text-foreground group-hover:text-primary"
+                            )}>
+                              {item.nome}
+                            </span>
+
+                            {isOutOfStock ? (
+                              <Badge variant="destructive" className="text-[9px] px-1 py-0 h-4 font-bold shrink-0">
+                                Esgotado
+                              </Badge>
+                            ) : isLowStock ? (
+                              <Badge className="bg-amber-500 hover:bg-amber-600 text-white text-[9px] px-1 py-0 h-4 font-semibold shrink-0 gap-0.5">
+                                <AlertTriangle className="h-2.5 w-2.5" /> {available}
+                              </Badge>
+                            ) : available !== Infinity ? (
+                              <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 text-emerald-700 bg-emerald-50 border-emerald-300 font-medium shrink-0">
+                                Disp: {available}
+                              </Badge>
+                            ) : null}
+                          </div>
+
+                          <div className="flex items-center justify-between mt-auto pt-1 gap-1 w-full">
+                            <span className={cn(
+                              "text-xs sm:text-base font-bold truncate",
+                              isOutOfStock ? "text-muted-foreground" : "text-primary"
+                            )}>
+                              {formatCurrency(item.preco_centavos)}
+                            </span>
+                            <span className={cn(
+                              "text-[10px] font-bold px-1.5 py-0.5 rounded transition-colors shrink-0",
+                              isOutOfStock 
+                                ? "bg-muted text-muted-foreground/30" 
+                                : "bg-muted text-muted-foreground group-hover:bg-primary group-hover:text-primary-foreground"
+                            )}>
+                              {isOutOfStock ? "✕" : "+"}
+                            </span>
+                          </div>
+                        </Button>
+                      );
+                    })}
                 </CardContent>
                 </Card>
 

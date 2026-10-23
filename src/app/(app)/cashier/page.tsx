@@ -102,8 +102,8 @@ export default function CashierPage() {
                   <MessageSquare className="h-3.5 w-3.5 mr-1.5 shrink-0" />
                   Conectar WhatsApp do Evento
                 </Button>
-                <Badge variant="outline" className="text-[11px] text-muted-foreground hidden sm:flex items-center gap-1 shrink-0">
-                  <ShieldCheck className="h-3 w-3 text-blue-600" /> Fallback IBM
+                <Badge variant="outline" className="text-[11px] text-blue-700 bg-blue-50/70 border-blue-200 hidden sm:flex items-center gap-1 shrink-0">
+                  <ShieldCheck className="h-3 w-3 text-blue-600" /> Fallback IBM Ativo
                 </Badge>
               </div>
             )}
