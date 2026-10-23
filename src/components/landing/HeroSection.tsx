@@ -3,6 +3,7 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Sparkles, Utensils, CreditCard, BellRing, Users, MapPin, Calendar } from 'lucide-react';
+import CountdownTimer from './CountdownTimer';
 
 export default function HeroSection() {
   return (
@@ -53,6 +54,9 @@ export default function HeroSection() {
             </a>
           </Button>
         </div>
+
+        {/* Countdown Timer */}
+        <CountdownTimer className="mt-8 sm:mt-10" />
 
         {/* Fast Key Highlights Grid */}
         <div className="mt-12 sm:mt-16 grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 max-w-4xl mx-auto text-left">
