@@ -1,20 +1,29 @@
 'use client';
 
+import { useState } from 'react';
 import { Pdv } from '@/lib/definitions';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '../ui/skeleton';
-import { 
-  Store, 
-  Plus, 
-  Settings, 
-  ChevronRight, 
-  CupSoda, 
-  Cake, 
-  Flame, 
-  UtensilsCrossed 
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  Store,
+  Plus,
+  Settings,
+  ChevronRight,
+  Pencil,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth-context';
 import { useTenant } from '@/hooks/use-tenant-context';
+import { useToast } from '@/hooks/use-toast';
+import { getPdvIconConfig } from '@/lib/pdv-icons';
+import PdvIconPicker from './PdvIconPicker';
+import { updatePdvIcon } from '@/lib/actions';
 import Link from 'next/link';
 
 interface PdvSelectorProps {
@@ -23,91 +32,45 @@ interface PdvSelectorProps {
   onPdvSelect: (pdv: Pdv) => void;
 }
 
-interface CategoryConfig {
-  icon: React.ComponentType<{ className?: string }>;
-  iconBg: string;
-  iconColor: string;
-}
-
-function getPdvCategoryConfig(nome: string): CategoryConfig {
-  const n = (nome || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-
-  if (
-    n.includes('bebida') ||
-    n.includes('bar') ||
-    n.includes('chopp') ||
-    n.includes('cerveja') ||
-    n.includes('refrigerante') ||
-    n.includes('suco') ||
-    n.includes('drink')
-  ) {
-    return {
-      icon: CupSoda,
-      iconBg: 'bg-purple-100/90',
-      iconColor: 'text-purple-600',
-    };
-  }
-
-  if (
-    n.includes('doce') ||
-    n.includes('sobremesa') ||
-    n.includes('bolo') ||
-    n.includes('churros') ||
-    n.includes('pipoca') ||
-    n.includes('sorvete') ||
-    n.includes('algodao')
-  ) {
-    return {
-      icon: Cake,
-      iconBg: 'bg-pink-100/90',
-      iconColor: 'text-pink-600',
-    };
-  }
-
-  if (
-    n.includes('churrasco') ||
-    n.includes('carne') ||
-    n.includes('espeto') ||
-    n.includes('espetinho') ||
-    n.includes('costela') ||
-    n.includes('brasa')
-  ) {
-    return {
-      icon: Flame,
-      iconBg: 'bg-amber-100/90',
-      iconColor: 'text-amber-700',
-    };
-  }
-
-  if (
-    n.includes('pastel') ||
-    n.includes('salgado') ||
-    n.includes('lanche') ||
-    n.includes('coxinha') ||
-    n.includes('hamburguer') ||
-    n.includes('pizza') ||
-    n.includes('torta') ||
-    n.includes('milho') ||
-    n.includes('caldo')
-  ) {
-    return {
-      icon: UtensilsCrossed,
-      iconBg: 'bg-orange-100/90',
-      iconColor: 'text-orange-600',
-    };
-  }
-
-  return {
-    icon: Store,
-    iconBg: 'bg-indigo-100/90',
-    iconColor: 'text-indigo-600',
-  };
-}
-
 export default function PdvSelector({ pdvs, operatorCounts = {}, onPdvSelect }: PdvSelectorProps) {
   const { user } = useAuth();
   const { currentEvent } = useTenant();
+  const { toast } = useToast();
   const isAdmin = ['SUPERADMIN', 'ADMIN_ORGANIZACAO', 'ADMIN_EVENTO'].includes(user?.role ?? '');
+
+  // Icon changer dialog state
+  const [iconPickerPdv, setIconPickerPdv] = useState<Pdv | null>(null);
+  const [isUpdatingIcon, setIsUpdatingIcon] = useState(false);
+
+  const handleSelectIcon = async (newIconId: string) => {
+    if (!iconPickerPdv || isUpdatingIcon) return;
+
+    setIsUpdatingIcon(true);
+    try {
+      const res = await updatePdvIcon(iconPickerPdv.id, newIconId);
+      if (res.status === 'success') {
+        toast({
+          title: 'Símbolo atualizado!',
+          description: `Novo ícone salvo para "${iconPickerPdv.nome}".`,
+        });
+        setIconPickerPdv(null);
+      } else {
+        toast({
+          variant: 'destructive',
+          title: 'Erro',
+          description: res.message,
+        });
+      }
+    } catch (err) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro',
+        description: 'Falha ao salvar o novo símbolo.',
+      });
+    } finally {
+      setIsUpdatingIcon(false);
+    }
+  };
 
   return (
     <div className="mx-auto max-w-xl w-full min-w-0 space-y-3.5 sm:space-y-4">
@@ -178,23 +141,44 @@ export default function PdvSelector({ pdvs, operatorCounts = {}, onPdvSelect }: 
       {pdvs && pdvs.length > 0 && (
         <div className="grid grid-cols-2 gap-3 sm:gap-4">
           {pdvs.map((pdv) => {
-            const config = getPdvCategoryConfig(pdv.nome);
+            const config = getPdvIconConfig(pdv.icon, pdv.nome);
             const Icon = config.icon;
             const opCount = operatorCounts[pdv.id] || 0;
 
             return (
-              <button
+              <div
                 key={pdv.id}
-                type="button"
+                role="button"
+                tabIndex={0}
                 onClick={() => onPdvSelect(pdv)}
-                className="group relative flex flex-col justify-between bg-white rounded-2xl border border-slate-100 p-3.5 sm:p-4 text-left shadow-xs hover:shadow-md hover:border-purple-200 hover:-translate-y-0.5 active:scale-[0.98] transition-all min-h-[142px] sm:min-h-[155px]"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') onPdvSelect(pdv);
+                }}
+                className="group relative flex flex-col justify-between bg-white rounded-2xl border border-slate-100 p-3.5 sm:p-4 text-left shadow-xs hover:shadow-md hover:border-purple-200 hover:-translate-y-0.5 active:scale-[0.98] transition-all min-h-[142px] sm:min-h-[155px] cursor-pointer"
               >
-                {/* Top Row: Category Icon + Online Badge */}
+                {/* Top Row: Category Icon (Clickable for Admin to change) + Online Badge */}
                 <div className="flex items-start justify-between w-full">
-                  <div
-                    className={`h-11 w-11 rounded-2xl ${config.iconBg} ${config.iconColor} flex items-center justify-center shadow-xs transition-transform group-hover:scale-105`}
-                  >
-                    <Icon className="h-5 w-5" />
+                  <div className="relative">
+                    <button
+                      type="button"
+                      title={isAdmin ? 'Clique para trocar o símbolo' : undefined}
+                      onClick={(e) => {
+                        if (isAdmin) {
+                          e.stopPropagation();
+                          setIconPickerPdv(pdv);
+                        }
+                      }}
+                      className={`h-11 w-11 rounded-2xl ${config.iconBg} ${config.iconColor} flex items-center justify-center shadow-xs transition-transform ${
+                        isAdmin ? 'hover:scale-110 hover:ring-2 hover:ring-purple-400 cursor-pointer' : 'group-hover:scale-105'
+                      }`}
+                    >
+                      <Icon className="h-5 w-5" />
+                      {isAdmin && (
+                        <span className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full bg-white shadow-xs border border-slate-200 text-slate-600 flex items-center justify-center opacity-70 group-hover:opacity-100 transition-opacity">
+                          <Pencil className="h-2.5 w-2.5" />
+                        </span>
+                      )}
+                    </button>
                   </div>
                   <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 text-[11px] font-semibold border border-emerald-100/60 shrink-0">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -218,7 +202,7 @@ export default function PdvSelector({ pdvs, operatorCounts = {}, onPdvSelect }: 
                   </span>
                   <ChevronRight className="h-4 w-4 text-slate-400 group-hover:text-purple-600 group-hover:translate-x-0.5 transition-all shrink-0" />
                 </div>
-              </button>
+              </div>
             );
           })}
         </div>
@@ -234,6 +218,25 @@ export default function PdvSelector({ pdvs, operatorCounts = {}, onPdvSelect }: 
           v4.2.0
         </span>
       </div>
+
+      {/* Quick Icon Selector Dialog for Admins */}
+      <Dialog open={!!iconPickerPdv} onOpenChange={(open) => !open && setIconPickerPdv(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Trocar Símbolo da Barraca</DialogTitle>
+            <DialogDescription>
+              Selecione o símbolo representativo para <strong>{iconPickerPdv?.nome}</strong>:
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-2">
+            <PdvIconPicker
+              value={iconPickerPdv ? getPdvIconConfig(iconPickerPdv.icon, iconPickerPdv.nome).id : undefined}
+              onChange={handleSelectIcon}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

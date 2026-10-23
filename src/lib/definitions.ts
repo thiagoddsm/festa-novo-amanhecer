@@ -146,6 +146,7 @@ export type PdvWhatsappConfig = {
 export type Pdv = {
   id: string;
   nome: string;
+  icon?: string;
   tenant_id?: string;
   event_id?: string;
   whatsapp?: PdvWhatsappConfig;

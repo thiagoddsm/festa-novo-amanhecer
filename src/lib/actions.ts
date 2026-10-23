@@ -443,6 +443,7 @@ export async function deleteMenuItem(pdvId: string, itemId: string): Promise<Act
 // --- PDV Management ---
 const CreatePdvSchema = z.object({
   nome: z.string().min(1, 'Nome do PDV é obrigatório.'),
+  icon: z.string().optional(),
   tenant_id: z.string().optional(),
   event_id: z.string().optional(),
 });
@@ -451,6 +452,7 @@ export async function createPdv(prevState: ActionState | undefined, formData: Fo
   const db = getWebDb();
   const validated = CreatePdvSchema.safeParse({
     nome: formData.get('nome'),
+    icon: formData.get('icon') || undefined,
     tenant_id: formData.get('tenant_id') || undefined,
     event_id: formData.get('event_id') || undefined,
   });
@@ -460,9 +462,10 @@ export async function createPdv(prevState: ActionState | undefined, formData: Fo
   }
 
   try {
-    const { nome, tenant_id, event_id } = validated.data;
+    const { nome, icon, tenant_id, event_id } = validated.data;
     const pdvRef = await clientAddDoc(clientCollection(db, 'pdvs'), {
       nome,
+      ...(icon ? { icon } : {}),
       tenant_id: tenant_id || null,
       event_id: event_id || null,
       created_at: ClientTimestamp.now(),
@@ -475,20 +478,43 @@ export async function createPdv(prevState: ActionState | undefined, formData: Fo
   }
 }
 
-export async function updatePdv(pdvId: string, nome: string): Promise<ActionState> {
+export async function updatePdv(pdvId: string, nome: string, icon?: string): Promise<ActionState> {
   const db = getWebDb();
   if (!pdvId || !nome.trim()) {
     return { status: 'error', message: 'Dados inválidos.' };
   }
 
   try {
-    await clientUpdateDoc(clientDoc(db, 'pdvs', pdvId), {
+    const updatePayload: Record<string, any> = {
       nome: nome.trim(),
       updated_at: ClientTimestamp.now(),
-    });
+    };
+    if (icon !== undefined) {
+      updatePayload.icon = icon;
+    }
+
+    await clientUpdateDoc(clientDoc(db, 'pdvs', pdvId), updatePayload);
     return { status: 'success', message: 'PDV atualizado com sucesso!' };
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Erro ao atualizar PDV.';
+    return { status: 'error', message: msg };
+  }
+}
+
+export async function updatePdvIcon(pdvId: string, icon: string): Promise<ActionState> {
+  const db = getWebDb();
+  if (!pdvId || !icon) {
+    return { status: 'error', message: 'Dados inválidos.' };
+  }
+
+  try {
+    await clientUpdateDoc(clientDoc(db, 'pdvs', pdvId), {
+      icon,
+      updated_at: ClientTimestamp.now(),
+    });
+    return { status: 'success', message: 'Símbolo atualizado com sucesso!' };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Erro ao atualizar símbolo.';
     return { status: 'error', message: msg };
   }
 }
@@ -524,6 +550,7 @@ export async function seedDefaultPdvs(tenantId: string, eventId: string): Promis
     const defaultPdvs = [
       {
         nome: 'Barraca de Bebidas',
+        icon: 'bebidas',
         menu: [
           { nome: 'Refrigerante Lata', preco_centavos: 600, ingredientes: ['Lata 350ml'] },
           { nome: 'Água Mineral', preco_centavos: 400, ingredientes: ['Garrafa 500ml'] },
@@ -533,6 +560,7 @@ export async function seedDefaultPdvs(tenantId: string, eventId: string): Promis
       },
       {
         nome: 'Barraca do Pastel',
+        icon: 'pastel',
         menu: [
           { nome: 'Pastel de Carne', preco_centavos: 1000, ingredientes: ['Carne moída', 'Massa artesanal'] },
           { nome: 'Pastel de Queijo', preco_centavos: 1000, ingredientes: ['Mussarela', 'Orégano'] },
@@ -542,6 +570,7 @@ export async function seedDefaultPdvs(tenantId: string, eventId: string): Promis
       },
       {
         nome: 'Barraca do Churrasco',
+        icon: 'churrasco',
         menu: [
           { nome: 'Espetinho de Carne', preco_centavos: 1200, ingredientes: ['Alcatra', 'Farofa', 'Vinagrete'] },
           { nome: 'Espetinho de Frango', preco_centavos: 1000, ingredientes: ['Peito de frango com bacon'] },
@@ -551,6 +580,7 @@ export async function seedDefaultPdvs(tenantId: string, eventId: string): Promis
       },
       {
         nome: 'Barraca de Doces',
+        icon: 'doces',
         menu: [
           { nome: 'Bolo no Pote', preco_centavos: 1000, ingredientes: ['Chocolate', 'Cenoura com brigadeiro'] },
           { nome: 'Brigadeiro Gourmet (Un)', preco_centavos: 400, ingredientes: ['Chocolate nobre'] },
@@ -563,6 +593,7 @@ export async function seedDefaultPdvs(tenantId: string, eventId: string): Promis
     for (const p of defaultPdvs) {
       const pdvRef = await clientAddDoc(clientCollection(db, 'pdvs'), {
         nome: p.nome,
+        icon: p.icon,
         tenant_id: tenantId,
         event_id: eventId,
         created_at: ClientTimestamp.now(),

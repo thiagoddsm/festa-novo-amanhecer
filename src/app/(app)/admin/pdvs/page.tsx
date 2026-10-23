@@ -47,6 +47,8 @@ import type { Pdv, MenuItem } from '@/lib/definitions';
 import { createPdv, updatePdv, deletePdv, seedDefaultPdvs } from '@/lib/actions';
 import EditMenuSheet from '@/components/pos/EditMenuSheet';
 import PdvWhatsappDialog from '@/components/pos/PdvWhatsappDialog';
+import PdvIconPicker from '@/components/pos/PdvIconPicker';
+import { getPdvIconConfig, detectPdvIconId } from '@/lib/pdv-icons';
 
 export default function AdminPdvsPage() {
   const firestore = useFirestore();
@@ -60,12 +62,14 @@ export default function AdminPdvsPage() {
   // New PDV dialog
   const [newPdvOpen, setNewPdvOpen] = useState(false);
   const [newPdvName, setNewPdvName] = useState('');
+  const [newPdvIcon, setNewPdvIcon] = useState('geral');
   const [isCreatingPdv, setIsCreatingPdv] = useState(false);
 
   // Edit PDV Name dialog
   const [editPdvOpen, setEditPdvOpen] = useState(false);
   const [editingPdv, setEditingPdv] = useState<Pdv | null>(null);
   const [editPdvName, setEditPdvName] = useState('');
+  const [editPdvIcon, setEditPdvIcon] = useState('geral');
   const [isUpdatingPdv, setIsUpdatingPdv] = useState(false);
 
   // Edit Menu Sheet
@@ -125,6 +129,7 @@ export default function AdminPdvsPage() {
     try {
       const formData = new FormData();
       formData.append('nome', newPdvName.trim());
+      formData.append('icon', newPdvIcon || detectPdvIconId(newPdvName.trim()));
       if (currentTenant) formData.append('tenant_id', currentTenant.id);
       if (currentEvent) formData.append('event_id', currentEvent.id);
 
@@ -132,6 +137,7 @@ export default function AdminPdvsPage() {
       if (result.status === 'success') {
         toast({ title: 'Sucesso!', description: result.message });
         setNewPdvName('');
+        setNewPdvIcon('geral');
         setNewPdvOpen(false);
       } else {
         toast({ variant: 'destructive', title: 'Erro', description: result.message });
@@ -143,14 +149,14 @@ export default function AdminPdvsPage() {
     }
   };
 
-  // Update PDV Name
+  // Update PDV
   const handleUpdatePdv = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingPdv || !editPdvName.trim() || isUpdatingPdv) return;
 
     setIsUpdatingPdv(true);
     try {
-      const result = await updatePdv(editingPdv.id, editPdvName.trim());
+      const result = await updatePdv(editingPdv.id, editPdvName.trim(), editPdvIcon);
       if (result.status === 'success') {
         toast({ title: 'Sucesso!', description: result.message });
         setEditPdvOpen(false);
@@ -253,16 +259,30 @@ export default function AdminPdvsPage() {
                       <strong>{currentEvent?.name || currentTenant?.name || 'o evento'}</strong>.
                     </DialogDescription>
                   </DialogHeader>
-                  <div className="py-4">
-                    <label className="text-sm font-medium">Nome do PDV / Barraca</label>
-                    <Input
-                      placeholder="Ex: Barraca do Espetinho"
-                      value={newPdvName}
-                      onChange={(e) => setNewPdvName(e.target.value)}
-                      className="mt-1"
-                      autoFocus
-                      required
-                    />
+                  <div className="py-4 space-y-3">
+                    <div>
+                      <label className="text-sm font-medium">Nome do PDV / Barraca</label>
+                      <Input
+                        placeholder="Ex: Barraca do Espetinho"
+                        value={newPdvName}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setNewPdvName(val);
+                          setNewPdvIcon(detectPdvIconId(val));
+                        }}
+                        className="mt-1"
+                        autoFocus
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium">Símbolo / Categoria</label>
+                      <p className="text-xs text-muted-foreground mb-1.5">Escolha o ícone que aparecerá no terminal e nas listagens.</p>
+                      <PdvIconPicker
+                        value={newPdvIcon}
+                        onChange={setNewPdvIcon}
+                      />
+                    </div>
                   </div>
                   <DialogFooter>
                     <Button
@@ -293,13 +313,17 @@ export default function AdminPdvsPage() {
             <div className="grid gap-3 sm:gap-4 md:grid-cols-2 lg:grid-cols-3">
               {pdvs.map((pdv) => {
                 const items = menuItemsByPdv[pdv.id] || [];
+                const iconConfig = getPdvIconConfig(pdv.icon, pdv.nome);
+                const IconComponent = iconConfig.icon;
 
                 return (
                   <Card key={pdv.id} className="border bg-card flex flex-col justify-between w-full min-w-0 shadow-xs">
                     <CardHeader className="p-3 sm:p-4 pb-2 flex flex-row items-start justify-between space-y-0 gap-2">
                       <div className="min-w-0 flex-1">
                         <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-2 min-w-0">
-                          <Store className="h-4 w-4 text-primary shrink-0" />
+                          <div className={`h-8 w-8 rounded-xl ${iconConfig.iconBg} ${iconConfig.iconColor} flex items-center justify-center shrink-0 shadow-2xs`}>
+                            <IconComponent className="h-4 w-4" />
+                          </div>
                           <span className="truncate">{pdv.nome}</span>
                         </CardTitle>
                         <CardDescription className="text-xs mt-0.5">
@@ -349,9 +373,10 @@ export default function AdminPdvsPage() {
                           onClick={() => {
                             setEditingPdv(pdv);
                             setEditPdvName(pdv.nome);
+                            setEditPdvIcon(pdv.icon || detectPdvIconId(pdv.nome));
                             setEditPdvOpen(true);
                           }}
-                          title="Editar Nome"
+                          title="Editar PDV e Símbolo"
                         >
                           <Pencil className="h-3.5 w-3.5" />
                         </Button>
@@ -460,25 +485,35 @@ export default function AdminPdvsPage() {
         </CardContent>
       </Card>
 
-      {/* Edit PDV Name Dialog */}
+      {/* Edit PDV Dialog */}
       <Dialog open={editPdvOpen} onOpenChange={setEditPdvOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-md">
           <form onSubmit={handleUpdatePdv}>
             <DialogHeader>
-              <DialogTitle>Editar Nome do PDV</DialogTitle>
+              <DialogTitle>Editar Ponto de Venda</DialogTitle>
               <DialogDescription>
-                Altere o nome exibido para este ponto de venda.
+                Altere o nome e o símbolo representativo deste PDV.
               </DialogDescription>
             </DialogHeader>
-            <div className="py-4">
-              <label className="text-sm font-medium">Nome do PDV</label>
-              <Input
-                value={editPdvName}
-                onChange={(e) => setEditPdvName(e.target.value)}
-                className="mt-1"
-                autoFocus
-                required
-              />
+            <div className="py-4 space-y-3">
+              <div>
+                <label className="text-sm font-medium">Nome do PDV</label>
+                <Input
+                  value={editPdvName}
+                  onChange={(e) => setEditPdvName(e.target.value)}
+                  className="mt-1"
+                  autoFocus
+                  required
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Símbolo / Categoria</label>
+                <p className="text-xs text-muted-foreground mb-1.5">Escolha o ícone representativo deste PDV.</p>
+                <PdvIconPicker
+                  value={editPdvIcon}
+                  onChange={setEditPdvIcon}
+                />
+              </div>
             </div>
             <DialogFooter>
               <Button
