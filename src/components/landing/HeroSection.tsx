@@ -1,9 +1,16 @@
 'use client';
 
 import React from 'react';
+import dynamic from 'next/dynamic';
 import { Button } from '@/components/ui/button';
 import { Sparkles, Utensils, CreditCard, BellRing, Users, MapPin, Calendar } from 'lucide-react';
-import CountdownTimer from './CountdownTimer';
+
+const CountdownTimer = dynamic(() => import('./CountdownTimer'), {
+  ssr: false,
+  loading: () => (
+    <div className="mx-auto max-w-xl h-28 rounded-3xl bg-purple-50/60 border border-purple-100/60 animate-pulse mt-8 sm:mt-10" />
+  ),
+});
 
 export default function HeroSection() {
   return (

@@ -29,9 +29,17 @@ export default function CountdownTimer({
   targetDate = '2026-11-14T18:00:00',
   className = '',
 }: CountdownTimerProps) {
-  const [timeLeft, setTimeLeft] = useState(() => calculateTimeLeft(targetDate));
+  const [mounted, setMounted] = useState(false);
+  const [timeLeft, setTimeLeft] = useState({
+    days: 0,
+    hours: 0,
+    minutes: 0,
+    seconds: 0,
+    isPast: false,
+  });
 
   useEffect(() => {
+    setMounted(true);
     const updateCountdown = () => {
       setTimeLeft(calculateTimeLeft(targetDate));
     };
@@ -40,6 +48,28 @@ export default function CountdownTimer({
     const interval = setInterval(updateCountdown, 1000);
     return () => clearInterval(interval);
   }, [targetDate]);
+
+  if (!mounted) {
+    return (
+      <div className={`mx-auto max-w-xl rounded-3xl border border-purple-200/80 bg-white/95 p-4 sm:p-5 shadow-sm ${className}`}>
+        <div className="flex items-center justify-center gap-1.5 text-xs font-semibold text-purple-700 mb-3">
+          <Clock className="h-3.5 w-3.5 text-purple-600" />
+          <span>CONTAGEM REGRESSIVA PARA A FESTA</span>
+        </div>
+        <div className="grid grid-cols-4 gap-2 sm:gap-3 text-center">
+          {['DIAS', 'HORAS', 'MINUTOS', 'SEGUNDOS'].map((label, idx) => (
+            <div
+              key={idx}
+              className="flex flex-col items-center justify-center rounded-2xl bg-purple-50/60 p-2 sm:p-3 border border-purple-100/60"
+            >
+              <span className="font-mono text-xl sm:text-3xl font-black text-slate-300 leading-none">--</span>
+              <span className="text-[10px] sm:text-xs font-bold tracking-wider text-purple-400 mt-1">{label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   if (timeLeft.isPast) {
     return (
@@ -61,7 +91,10 @@ export default function CountdownTimer({
   ];
 
   return (
-    <div className={`mx-auto max-w-xl rounded-3xl border border-purple-200/80 bg-white/95 p-4 sm:p-5 shadow-sm backdrop-blur-sm ${className}`}>
+    <div
+      suppressHydrationWarning
+      className={`mx-auto max-w-xl rounded-3xl border border-purple-200/80 bg-white/95 p-4 sm:p-5 shadow-sm backdrop-blur-sm ${className}`}
+    >
       <div className="flex items-center justify-center gap-1.5 text-xs font-semibold text-purple-700 mb-3">
         <Clock className="h-3.5 w-3.5 text-purple-600 animate-pulse" />
         <span>CONTAGEM REGRESSIVA PARA A FESTA</span>
@@ -73,7 +106,10 @@ export default function CountdownTimer({
             key={idx}
             className="flex flex-col items-center justify-center rounded-2xl bg-gradient-to-b from-purple-50/80 to-purple-100/40 p-2 sm:p-3 border border-purple-100/60 shadow-2xs"
           >
-            <span className="font-mono text-xl sm:text-3xl font-black text-slate-900 leading-none">
+            <span
+              suppressHydrationWarning
+              className="font-mono text-xl sm:text-3xl font-black text-slate-900 leading-none"
+            >
               {String(block.value).padStart(2, '0')}
             </span>
             <span className="text-[10px] sm:text-xs font-bold tracking-wider text-purple-700 mt-1">
