@@ -63,9 +63,10 @@ import {
 
 interface EditMenuSheetProps {
   pdv: Pdv;
-  menuItems: MenuItem[];
+  menuItems?: MenuItem[];
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
+  onItemsChange?: (items: MenuItem[]) => void;
 }
 
 interface EditingItemState {
@@ -91,6 +92,23 @@ export default function EditMenuSheet({
   const [ingredients, setIngredients] = useState<PdvIngredient[]>([]);
   const [ingredientsDialogOpen, setIngredientsDialogOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
+
+  // Real-time live menu items loaded directly from subcollection
+  const [liveMenuItems, setLiveMenuItems] = useState<MenuItem[]>(menuItems || []);
+
+  useEffect(() => {
+    if (!firestore || !isOpen || !pdv.id) return;
+    const menuColRef = collection(firestore, 'pdvs', pdv.id, 'menuItems');
+    const q = query(menuColRef, orderBy('nome', 'asc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const list = snapshot.docs.map((d) => ({
+        id: d.id,
+        ...d.data(),
+      })) as MenuItem[];
+      setLiveMenuItems(list);
+    });
+    return () => unsubscribe();
+  }, [firestore, isOpen, pdv.id]);
 
   // Load ingredients for this PDV to build recipes
   useEffect(() => {
@@ -299,12 +317,12 @@ export default function EditMenuSheet({
           <div className="py-4 space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                Itens Atuais ({menuItems.length})
+                Itens Atuais ({liveMenuItems.length})
               </span>
             </div>
 
             <div className="space-y-3">
-              {menuItems.map((item) => (
+              {liveMenuItems.map((item) => (
                 <div
                   key={item.id}
                   className="p-3 rounded-lg border bg-card hover:bg-muted/30 transition-colors space-y-2"
