@@ -250,7 +250,7 @@ export async function processSale(
             }
 
             // Read and validate all required ingredients
-            const ingredientDeductions = new Map<string, { ref: any; newQty: number }>();
+            const ingredientDeductions = new Map<string, { ref: any; newQty: number; currentQty: number; nome: string; unidade: string; qtyNeeded: number }>();
             for (const [ingId, need] of ingredientNeeds.entries()) {
                 const ingRef = clientDoc(db, 'pdvs', pdv_id, 'ingredients', ingId);
                 const ingSnap = await t.get(ingRef);
@@ -262,7 +262,14 @@ export async function processSale(
                 if (currentQty < need.qtyNeeded) {
                     throw new Error(`Estoque insuficiente do insumo "${ingData.nome}". Disponível: ${currentQty} ${ingData.unidade}, Necessário: ${need.qtyNeeded} ${ingData.unidade}.`);
                 }
-                ingredientDeductions.set(ingId, { ref: ingRef, newQty: currentQty - need.qtyNeeded });
+                ingredientDeductions.set(ingId, {
+                    ref: ingRef,
+                    newQty: currentQty - need.qtyNeeded,
+                    currentQty,
+                    nome: ingData.nome,
+                    unidade: ingData.unidade || 'un',
+                    qtyNeeded: need.qtyNeeded,
+                });
             }
 
             // --- 2. WRITE PHASE ---
@@ -305,6 +312,7 @@ export async function processSale(
             // 5. Create order record
             const orderRef = clientDoc(clientCollection(db, 'orders'));
             const orderId = orderRef.id;
+            const orderNumber = `#${orderId.substring(0, 4).toUpperCase()}`;
             t.set(orderRef, {
                 pdv_id: pdv_id,
                 pdv_nome: pdv_nome,
@@ -314,10 +322,39 @@ export async function processSale(
                 created_at: now,
                 updated_at: now,
                 items: validatedFields.data.items,
-                order_number: `#${orderId.substring(0, 4).toUpperCase()}`,
+                order_number: orderNumber,
                 tenant_id: effectiveTenantId,
                 event_id: effectiveEventId,
             });
+
+            // 6. Audit log for ingredient deductions
+            if (ingredientDeductions.size > 0) {
+                const logRef = clientDoc(clientCollection(db, 'pdvs', pdv_id, 'ingredient_logs'));
+                t.set(logRef, {
+                    pdv_id: pdv_id,
+                    tipo: 'SAIDA_VENDA',
+                    titulo: `Saída por Venda — Pedido ${orderNumber}`,
+                    pedido_numero: orderNumber,
+                    order_id: orderId,
+                    transacao_id: transactionRef.id,
+                    cliente_nome: card.nome_cliente || 'Cliente',
+                    usuario: usuario_responsavel || 'PDV',
+                    itens_vendidos: validatedFields.data.items.map(it => ({
+                        nome: it.name,
+                        quantidade: it.quantity,
+                        observacoes: it.observation || null,
+                    })),
+                    insumos_alterados: Array.from(ingredientDeductions.entries()).map(([ingId, d]) => ({
+                        ingredient_id: ingId,
+                        ingredient_nome: d.nome,
+                        quantidade_anterior: d.currentQty,
+                        quantidade_alterada: -d.qtyNeeded,
+                        quantidade_resultante: d.newQty,
+                        unidade: d.unidade,
+                    })),
+                    created_at: now,
+                });
+            }
 
             return {
                 novo_saldo_centavos,
@@ -387,7 +424,7 @@ export async function reverseTransaction(transactionId: string, responsibleUser:
 
             // Read items & ingredients for stock restoration if reversing a sale
             const productRestorations = new Map<string, { ref: any; newStock: number }>();
-            const ingredientRestorations = new Map<string, { ref: any; newQty: number }>();
+            const ingredientRestorations = new Map<string, { ref: any; newQty: number; currentQty: number; delta: number; nome: string; unidade: string }>();
 
             if (originalTx.tipo === 'VENDA' && originalTx.items && originalTx.items.length > 0) {
                 const distinctRestorationItemIds = Array.from(new Set(originalTx.items.map(it => it.id)));
@@ -428,12 +465,16 @@ export async function reverseTransaction(transactionId: string, responsibleUser:
                             const ingSnap = await t.get(ingRef);
                             if (ingSnap.exists()) {
                                 const ingData = ingSnap.data() as PdvIngredient;
-                                const cur = ingredientRestorations.has(recipeItem.ingredient_id)
-                                    ? ingredientRestorations.get(recipeItem.ingredient_id)!.newQty
-                                    : (ingData.quantidade_atual || 0);
+                                const existing = ingredientRestorations.get(recipeItem.ingredient_id);
+                                const cur = existing ? existing.newQty : (ingData.quantidade_atual || 0);
+                                const delta = recipeItem.quantidade * it.quantity;
                                 ingredientRestorations.set(recipeItem.ingredient_id, {
                                     ref: ingRef,
-                                    newQty: cur + (recipeItem.quantidade * it.quantity),
+                                    newQty: cur + delta,
+                                    currentQty: existing ? existing.currentQty : (ingData.quantidade_atual || 0),
+                                    delta: (existing ? existing.delta : 0) + delta,
+                                    nome: ingData.nome,
+                                    unidade: ingData.unidade || 'un',
                                 });
                             }
                         }
@@ -474,6 +515,32 @@ export async function reverseTransaction(transactionId: string, responsibleUser:
             // Restore ingredient stocks
             for (const { ref, newQty } of ingredientRestorations.values()) {
                 t.update(ref, { quantidade_atual: newQty, updated_at: now });
+            }
+
+            // Audit log for restored ingredients
+            if (ingredientRestorations.size > 0 && originalTx.pdv_id) {
+                const logRef = clientDoc(clientCollection(db, 'pdvs', originalTx.pdv_id, 'ingredient_logs'));
+                t.set(logRef, {
+                    pdv_id: originalTx.pdv_id,
+                    tipo: 'ESTORNO',
+                    titulo: `Estorno de Venda — Devolução ao Estoque`,
+                    transacao_id: transactionId,
+                    usuario: responsibleUser || 'Administrador',
+                    itens_vendidos: (originalTx.items || []).map(it => ({
+                        nome: it.name,
+                        quantidade: it.quantity,
+                        observacoes: it.observation || null,
+                    })),
+                    insumos_alterados: Array.from(ingredientRestorations.entries()).map(([ingId, r]) => ({
+                        ingredient_id: ingId,
+                        ingredient_nome: r.nome,
+                        quantidade_anterior: r.currentQty,
+                        quantidade_alterada: +r.delta,
+                        quantidade_resultante: r.newQty,
+                        unidade: r.unidade,
+                    })),
+                    created_at: now,
+                });
             }
 
             const reversalTxRef = clientDoc(clientCollection(db, 'transactions'));
@@ -544,17 +611,41 @@ export async function addIngredient(prevState: ActionState | undefined, formData
   try {
     const { pdvId, nome, quantidade_atual, unidade, estoque_minimo } = validatedFields.data;
     const ingCol = clientCollection(db, 'pdvs', pdvId, 'ingredients');
+    const now = ClientTimestamp.now();
     const ingDocData: Record<string, any> = {
       pdv_id: pdvId,
       nome,
       quantidade_atual,
       unidade,
-      updated_at: ClientTimestamp.now(),
+      updated_at: now,
     };
     if (typeof estoque_minimo === 'number') {
       ingDocData.estoque_minimo = estoque_minimo;
     }
-    await clientAddDoc(ingCol, ingDocData);
+    const newDoc = await clientAddDoc(ingCol, ingDocData);
+
+    // Audit log
+    try {
+      const logCol = clientCollection(db, 'pdvs', pdvId, 'ingredient_logs');
+      await clientAddDoc(logCol, {
+        pdv_id: pdvId,
+        tipo: 'CRIACAO',
+        titulo: `Cadastro de Insumo: ${nome}`,
+        descricao: `Insumo adicionado com estoque inicial de ${quantidade_atual} ${unidade}.`,
+        insumos_alterados: [{
+          ingredient_id: newDoc.id,
+          ingredient_nome: nome,
+          quantidade_anterior: 0,
+          quantidade_alterada: quantidade_atual,
+          quantidade_resultante: quantidade_atual,
+          unidade,
+        }],
+        created_at: now,
+      });
+    } catch (e) {
+      console.warn('Erro ao registrar log de auditoria de insumo:', e);
+    }
+
     return { status: 'success', message: 'Insumo adicionado com sucesso!' };
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Erro ao adicionar insumo.';
@@ -570,10 +661,39 @@ export async function updateIngredientStock(
   const db = getWebDb();
   try {
     const ingRef = clientDoc(db, 'pdvs', pdvId, 'ingredients', ingredientId);
+    const snap = await clientGetDoc(ingRef);
+    const oldData = snap.exists() ? (snap.data() as PdvIngredient) : null;
+    const oldQty = oldData?.quantidade_atual ?? 0;
+    const delta = novoSaldo - oldQty;
+    const now = ClientTimestamp.now();
+
     await clientUpdateDoc(ingRef, {
       quantidade_atual: Math.max(0, novoSaldo),
-      updated_at: ClientTimestamp.now(),
+      updated_at: now,
     });
+
+    // Audit log
+    try {
+      const logCol = clientCollection(db, 'pdvs', pdvId, 'ingredient_logs');
+      await clientAddDoc(logCol, {
+        pdv_id: pdvId,
+        tipo: delta >= 0 ? 'ENTRADA_MANUAL' : 'AJUSTE_MANUAL',
+        titulo: delta >= 0 ? `Entrada Manual: ${oldData?.nome || 'Insumo'}` : `Ajuste de Estoque: ${oldData?.nome || 'Insumo'}`,
+        descricao: `Estoque ajustado de ${oldQty} para ${novoSaldo} ${oldData?.unidade || 'un'} (${delta >= 0 ? '+' : ''}${delta}).`,
+        insumos_alterados: [{
+          ingredient_id: ingredientId,
+          ingredient_nome: oldData?.nome || 'Insumo',
+          quantidade_anterior: oldQty,
+          quantidade_alterada: delta,
+          quantidade_resultante: Math.max(0, novoSaldo),
+          unidade: oldData?.unidade || 'un',
+        }],
+        created_at: now,
+      });
+    } catch (e) {
+      console.warn('Erro ao registrar log de auditoria:', e);
+    }
+
     return { status: 'success', message: 'Estoque do insumo atualizado com sucesso!' };
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Erro ao atualizar insumo.';
@@ -611,12 +731,17 @@ export async function updateIngredient(
   try {
     const { pdvId, ingredientId, nome, quantidade_atual, unidade, estoque_minimo } = validatedFields.data;
     const ingRef = clientDoc(db, 'pdvs', pdvId, 'ingredients', ingredientId);
+    const snap = await clientGetDoc(ingRef);
+    const oldData = snap.exists() ? (snap.data() as PdvIngredient) : null;
+    const oldQty = oldData?.quantidade_atual ?? 0;
+    const delta = quantidade_atual - oldQty;
+    const now = ClientTimestamp.now();
 
     const updateData: Record<string, any> = {
       nome: nome.trim(),
       quantidade_atual: Math.max(0, quantidade_atual),
       unidade: unidade.trim() || 'un',
-      updated_at: ClientTimestamp.now(),
+      updated_at: now,
     };
 
     if (typeof estoque_minimo === 'number') {
@@ -626,6 +751,34 @@ export async function updateIngredient(
     }
 
     await clientUpdateDoc(ingRef, updateData);
+
+    // Audit log
+    try {
+      const logCol = clientCollection(db, 'pdvs', pdvId, 'ingredient_logs');
+      const changes: string[] = [];
+      if (oldData && oldData.nome !== nome) changes.push(`Nome alterado de "${oldData.nome}" para "${nome}"`);
+      if (oldData && oldData.unidade !== unidade) changes.push(`Unidade alterada de "${oldData.unidade}" para "${unidade}"`);
+      if (delta !== 0) changes.push(`Estoque de ${oldQty} para ${quantidade_atual} ${unidade} (${delta >= 0 ? '+' : ''}${delta})`);
+
+      await clientAddDoc(logCol, {
+        pdv_id: pdvId,
+        tipo: 'EDICAO',
+        titulo: `Edição de Insumo: ${nome}`,
+        descricao: changes.length > 0 ? changes.join(' • ') : 'Dados do insumo atualizados.',
+        insumos_alterados: [{
+          ingredient_id: ingredientId,
+          ingredient_nome: nome,
+          quantidade_anterior: oldQty,
+          quantidade_alterada: delta,
+          quantidade_resultante: quantidade_atual,
+          unidade,
+        }],
+        created_at: now,
+      });
+    } catch (e) {
+      console.warn('Erro ao registrar log de auditoria:', e);
+    }
+
     return { status: 'success', message: `Insumo "${nome}" atualizado com sucesso!` };
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Erro ao atualizar insumo.';
@@ -637,7 +790,35 @@ export async function deleteIngredient(pdvId: string, ingredientId: string): Pro
   const db = getWebDb();
   try {
     const ingRef = clientDoc(db, 'pdvs', pdvId, 'ingredients', ingredientId);
+    const snap = await clientGetDoc(ingRef);
+    const oldData = snap.exists() ? (snap.data() as PdvIngredient) : null;
+    const now = ClientTimestamp.now();
+
     await clientDeleteDoc(ingRef);
+
+    if (oldData) {
+      try {
+        const logCol = clientCollection(db, 'pdvs', pdvId, 'ingredient_logs');
+        await clientAddDoc(logCol, {
+          pdv_id: pdvId,
+          tipo: 'EXCLUSAO',
+          titulo: `Insumo Excluído: ${oldData.nome}`,
+          descricao: `Insumo removido da barraca. Estoque no momento da exclusão: ${oldData.quantidade_atual} ${oldData.unidade}.`,
+          insumos_alterados: [{
+            ingredient_id: ingredientId,
+            ingredient_nome: oldData.nome,
+            quantidade_anterior: oldData.quantidade_atual,
+            quantidade_alterada: -(oldData.quantidade_atual ?? 0),
+            quantidade_resultante: 0,
+            unidade: oldData.unidade || 'un',
+          }],
+          created_at: now,
+        });
+      } catch (e) {
+        console.warn('Erro ao registrar log de auditoria:', e);
+      }
+    }
+
     return { status: 'success', message: 'Insumo excluído com sucesso!' };
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Erro ao excluir insumo.';

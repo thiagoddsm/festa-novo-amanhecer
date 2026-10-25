@@ -176,6 +176,48 @@ export type RecipeItem = {
 };
 
 // ---------------------------------------------------------------------------
+// Log de Auditoria de Insumos (Firestore: /pdvs/{pdvId}/ingredient_logs/{logId})
+// ---------------------------------------------------------------------------
+
+export type IngredientLogType =
+  | 'SAIDA_VENDA'
+  | 'ESTORNO'
+  | 'ENTRADA_MANUAL'
+  | 'AJUSTE_MANUAL'
+  | 'CRIACAO'
+  | 'EDICAO'
+  | 'EXCLUSAO';
+
+export type IngredientLogItem = {
+  ingredient_id?: string;
+  ingredient_nome: string;
+  quantidade_anterior?: number;
+  quantidade_alterada: number;
+  quantidade_resultante?: number;
+  unidade?: string;
+};
+
+export type IngredientLogEntry = {
+  id: string;
+  pdv_id: string;
+  tipo: IngredientLogType;
+  titulo: string;
+  descricao?: string;
+  pedido_numero?: string;
+  order_id?: string;
+  transacao_id?: string;
+  cliente_nome?: string;
+  usuario?: string;
+  itens_vendidos?: {
+    nome: string;
+    quantidade: number;
+    observacoes?: string | null;
+  }[];
+  insumos_alterados: IngredientLogItem[];
+  created_at: Timestamp;
+};
+
+// ---------------------------------------------------------------------------
 // Menu Item (Firestore: /pdvs/{pdvId}/menuItems/{itemId})
 // ---------------------------------------------------------------------------
 
