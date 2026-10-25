@@ -443,25 +443,39 @@ export default function EditMenuSheet({
 
                             {editingItem.receita.length > 0 ? (
                               <div className="space-y-1.5">
-                                {editingItem.receita.map((r) => (
-                                  <div
-                                    key={r.ingredient_id}
-                                    className="flex items-center justify-between text-xs p-1.5 rounded bg-background border"
-                                  >
-                                    <span>
-                                      <strong>{r.quantidade}x</strong> {r.ingredient_nome}
-                                    </span>
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-6 w-6 text-destructive"
-                                      onClick={() => removeIngredientFromRecipe(true, r.ingredient_id)}
+                                {editingItem.receita.map((r) => {
+                                  const ing = ingredients.find((i) => i.id === r.ingredient_id);
+                                  const unit = r.unidade || ing?.unidade || 'un';
+                                  const stock = typeof ing?.quantidade_atual === 'number' ? ing.quantidade_atual : null;
+                                  const portions = stock !== null ? Math.floor(stock / (r.quantidade || 1)) : null;
+
+                                  return (
+                                    <div
+                                      key={r.ingredient_id}
+                                      className="flex items-center justify-between text-xs p-2 rounded bg-background border shadow-2xs"
                                     >
-                                      <X className="h-3.5 w-3.5" />
-                                    </Button>
-                                  </div>
-                                ))}
+                                      <div className="flex flex-col">
+                                        <span className="font-semibold text-foreground">
+                                          {r.quantidade} {unit} de {r.ingredient_nome}
+                                        </span>
+                                        {stock !== null && (
+                                          <span className="text-[11px] text-muted-foreground">
+                                            Estoque disponível: {stock} {unit} &bull; Rende {portions} {portions === 1 ? 'lanche' : 'lanches'}
+                                          </span>
+                                        )}
+                                      </div>
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-6 w-6 text-destructive hover:bg-destructive/10"
+                                        onClick={() => removeIngredientFromRecipe(true, r.ingredient_id)}
+                                      >
+                                        <X className="h-3.5 w-3.5" />
+                                      </Button>
+                                    </div>
+                                  );
+                                })}
                               </div>
                             ) : (
                               <p className="text-xs text-muted-foreground italic">
@@ -478,27 +492,33 @@ export default function EditMenuSheet({
                                 <SelectContent>
                                   {ingredients.map((ing) => (
                                     <SelectItem key={ing.id} value={ing.id} className="text-xs">
-                                      {ing.nome} ({ing.unidade})
+                                      {ing.nome} ({ing.quantidade_atual} {ing.unidade} em estoque)
                                     </SelectItem>
                                   ))}
                                 </SelectContent>
                               </Select>
-                              <Input
-                                type="number"
-                                min="1"
-                                className="h-8 w-16 text-xs"
-                                value={selectedIngQty}
-                                onChange={(e) => setSelectedIngQty(Number(e.target.value) || 1)}
-                              />
+                              <div className="flex items-center gap-1 shrink-0">
+                                <Input
+                                  type="number"
+                                  min="0.1"
+                                  step="any"
+                                  className="h-8 w-16 text-xs text-center font-medium"
+                                  value={selectedIngQty}
+                                  onChange={(e) => setSelectedIngQty(Number(e.target.value) || 1)}
+                                />
+                                <span className="text-xs font-semibold text-muted-foreground min-w-[24px]">
+                                  {ingredients.find((i) => i.id === selectedIngId)?.unidade || 'un'}
+                                </span>
+                              </div>
                               <Button
                                 type="button"
                                 size="sm"
                                 variant="secondary"
-                                className="h-8 text-xs font-semibold"
+                                className="h-8 text-xs font-semibold whitespace-nowrap"
                                 onClick={() => addIngredientToRecipe(true)}
                                 disabled={!selectedIngId}
                               >
-                                + Adicionar
+                                + Adicionar à Receita
                               </Button>
                             </div>
                           </div>
@@ -562,7 +582,10 @@ export default function EditMenuSheet({
 
                         {item.stock_control_type === 'INGREDIENTS' && item.receita && item.receita.length > 0 && (
                           <p className="text-xs text-muted-foreground">
-                            Usa: {item.receita.map((r) => `${r.quantidade}x ${r.ingredient_nome}`).join(', ')}
+                            Receita: {item.receita.map((r) => {
+                              const u = r.unidade || ingredients.find((i) => i.id === r.ingredient_id)?.unidade || 'un';
+                              return `${r.quantidade} ${u} de ${r.ingredient_nome}`;
+                            }).join(' • ')}
                           </p>
                         )}
                       </div>
@@ -742,25 +765,39 @@ export default function EditMenuSheet({
 
                     {newRecipe.length > 0 ? (
                       <div className="space-y-1.5">
-                        {newRecipe.map((r) => (
-                          <div
-                            key={r.ingredient_id}
-                            className="flex items-center justify-between text-xs p-1.5 rounded bg-background border"
-                          >
-                            <span>
-                              <strong>{r.quantidade}x</strong> {r.ingredient_nome}
-                            </span>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="h-6 w-6 text-destructive"
-                              onClick={() => removeIngredientFromRecipe(false, r.ingredient_id)}
+                        {newRecipe.map((r) => {
+                          const ing = ingredients.find((i) => i.id === r.ingredient_id);
+                          const unit = r.unidade || ing?.unidade || 'un';
+                          const stock = typeof ing?.quantidade_atual === 'number' ? ing.quantidade_atual : null;
+                          const portions = stock !== null ? Math.floor(stock / (r.quantidade || 1)) : null;
+
+                          return (
+                            <div
+                              key={r.ingredient_id}
+                              className="flex items-center justify-between text-xs p-2 rounded bg-background border shadow-2xs"
                             >
-                              <X className="h-3.5 w-3.5" />
-                            </Button>
-                          </div>
-                        ))}
+                              <div className="flex flex-col">
+                                <span className="font-semibold text-foreground">
+                                  {r.quantidade} {unit} de {r.ingredient_nome}
+                                </span>
+                                {stock !== null && (
+                                  <span className="text-[11px] text-muted-foreground">
+                                    Estoque disponível: {stock} {unit} &bull; Rende {portions} {portions === 1 ? 'lanche' : 'lanches'}
+                                  </span>
+                                )}
+                              </div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6 text-destructive hover:bg-destructive/10"
+                                onClick={() => removeIngredientFromRecipe(false, r.ingredient_id)}
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          );
+                        })}
                       </div>
                     ) : (
                       <p className="text-xs text-muted-foreground italic">
@@ -776,27 +813,33 @@ export default function EditMenuSheet({
                         <SelectContent>
                           {ingredients.map((ing) => (
                             <SelectItem key={ing.id} value={ing.id} className="text-xs">
-                              {ing.nome} ({ing.unidade})
+                              {ing.nome} ({ing.quantidade_atual} {ing.unidade} em estoque)
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
-                      <Input
-                        type="number"
-                        min="1"
-                        className="h-8 w-16 text-xs"
-                        value={selectedIngQty}
-                        onChange={(e) => setSelectedIngQty(Number(e.target.value) || 1)}
-                      />
+                      <div className="flex items-center gap-1 shrink-0">
+                        <Input
+                          type="number"
+                          min="0.1"
+                          step="any"
+                          className="h-8 w-16 text-xs text-center font-medium"
+                          value={selectedIngQty}
+                          onChange={(e) => setSelectedIngQty(Number(e.target.value) || 1)}
+                        />
+                        <span className="text-xs font-semibold text-muted-foreground min-w-[24px]">
+                          {ingredients.find((i) => i.id === selectedIngId)?.unidade || 'un'}
+                        </span>
+                      </div>
                       <Button
                         type="button"
                         size="sm"
                         variant="secondary"
-                        className="h-8 text-xs font-semibold"
+                        className="h-8 text-xs font-semibold whitespace-nowrap"
                         onClick={() => addIngredientToRecipe(false)}
                         disabled={!selectedIngId}
                       >
-                        + Adicionar
+                        + Adicionar à Receita
                       </Button>
                     </div>
                   </div>

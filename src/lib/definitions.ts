@@ -172,6 +172,7 @@ export type RecipeItem = {
   ingredient_id: string;
   ingredient_nome: string;
   quantidade: number;
+  unidade?: string;
 };
 
 // ---------------------------------------------------------------------------

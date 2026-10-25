@@ -581,6 +581,58 @@ export async function updateIngredientStock(
   }
 }
 
+const UpdateIngredientSchema = z.object({
+  pdvId: z.string().min(1, 'PDV ID é obrigatório.'),
+  ingredientId: z.string().min(1, 'ID do insumo é obrigatório.'),
+  nome: z.string().min(1, 'Nome do insumo é obrigatório.'),
+  quantidade_atual: z.coerce.number().min(0, 'Quantidade não pode ser negativa.'),
+  unidade: z.string().default('un'),
+  estoque_minimo: z.coerce.number().min(0).optional().nullable(),
+});
+
+export async function updateIngredient(
+  prevState: ActionState | undefined,
+  formData: FormData
+): Promise<ActionState> {
+  const db = getWebDb();
+  const validatedFields = UpdateIngredientSchema.safeParse({
+    pdvId: formData.get('pdvId'),
+    ingredientId: formData.get('ingredientId'),
+    nome: formData.get('nome'),
+    quantidade_atual: formData.get('quantidade_atual'),
+    unidade: formData.get('unidade') || 'un',
+    estoque_minimo: formData.get('estoque_minimo') || null,
+  });
+
+  if (!validatedFields.success) {
+    return { status: 'error', message: 'Dados do insumo inválidos.' };
+  }
+
+  try {
+    const { pdvId, ingredientId, nome, quantidade_atual, unidade, estoque_minimo } = validatedFields.data;
+    const ingRef = clientDoc(db, 'pdvs', pdvId, 'ingredients', ingredientId);
+
+    const updateData: Record<string, any> = {
+      nome: nome.trim(),
+      quantidade_atual: Math.max(0, quantidade_atual),
+      unidade: unidade.trim() || 'un',
+      updated_at: ClientTimestamp.now(),
+    };
+
+    if (typeof estoque_minimo === 'number') {
+      updateData.estoque_minimo = estoque_minimo;
+    } else {
+      updateData.estoque_minimo = clientDeleteField();
+    }
+
+    await clientUpdateDoc(ingRef, updateData);
+    return { status: 'success', message: `Insumo "${nome}" atualizado com sucesso!` };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Erro ao atualizar insumo.';
+    return { status: 'error', message: msg };
+  }
+}
+
 export async function deleteIngredient(pdvId: string, ingredientId: string): Promise<ActionState> {
   const db = getWebDb();
   try {
