@@ -17,7 +17,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { useFirestore } from '@/firebase';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
-import { Loader2, Plus, Trash2, PackagePlus, AlertTriangle, Check, RefreshCw } from 'lucide-react';
+import { Loader2, Plus, Trash2, PackagePlus, AlertTriangle, Check, RefreshCw, Info } from 'lucide-react';
 import type { Pdv, PdvIngredient } from '@/lib/definitions';
 import { addIngredient, updateIngredientStock, deleteIngredient } from '@/lib/actions';
 import {
@@ -169,6 +169,20 @@ export default function ManageIngredientsDialog({
         </DialogHeader>
 
         <div className="flex-1 overflow-hidden flex flex-col gap-4">
+          {/* Informational Guidance Box */}
+          <div className="rounded-lg border border-purple-200 bg-purple-50/70 p-3 text-xs text-purple-950 flex items-start gap-2.5">
+            <Info className="h-4 w-4 text-purple-600 mt-0.5 shrink-0" />
+            <div className="space-y-1">
+              <p className="font-semibold text-purple-900">Como funciona o consumo por produto (Ficha Técnica / Receita)?</p>
+              <p className="text-purple-800 leading-relaxed">
+                <strong>1. Aqui nos Insumos:</strong> cadastre o estoque bruto da barraca (ex: <em>180 fatias de Queijo</em>, <em>2000g de Bacon</em>).
+              </p>
+              <p className="text-purple-800 leading-relaxed">
+                <strong>2. No Cardápio (Editar Produto):</strong> ative <em>Controle de Estoque por Receita</em> e defina a porção gasta por lanche (ex: <em>2 fatias de queijo</em> e <em>40g de bacon</em> por hambúrguer). O sistema calcula sozinho a quantidade de porções possíveis e dá baixa automática em cada venda!
+              </p>
+            </div>
+          </div>
+
           <div className="flex items-center justify-between border-b pb-2">
             <span className="text-sm font-semibold text-muted-foreground">
               Insumos Cadastrados ({ingredients.length})
@@ -336,7 +350,7 @@ export default function ManageIngredientsDialog({
                 </Label>
                 <Input
                   id="ing-name"
-                  placeholder="Ex: Pão de Hambúrguer, Carne 150g"
+                  placeholder="Ex: Pão, Queijo, Bacon, Carne 150g"
                   value={nome}
                   onChange={(e) => setNome(e.target.value)}
                   required
@@ -367,7 +381,7 @@ export default function ManageIngredientsDialog({
                 </Label>
                 <Input
                   id="ing-unit"
-                  placeholder="un, fatia, g"
+                  placeholder="un, fatias, g"
                   value={unidade}
                   onChange={(e) => setUnidade(e.target.value)}
                   required
@@ -389,6 +403,32 @@ export default function ManageIngredientsDialog({
                   className="h-9 text-xs"
                 />
               </div>
+            </div>
+
+            {/* Quick unit pills */}
+            <div className="flex items-center gap-1.5 flex-wrap text-[11px] text-muted-foreground pt-0.5">
+              <span>Unidades comuns:</span>
+              {[
+                { label: 'Unidade (un)', val: 'un' },
+                { label: 'Fatias', val: 'fatias' },
+                { label: 'Gramas (g)', val: 'g' },
+                { label: 'Quilos (kg)', val: 'kg' },
+                { label: 'Mililitros (ml)', val: 'ml' },
+                { label: 'Porção', val: 'porção' },
+              ].map((p) => (
+                <button
+                  key={p.val}
+                  type="button"
+                  onClick={() => setUnidade(p.val)}
+                  className={`px-2 py-0.5 rounded-full border transition-colors ${
+                    unidade === p.val
+                      ? 'bg-primary text-primary-foreground border-primary font-medium'
+                      : 'bg-muted/60 hover:bg-muted text-foreground border-border'
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
             </div>
 
             <Button

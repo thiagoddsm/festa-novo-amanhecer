@@ -85,6 +85,16 @@ export default function PosPage() {
     setIsLoading(false);
   }, [user, allPdvs, user?.pdvId, user?.role]);
 
+  // Keep selectedPdv in sync with fresh updates from allPdvs
+  useEffect(() => {
+    if (selectedPdv && allPdvs) {
+      const fresh = allPdvs.find((p) => p.id === selectedPdv.id);
+      if (fresh && JSON.stringify(fresh) !== JSON.stringify(selectedPdv)) {
+        setSelectedPdv(fresh);
+      }
+    }
+  }, [allPdvs, selectedPdv]);
+
   // Reset selected PDV if it does not belong to the active tenant/event (only for admin roles)
   useEffect(() => {
     if (user?.role !== 'PDV' && selectedPdv) {

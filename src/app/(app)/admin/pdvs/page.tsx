@@ -93,7 +93,7 @@ export default function AdminPdvsPage() {
     if (!firestore) return;
 
     const pdvCol = collection(firestore, 'pdvs');
-    const unsubscribe = onSnapshot(pdvCol, async (snapshot) => {
+    const unsubscribe = onSnapshot(pdvCol, (snapshot) => {
       const allPdvs = snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as Pdv));
 
       // Filter strictly by current tenant and event
@@ -108,22 +108,33 @@ export default function AdminPdvsPage() {
 
       setPdvs(filtered);
       setIsLoading(false);
-
-      // Load menu items for each PDV
-      const itemsMap: Record<string, MenuItem[]> = {};
-      for (const p of filtered) {
-        try {
-          const menuSnap = await getDocs(collection(firestore, 'pdvs', p.id, 'menuItems'));
-          itemsMap[p.id] = menuSnap.docs.map((d) => ({ id: d.id, ...d.data() } as MenuItem));
-        } catch (e) {
-          itemsMap[p.id] = [];
-        }
-      }
-      setMenuItemsByPdv(itemsMap);
     });
 
     return () => unsubscribe();
   }, [firestore, currentTenant, currentEvent]);
+
+  // Real-time listener for menu items across all PDVs
+  useEffect(() => {
+    if (!firestore || !pdvs || pdvs.length === 0) return;
+
+    const unsubs: (() => void)[] = [];
+
+    pdvs.forEach((p) => {
+      const menuCol = collection(firestore, 'pdvs', p.id, 'menuItems');
+      const unsub = onSnapshot(menuCol, (snap) => {
+        const items = snap.docs.map((d) => ({ id: d.id, ...d.data() } as MenuItem));
+        setMenuItemsByPdv((prev) => ({
+          ...prev,
+          [p.id]: items,
+        }));
+      });
+      unsubs.push(unsub);
+    });
+
+    return () => {
+      unsubs.forEach((u) => u());
+    };
+  }, [firestore, pdvs]);
 
   // Create PDV
   const handleCreatePdv = async (e: React.FormEvent) => {

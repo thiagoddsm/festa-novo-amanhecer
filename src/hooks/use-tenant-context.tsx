@@ -69,7 +69,10 @@ export function TenantProvider({ children }: { children: ReactNode }) {
       const matchedTenant = visibleTenants.find((t) => t.id === savedTenantId) || visibleTenants[0] || null;
       
       setCurrentTenantState((prev) => {
-        if (prev && visibleTenants.some((t) => t.id === prev.id)) return prev;
+        if (prev) {
+          const fresh = visibleTenants.find((t) => t.id === prev.id);
+          if (fresh) return fresh;
+        }
         return matchedTenant;
       });
     });
@@ -107,7 +110,10 @@ export function TenantProvider({ children }: { children: ReactNode }) {
       const matchedEvent = visibleEvents.find((e) => e.id === savedEventId) || visibleEvents[0] || null;
 
       setCurrentEventState((prev) => {
-        if (prev && visibleEvents.some((e) => e.id === prev.id)) return prev;
+        if (prev) {
+          const fresh = visibleEvents.find((e) => e.id === prev.id);
+          if (fresh) return fresh;
+        }
         return matchedEvent;
       });
     });

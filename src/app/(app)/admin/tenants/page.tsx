@@ -80,31 +80,39 @@ export default function TenantsPage() {
   useEffect(() => {
     if (!firestore) return;
 
-    const unsubscribe = onSnapshot(collection(firestore, 'tenants'), async (snapshot) => {
+    const unsubscribe = onSnapshot(collection(firestore, 'tenants'), (snapshot) => {
       const tenantList = snapshot.docs.map(
         (d) => ({ id: d.id, ...d.data() } as Tenant),
       );
       setTenants(tenantList);
       setIsLoading(false);
-
-      // Load events for each tenant
-      const eventsMap: Record<string, TenantEvent[]> = {};
-      for (const t of tenantList) {
-        try {
-          const eventsSnap = await getDocs(collection(firestore, 'tenants', t.id, 'events'));
-          eventsMap[t.id] = eventsSnap.docs.map(
-            (ed) => ({ id: ed.id, ...ed.data() } as TenantEvent),
-          );
-        } catch (e) {
-          console.error(`Failed to load events for tenant ${t.id}`, e);
-          eventsMap[t.id] = [];
-        }
-      }
-      setEventsByTenant(eventsMap);
     });
 
     return () => unsubscribe();
   }, [firestore]);
+
+  // Real-time listener for events across all tenants
+  useEffect(() => {
+    if (!firestore || !tenants || tenants.length === 0) return;
+
+    const unsubs: (() => void)[] = [];
+
+    tenants.forEach((t) => {
+      const evCol = collection(firestore, 'tenants', t.id, 'events');
+      const unsub = onSnapshot(evCol, (snap) => {
+        const events = snap.docs.map((ed) => ({ id: ed.id, ...ed.data() } as TenantEvent));
+        setEventsByTenant((prev) => ({
+          ...prev,
+          [t.id]: events,
+        }));
+      });
+      unsubs.push(unsub);
+    });
+
+    return () => {
+      unsubs.forEach((u) => u());
+    };
+  }, [firestore, tenants]);
 
   // Create Organization
   const handleCreateOrg = async (e: React.FormEvent) => {

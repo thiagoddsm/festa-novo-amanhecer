@@ -248,6 +248,7 @@ export default function EditMenuSheet({
       ingredient_id: ingObj.id,
       ingredient_nome: ingObj.nome,
       quantidade: selectedIngQty || 1,
+      unidade: ingObj.unidade || 'un',
     };
 
     if (isEditing && editingItem) {
