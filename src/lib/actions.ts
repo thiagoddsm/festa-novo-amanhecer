@@ -31,6 +31,7 @@ import {
   limit as clientLimit,
   runTransaction as clientRunTransaction,
   Timestamp as ClientTimestamp,
+  deleteField as clientDeleteField,
 } from 'firebase/firestore';
 import { firebaseConfig } from '@/firebase/config';
 
@@ -543,14 +544,17 @@ export async function addIngredient(prevState: ActionState | undefined, formData
   try {
     const { pdvId, nome, quantidade_atual, unidade, estoque_minimo } = validatedFields.data;
     const ingCol = clientCollection(db, 'pdvs', pdvId, 'ingredients');
-    await clientAddDoc(ingCol, {
+    const ingDocData: Record<string, any> = {
       pdv_id: pdvId,
       nome,
       quantidade_atual,
       unidade,
-      estoque_minimo: estoque_minimo ?? null,
       updated_at: ClientTimestamp.now(),
-    });
+    };
+    if (typeof estoque_minimo === 'number') {
+      ingDocData.estoque_minimo = estoque_minimo;
+    }
+    await clientAddDoc(ingCol, ingDocData);
     return { status: 'success', message: 'Insumo adicionado com sucesso!' };
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Erro ao adicionar insumo.';
@@ -632,20 +636,24 @@ export async function addMenuItem( prevState: ActionState | undefined, formData:
       }
     }
 
-    const itemDocData: Partial<MenuItem> = {
+    const itemDocData: Record<string, any> = {
       nome,
       preco_centavos,
       ingredientes: ingredientesList,
       stock_control_type: (stock_control_type as StockControlType) || 'NONE',
-      ...(stock_control_type === 'PRODUCT' ? {
-        estoque_atual: estoque_atual ?? 0,
-        estoque_minimo: estoque_minimo ?? undefined,
-      } : {}),
-      ...(stock_control_type === 'INGREDIENTS' ? {
-        receita: parsedReceita || [],
-        estoque_minimo: estoque_minimo ?? undefined,
-      } : {}),
     };
+
+    if (stock_control_type === 'PRODUCT') {
+      itemDocData.estoque_atual = typeof estoque_atual === 'number' ? estoque_atual : 0;
+      if (typeof estoque_minimo === 'number') {
+        itemDocData.estoque_minimo = estoque_minimo;
+      }
+    } else if (stock_control_type === 'INGREDIENTS') {
+      itemDocData.receita = parsedReceita || [];
+      if (typeof estoque_minimo === 'number') {
+        itemDocData.estoque_minimo = estoque_minimo;
+      }
+    }
 
     const menuItemsCollection = clientCollection(db, 'pdvs', pdvId, 'menuItems');
     await clientAddDoc(menuItemsCollection, itemDocData);
@@ -689,24 +697,34 @@ export async function updateMenuItem(prevState: ActionState | undefined, formDat
       }
     }
 
-    const itemDocData: Partial<MenuItem> = {
+    const itemDocData: Record<string, any> = {
       nome,
       preco_centavos,
       ingredientes: ingredientesList,
       stock_control_type: (stock_control_type as StockControlType) || 'NONE',
-      ...(stock_control_type === 'PRODUCT' ? {
-        estoque_atual: estoque_atual ?? 0,
-        estoque_minimo: estoque_minimo ?? undefined,
-      } : {
-        estoque_atual: undefined,
-      }),
-      ...(stock_control_type === 'INGREDIENTS' ? {
-        receita: parsedReceita || [],
-        estoque_minimo: estoque_minimo ?? undefined,
-      } : {
-        receita: undefined,
-      }),
     };
+
+    if (stock_control_type === 'PRODUCT') {
+      itemDocData.estoque_atual = typeof estoque_atual === 'number' ? estoque_atual : 0;
+      if (typeof estoque_minimo === 'number') {
+        itemDocData.estoque_minimo = estoque_minimo;
+      } else {
+        itemDocData.estoque_minimo = clientDeleteField();
+      }
+      itemDocData.receita = clientDeleteField();
+    } else if (stock_control_type === 'INGREDIENTS') {
+      itemDocData.receita = parsedReceita || [];
+      if (typeof estoque_minimo === 'number') {
+        itemDocData.estoque_minimo = estoque_minimo;
+      } else {
+        itemDocData.estoque_minimo = clientDeleteField();
+      }
+      itemDocData.estoque_atual = clientDeleteField();
+    } else {
+      itemDocData.estoque_atual = clientDeleteField();
+      itemDocData.estoque_minimo = clientDeleteField();
+      itemDocData.receita = clientDeleteField();
+    }
 
     const itemRef = clientDoc(db, 'pdvs', pdvId, 'menuItems', itemId);
     await clientUpdateDoc(itemRef, itemDocData);
