@@ -122,9 +122,9 @@ export default function CardsPage() {
     const cardIds = selectedData.map(card => card.id);
     const result = await deleteCards(cardIds);
     toast({
-        title: result.status === 'success' ? 'Sucesso!' : 'Erro!',
+        title: result?.status === 'success' ? 'Sucesso!' : 'Erro!',
         description: result.message,
-        variant: result.status === 'success' ? 'default' : 'destructive'
+        variant: result?.status === 'success' ? 'default' : 'destructive'
     });
   }
 

@@ -70,7 +70,7 @@ export default function EventWhatsappDialog({
   // Sync state when event prop updates
   useEffect(() => {
     if (event.whatsapp) {
-      setStatus(event.whatsapp.status || 'DISCONNECTED');
+      setStatus(event?.whatsapp?.status || 'DISCONNECTED');
       setPhoneNumber(event.whatsapp.phoneNumber);
       setInstanceName(event.whatsapp.instanceName);
       if (event.whatsapp.instanceName) {
@@ -105,7 +105,7 @@ export default function EventWhatsappDialog({
       pollIntervalRef.current = setInterval(async () => {
         try {
           const res = await checkEventWhatsappStatus(tenantId, event.id, targetInstance, targetToken);
-          if (res.status === 'CONNECTED') {
+          if (res?.status === 'CONNECTED') {
             setStatus('CONNECTED');
             setPhoneNumber(res.phoneNumber);
             setQrBase64(null);
@@ -116,7 +116,7 @@ export default function EventWhatsappDialog({
               description: `O evento ${event.name} agora enviará comprovantes e QR Codes diretamente.`,
             });
             onStatusChange?.();
-          } else if (res.status === 'DISCONNECTED' && status === 'CONNECTED') {
+          } else if (res?.status === 'DISCONNECTED' && status === 'CONNECTED') {
             setStatus('DISCONNECTED');
             setPhoneNumber(undefined);
             stopPolling();
@@ -186,7 +186,7 @@ export default function EventWhatsappDialog({
     setIsDisconnecting(true);
     try {
       const res = await disconnectEventWhatsapp(tenantId, event.id, inst, customToken.trim() || undefined);
-      if (res.status === 'success') {
+      if (res?.status === 'success') {
         setStatus('DISCONNECTED');
         setPhoneNumber(undefined);
         setQrBase64(null);

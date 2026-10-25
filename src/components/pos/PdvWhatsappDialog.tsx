@@ -68,7 +68,7 @@ export default function PdvWhatsappDialog({
   // Sync state when pdv prop updates
   useEffect(() => {
     if (pdv.whatsapp) {
-      setStatus(pdv.whatsapp.status || 'DISCONNECTED');
+      setStatus(pdv?.whatsapp?.status || 'DISCONNECTED');
       setPhoneNumber(pdv.whatsapp.phoneNumber);
       setInstanceName(pdv.whatsapp.instanceName);
       if (pdv.whatsapp.instanceName) {
@@ -103,7 +103,7 @@ export default function PdvWhatsappDialog({
       pollIntervalRef.current = setInterval(async () => {
         try {
           const res = await checkPdvWhatsappStatus(pdv.id, targetInstance, targetToken);
-          if (res.status === 'CONNECTED') {
+          if (res?.status === 'CONNECTED') {
             setStatus('CONNECTED');
             setPhoneNumber(res.phoneNumber);
             setQrBase64(null);
@@ -114,7 +114,7 @@ export default function PdvWhatsappDialog({
               description: `A barraca ${pdv.nome} agora enviará notificações diretamente.`,
             });
             onStatusChange?.();
-          } else if (res.status === 'DISCONNECTED' && status === 'CONNECTED') {
+          } else if (res?.status === 'DISCONNECTED' && status === 'CONNECTED') {
             setStatus('DISCONNECTED');
             setPhoneNumber(undefined);
             stopPolling();
@@ -182,7 +182,7 @@ export default function PdvWhatsappDialog({
     setIsDisconnecting(true);
     try {
       const res = await disconnectPdvWhatsapp(pdv.id, instanceName);
-      if (res.status === 'success') {
+      if (res?.status === 'success') {
         setStatus('DISCONNECTED');
         setPhoneNumber(undefined);
         setQrBase64(null);

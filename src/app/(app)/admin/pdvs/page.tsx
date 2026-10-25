@@ -139,7 +139,7 @@ export default function AdminPdvsPage() {
       if (currentEvent) formData.append('event_id', currentEvent.id);
 
       const result = await createPdv(undefined, formData);
-      if (result.status === 'success') {
+      if (result?.status === 'success') {
         toast({ title: 'Sucesso!', description: result.message });
         setNewPdvName('');
         setNewPdvIcon('geral');
@@ -162,7 +162,7 @@ export default function AdminPdvsPage() {
     setIsUpdatingPdv(true);
     try {
       const result = await updatePdv(editingPdv.id, editPdvName.trim(), editPdvIcon);
-      if (result.status === 'success') {
+      if (result?.status === 'success') {
         toast({ title: 'Sucesso!', description: result.message });
         setEditPdvOpen(false);
         setEditingPdv(null);
@@ -180,7 +180,7 @@ export default function AdminPdvsPage() {
   const handleDeletePdv = async (pdvId: string) => {
     try {
       const result = await deletePdv(pdvId);
-      if (result.status === 'success') {
+      if (result?.status === 'success') {
         toast({ title: 'Excluído!', description: result.message });
       } else {
         toast({ variant: 'destructive', title: 'Erro', description: result.message });
@@ -203,7 +203,7 @@ export default function AdminPdvsPage() {
 
     startSeeding(async () => {
       const result = await seedDefaultPdvs(currentTenant.id, currentEvent.id);
-      if (result.status === 'success') {
+      if (result?.status === 'success') {
         toast({ title: 'Barracas Criadas!', description: result.message });
       } else {
         toast({ variant: 'destructive', title: 'Erro', description: result.message });

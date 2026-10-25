@@ -144,9 +144,9 @@ export default function EditMenuSheet({
     startTransition(async () => {
       const result = await deleteMenuItem(pdv.id, itemId);
       toast({
-        title: result.status === 'success' ? 'Sucesso!' : 'Erro!',
+        title: result?.status === 'success' ? 'Sucesso!' : 'Erro!',
         description: result.message,
-        variant: result.status === 'success' ? 'default' : 'destructive',
+        variant: result?.status === 'success' ? 'default' : 'destructive',
       });
     });
   };
@@ -174,7 +174,7 @@ export default function EditMenuSheet({
 
     startTransition(async () => {
       const res = await updateMenuItem(undefined, fd);
-      if (res.status === 'success') {
+      if (res?.status === 'success') {
         toast({ title: 'Sucesso!', description: res.message });
         setEditingItem(null);
       } else {
@@ -205,7 +205,7 @@ export default function EditMenuSheet({
 
     startTransition(async () => {
       const res = await addMenuItem(undefined, fd);
-      if (res.status === 'success') {
+      if (res?.status === 'success') {
         toast({ title: 'Sucesso!', description: res.message });
         setNewName('');
         setNewPrice('');

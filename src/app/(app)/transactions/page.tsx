@@ -106,9 +106,9 @@ const getTipoVariant = (tipo: string) => {
         startTransition(async () => {
             const result = await reverseTransaction(transaction.id, user?.name || 'Admin');
             toast({
-                title: result.status === 'success' ? 'Sucesso!' : 'Erro!',
+                title: result?.status === 'success' ? 'Sucesso!' : 'Erro!',
                 description: result.message,
-                variant: result.status === 'success' ? 'default' : 'destructive'
+                variant: result?.status === 'success' ? 'default' : 'destructive'
             });
         });
     }
@@ -323,9 +323,9 @@ export default function TransactionsPage() {
     const transactionIds = selectedData.map(t => t.id);
     const result = await deleteTransactions(transactionIds);
      toast({
-        title: result.status === 'success' ? 'Sucesso!' : 'Erro!',
+        title: result?.status === 'success' ? 'Sucesso!' : 'Erro!',
         description: result.message,
-        variant: result.status === 'success' ? 'default' : 'destructive'
+        variant: result?.status === 'success' ? 'default' : 'destructive'
     });
   }
 

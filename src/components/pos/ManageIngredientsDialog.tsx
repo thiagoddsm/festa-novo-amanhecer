@@ -104,7 +104,7 @@ export default function ManageIngredientsDialog({
     startTransition(async () => {
       const res = await addIngredient(undefined, fd);
       setIsAdding(false);
-      if (res.status === 'success') {
+      if (res?.status === 'success') {
         toast({ title: 'Sucesso!', description: res.message });
         setNome('');
         setQuantidade(100);
@@ -120,7 +120,7 @@ export default function ManageIngredientsDialog({
     startTransition(async () => {
       const novo = (ing.quantidade_atual || 0) + amount;
       const res = await updateIngredientStock(pdv.id, ing.id, novo);
-      if (res.status === 'success') {
+      if (res?.status === 'success') {
         toast({ title: 'Estoque Atualizado', description: `+${amount} ${ing.unidade} adicionados a ${ing.nome}.` });
       } else {
         toast({ variant: 'destructive', title: 'Erro ao atualizar', description: res.message });
@@ -136,7 +136,7 @@ export default function ManageIngredientsDialog({
     startTransition(async () => {
       const res = await updateIngredientStock(pdv.id, ing.id, Number(quickStockVal));
       setEditingStockId(null);
-      if (res.status === 'success') {
+      if (res?.status === 'success') {
         toast({ title: 'Sucesso!', description: `Estoque de ${ing.nome} atualizado para ${quickStockVal}.` });
       } else {
         toast({ variant: 'destructive', title: 'Erro', description: res.message });
@@ -147,7 +147,7 @@ export default function ManageIngredientsDialog({
   const handleDelete = (ingredientId: string) => {
     startTransition(async () => {
       const res = await deleteIngredient(pdv.id, ingredientId);
-      if (res.status === 'success') {
+      if (res?.status === 'success') {
         toast({ title: 'Insumo Excluído', description: res.message });
       } else {
         toast({ variant: 'destructive', title: 'Erro ao excluir', description: res.message });

@@ -104,7 +104,7 @@ const OrderCard = ({ order }: { order: Order }) => {
         
         startTransition(async () => {
             const result = await updateOrderStatus(order.id, newStatus);
-            if (result.status === 'error') {
+            if (result?.status === 'error') {
                 toast({
                     variant: 'destructive',
                     title: 'Erro ao atualizar pedido',
@@ -125,7 +125,7 @@ const OrderCard = ({ order }: { order: Order }) => {
         end: (item, monitor) => {
             const dropResult = monitor.getDropResult<{ status: OrderStatus }>();
             if (item && dropResult) {
-                handleStatusUpdate(dropResult.status);
+                handleStatusUpdate(dropResult?.status);
             }
         },
         collect: monitor => ({

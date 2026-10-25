@@ -48,7 +48,7 @@ export default function PdvSelector({ pdvs, operatorCounts = {}, onPdvSelect }: 
     setIsUpdatingIcon(true);
     try {
       const res = await updatePdvIcon(iconPickerPdv.id, newIconId);
-      if (res.status === 'success') {
+      if (res?.status === 'success') {
         toast({
           title: 'Símbolo atualizado!',
           description: `Novo ícone salvo para "${iconPickerPdv.nome}".`,
