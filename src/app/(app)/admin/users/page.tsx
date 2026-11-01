@@ -4,20 +4,11 @@ import {
   useState,
   useEffect,
   useMemo,
-  memo,
-  useCallback,
-  useRef,
 } from 'react';
 import { useFirestore } from '@/firebase';
 import {
   collection,
   onSnapshot,
-  getDocs,
-  doc,
-  updateDoc,
-  arrayUnion,
-  arrayRemove,
-  deleteField,
 } from 'firebase/firestore';
 import {
   Card,
@@ -29,21 +20,21 @@ import {
 import { DataTable } from '@/components/ui/data-table';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { useToast } from '@/hooks/use-toast';
-import { UserCog, X, Plus, CheckCircle, ChevronDown, ChevronRight, AlertTriangle } from 'lucide-react';
-import type { UserProfile, Pdv, Tenant, TenantEvent, TenantRole, UserRole } from '@/lib/definitions';
+  UserCog,
+  Building2,
+  Calendar,
+  Store,
+  CreditCard,
+  Shield,
+  Sparkles,
+  AlertTriangle,
+  UserX,
+} from 'lucide-react';
+import type { UserProfile, Pdv, Tenant, TenantEvent, UserRole } from '@/lib/definitions';
 import { type ColumnDef } from '@tanstack/react-table';
-import type { Firestore } from 'firebase/firestore';
 import CreateUserDialog from '@/components/admin/CreateUserDialog';
-import { useTenant } from '@/hooks/use-tenant-context';
+import EditUserAccessDialog from '@/components/admin/EditUserAccessDialog';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -53,507 +44,37 @@ const ROLE_LABELS: Record<UserRole, string> = {
   SUPERADMIN: 'Super Admin',
   ADMIN_ORGANIZACAO: 'Admin Organização',
   ADMIN_EVENTO: 'Admin Evento',
-  CAIXA: 'Caixa',
-  PDV: 'PDV',
-  VISITANTE: 'Visitante',
+  CAIXA: 'Caixa Central',
+  PDV: 'Operador de Barraca (PDV)',
+  VISITANTE: 'Visitante (Aguardando)',
 };
 
-const ROLE_BADGE_CLASS: Record<UserRole, string> = {
-  SUPERADMIN: 'bg-purple-100 text-purple-800 border-purple-300',
-  ADMIN_ORGANIZACAO: 'bg-blue-100 text-blue-800 border-blue-300',
-  ADMIN_EVENTO: 'bg-cyan-100 text-cyan-800 border-cyan-300',
-  CAIXA: 'bg-green-100 text-green-800 border-green-300',
-  PDV: 'bg-orange-100 text-orange-800 border-orange-300',
-  VISITANTE: 'bg-yellow-100 text-yellow-800 border-yellow-300',
+const ROLE_BADGE_STYLE: Record<UserRole, { class: string; icon: any }> = {
+  SUPERADMIN: { class: 'bg-purple-100 text-purple-800 border-purple-300', icon: Shield },
+  ADMIN_ORGANIZACAO: { class: 'bg-blue-100 text-blue-800 border-blue-300', icon: Shield },
+  ADMIN_EVENTO: { class: 'bg-cyan-100 text-cyan-800 border-cyan-300', icon: Calendar },
+  CAIXA: { class: 'bg-green-100 text-green-800 border-green-300', icon: CreditCard },
+  PDV: { class: 'bg-orange-100 text-orange-800 border-orange-300', icon: Store },
+  VISITANTE: { class: 'bg-amber-100 text-amber-800 border-amber-300', icon: UserX },
 };
 
-const TENANT_ROLE_LABELS: Record<TenantRole, string> = {
-  ADMIN: 'Admin',
-  OPERADOR: 'Operador',
-  CAIXA: 'Caixa',
-  PDV: 'PDV',
-};
+function UserRoleBadge({ role }: { role: UserRole }) {
+  const meta = ROLE_BADGE_STYLE[role] || { class: 'bg-muted text-foreground', icon: Shield };
+  const Icon = meta.icon;
+  const label = role === 'VISITANTE' ? 'Aguardando Aprovação' : (ROLE_LABELS[role] || role);
 
-function RoleBadge({ role }: { role: UserRole }) {
-  const label =
-    role === 'VISITANTE' ? 'Aguardando Aprovação' : (ROLE_LABELS[role] ?? role);
   return (
     <span
-      className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${ROLE_BADGE_CLASS[role] ?? ''}`}
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${meta.class}`}
     >
+      <Icon className="h-3 w-3 shrink-0" />
       {label}
     </span>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Lazy event loading cache (module-level, keyed by tenantId)
-// ---------------------------------------------------------------------------
-const eventCache: Record<string, TenantEvent[]> = {};
-
-async function loadEvents(firestore: Firestore, tenantId: string): Promise<TenantEvent[]> {
-  if (eventCache[tenantId]) return eventCache[tenantId];
-  const snap = await getDocs(collection(firestore, 'tenants', tenantId, 'events'));
-  const events = snap.docs.map((d) => ({ id: d.id, ...d.data() } as TenantEvent));
-  if (events.length > 0) eventCache[tenantId] = events;
-  return events;
-}
-
-// ---------------------------------------------------------------------------
-// VisitanteAlert — show pending request and approve button
-// ---------------------------------------------------------------------------
-const VisitanteAlert = memo(
-  ({ user, tenants, pdvs }: { user: UserProfile; tenants: Tenant[]; pdvs: Pdv[] }) => {
-    const firestore = useFirestore();
-    const { toast } = useToast();
-    const [isApproving, setIsApproving] = useState(false);
-    const [eventName, setEventName] = useState<string | null>(null);
-
-    const requestedTenant = tenants.find((t) => t.id === user.requestedTenantId);
-    const requestedPdv = user.requestedPdvId ? pdvs.find((p) => p.id === user.requestedPdvId) : null;
-
-    useEffect(() => {
-      if (!firestore || !user.requestedTenantId || !user.requestedEventId) return;
-
-      loadEvents(firestore, user.requestedTenantId)
-        .then((events) => {
-          const found = events.find((e) => e.id === user.requestedEventId);
-          if (found) {
-            setEventName(found.name);
-          }
-        })
-        .catch((err) => console.warn('Erro ao carregar nome do evento solicitado:', err));
-    }, [firestore, user.requestedTenantId, user.requestedEventId]);
-
-    if (!user.requestedTenantId) return null;
-
-    const handleApprove = async () => {
-      if (isApproving) return;
-      setIsApproving(true);
-      try {
-        const tenantId = user.requestedTenantId!;
-        const eventId = user.requestedEventId;
-        const reqRole = user.requestedRole;
-
-        let newGlobalRole: UserRole = 'CAIXA';
-        let newTenantRole: TenantRole = 'CAIXA';
-
-        if (reqRole === 'PDV') {
-          newGlobalRole = 'PDV';
-          newTenantRole = 'PDV';
-        } else if (reqRole === 'CAIXA') {
-          newGlobalRole = 'CAIXA';
-          newTenantRole = 'CAIXA';
-        } else {
-          // Fallback legacy
-          newGlobalRole = eventId ? 'ADMIN_EVENTO' : 'ADMIN_ORGANIZACAO';
-          newTenantRole = eventId ? 'CAIXA' : 'ADMIN';
-        }
-
-        const tenantEntry = eventId
-          ? { role: newTenantRole, allowedEventIds: [eventId] }
-          : { role: newTenantRole };
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const updatePayload: Record<string, any> = {
-          role: newGlobalRole,
-          [`tenants.${tenantId}`]: tenantEntry,
-          requestedTenantId: deleteField(),
-          requestedEventId: deleteField(),
-          requestedRole: deleteField(),
-          requestedPdvId: deleteField(),
-        };
-
-        if (reqRole === 'PDV' && user.requestedPdvId) {
-          updatePayload.pdvId = user.requestedPdvId;
-        }
-
-        await updateDoc(doc(firestore, 'users', user.id), updatePayload);
-        toast({ title: 'Acesso aprovado!', description: `${user.name} aprovado como ${ROLE_LABELS[newGlobalRole] || newGlobalRole}.` });
-      } catch (err) {
-        console.error(err);
-        toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível aprovar o acesso.' });
-      } finally {
-        setIsApproving(false);
-      }
-    };
-
-    return (
-      <div className="flex flex-col gap-1 mt-1 p-2.5 rounded-lg bg-amber-50/80 border border-amber-200 shadow-2xs">
-        <div className="flex items-center gap-1.5 text-amber-800 text-xs font-bold">
-          <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
-          Solicitação de Cadastro Pendente
-        </div>
-        {requestedTenant && (
-          <div className="text-xs text-amber-900 space-y-0.5">
-            <p>
-              Org: <strong>{requestedTenant.name}</strong>
-              {user.requestedEventId && (
-                <>
-                  {' • '}Evento: <strong>{eventName || 'Carregando...'}</strong>
-                </>
-              )}
-            </p>
-            <p className="flex items-center gap-1.5 pt-0.5">
-              <span>Função Desejada:</span>
-              <span className="font-bold text-primary px-1.5 py-0.2 bg-background rounded border border-border">
-                {user.requestedRole === 'PDV' ? 'PDV (Barraca)' : 'Caixa Central'}
-              </span>
-              {user.requestedRole === 'PDV' && (
-                <span className="text-muted-foreground text-[11px]">
-                  {requestedPdv ? `(${requestedPdv.nome})` : user.requestedPdvId ? `(ID: ${user.requestedPdvId})` : '(Nenhuma barraca pré-selecionada)'}
-                </span>
-              )}
-            </p>
-          </div>
-        )}
-        <Button
-          size="sm"
-          variant="outline"
-          className="self-start text-green-700 border-green-500 hover:bg-green-100/60 text-xs h-7 mt-1.5 font-bold shadow-2xs"
-          onClick={handleApprove}
-          disabled={isApproving}
-        >
-          <CheckCircle className="h-3.5 w-3.5 mr-1" />
-          {isApproving ? 'Aprovando…' : `Aprovar como ${user.requestedRole === 'PDV' ? 'PDV' : 'Caixa'}`}
-        </Button>
-      </div>
-    );
-  },
-);
-VisitanteAlert.displayName = 'VisitanteAlert';
-
-// ---------------------------------------------------------------------------
-// TenantAccessPanel — collapsible per-user tenant management
-// ---------------------------------------------------------------------------
-type TenantAccessPanelProps = {
-  user: UserProfile;
-  tenants: Tenant[];
-  eventsByTenant: Record<string, TenantEvent[]>;
-};
-
-const TenantAccessPanel = memo(({ user, tenants, eventsByTenant }: TenantAccessPanelProps) => {
-  const firestore = useFirestore();
-  const { toast } = useToast();
-  const [expanded, setExpanded] = useState(false);
-  const [pendingTenant, setPendingTenant] = useState<string | null>(null);
-  const [addEventSelect, setAddEventSelect] = useState<Record<string, string>>({});
-  const [newTenantId, setNewTenantId] = useState('');
-
-  const userTenantIds = Object.keys(user.tenants ?? {});
-  const unlinkedTenants = tenants.filter((t) => !userTenantIds.includes(t.id));
-
-  const handleExpand = () => setExpanded((v) => !v);
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const mutate = useCallback(async (tenantId: string, payload: Record<string, any>, successMsg: string) => {
-    setPendingTenant(tenantId);
-    try {
-      await updateDoc(doc(firestore, 'users', user.id), payload);
-      toast({ title: 'Sucesso!', description: successMsg });
-    } catch (err) {
-      console.error(err);
-      toast({ variant: 'destructive', title: 'Erro', description: 'Operação falhou.' });
-    } finally {
-      setPendingTenant(null);
-    }
-  }, [firestore, user.id, toast]);
-
-  const changeTenantRole = (tenantId: string, newRole: TenantRole) =>
-    mutate(tenantId, { [`tenants.${tenantId}.role`]: newRole }, `Papel → ${TENANT_ROLE_LABELS[newRole]}`);
-
-  const removeTenant = (tenantId: string) =>
-    mutate(tenantId, { [`tenants.${tenantId}`]: deleteField() }, 'Acesso à organização revogado.');
-
-  const addEvent = async (tenantId: string, eventId: string) => {
-    if (!eventId) return;
-    await mutate(tenantId, { [`tenants.${tenantId}.allowedEventIds`]: arrayUnion(eventId) }, `Evento ${eventId} liberado.`);
-    setAddEventSelect((prev) => ({ ...prev, [tenantId]: '' }));
-  };
-
-  const removeEvent = (tenantId: string, eventId: string) =>
-    mutate(tenantId, { [`tenants.${tenantId}.allowedEventIds`]: arrayRemove(eventId) }, `Evento ${eventId} removido.`);
-
-  const addNewTenant = async () => {
-    if (!newTenantId) return;
-    const tid = newTenantId;
-    setNewTenantId('');
-    await mutate(tid, { [`tenants.${tid}`]: { role: 'OPERADOR' } }, 'Organização vinculada.');
-  };
-
-  if (!user.tenants && unlinkedTenants.length === 0) return null;
-
-  return (
-    <div className="mt-2">
-      <button
-        className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-        onClick={handleExpand}
-        type="button"
-      >
-        {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-        Acesso por Organização ({userTenantIds.length})
-      </button>
-
-      {expanded && (
-        <div className="mt-2 flex flex-col gap-2">
-          {userTenantIds.map((tenantId) => {
-            const access = user.tenants![tenantId];
-            const tenantName = tenants.find((t) => t.id === tenantId)?.name ?? tenantId;
-            const events = eventsByTenant[tenantId] ?? [];
-            const allowedIds = access.allowedEventIds ?? [];
-            const availableEvents = events.filter((e) => !allowedIds.includes(e.id));
-            const isBusy = pendingTenant === tenantId;
-
-            return (
-              <div key={tenantId} className="rounded-md border p-2 bg-muted/30 flex flex-col gap-2">
-                {/* Header */}
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-medium text-sm">{tenantName}</span>
-                  <button
-                    type="button"
-                    className="text-muted-foreground hover:text-destructive p-1 rounded hover:bg-muted"
-                    onClick={() => removeTenant(tenantId)}
-                    title="Remover organização"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-
-                {/* Tenant role */}
-                <Select
-                  value={access.role}
-                  onValueChange={(v) => changeTenantRole(tenantId, v as TenantRole)}
-                >
-                  <SelectTrigger className="h-7 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(Object.keys(TENANT_ROLE_LABELS) as TenantRole[]).map((r) => (
-                      <SelectItem key={r} value={r} className="text-xs">
-                        {TENANT_ROLE_LABELS[r]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                {/* Event chips */}
-                {allowedIds.length > 0 && (
-                  <div className="flex flex-wrap gap-1">
-                    {allowedIds.map((eid) => {
-                      const evName = events.find((e) => e.id === eid)?.name ?? eid;
-                      return (
-                        <span
-                          key={eid}
-                          className="inline-flex items-center gap-1 rounded-full bg-blue-100 text-blue-800 text-xs px-2 py-0.5 border border-blue-200"
-                        >
-                          {evName}
-                          <button
-                            type="button"
-                            className="hover:text-destructive"
-                            onClick={() => removeEvent(tenantId, eid)}
-                          >
-                            <X className="h-3 w-3" />
-                          </button>
-                        </span>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* Add event */}
-                <div className="flex items-center gap-1">
-                  <Select
-                    value={addEventSelect[tenantId] ?? ''}
-                    onValueChange={(v) => {
-                      setAddEventSelect((prev) => ({ ...prev, [tenantId]: v }));
-                    }}
-                  >
-                    <SelectTrigger className="h-7 text-xs flex-1">
-                      <SelectValue placeholder="+ Liberar Evento Específico" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {availableEvents.length === 0 ? (
-                        <SelectItem value="__none__" disabled>
-                          Nenhum evento disponível
-                        </SelectItem>
-                      ) : (
-                        availableEvents.map((e) => (
-                          <SelectItem key={e.id} value={e.id} className="text-xs">
-                            {e.name}
-                          </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7 text-xs px-2"
-                    onClick={() => addEvent(tenantId, addEventSelect[tenantId] ?? '')}
-                    disabled={!addEventSelect[tenantId]}
-                  >
-                    <Plus className="h-3 w-3" />
-                  </Button>
-                </div>
-              </div>
-            );
-          })}
-
-          {/* Link new tenant */}
-          {unlinkedTenants.length > 0 && (
-            <div className="flex items-center gap-1 mt-1">
-              <Select value={newTenantId} onValueChange={setNewTenantId}>
-                <SelectTrigger className="h-7 text-xs flex-1">
-                  <SelectValue placeholder="+ Vincular Nova Organização" />
-                </SelectTrigger>
-                <SelectContent>
-                  {unlinkedTenants.map((t) => (
-                    <SelectItem key={t.id} value={t.id} className="text-xs">
-                      {t.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-7 text-xs px-2"
-                onClick={addNewTenant}
-                disabled={!newTenantId}
-              >
-                <Plus className="h-3 w-3" />
-              </Button>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-});
-TenantAccessPanel.displayName = 'TenantAccessPanel';
-
-// ---------------------------------------------------------------------------
-// GlobalRoleManager — optimistic global role selector + PDV assignment
-// ---------------------------------------------------------------------------
-const GlobalRoleManager = memo(({ user, pdvs, allPdvs }: { user: UserProfile; pdvs: Pdv[]; allPdvs: Pdv[] }) => {
-  const [localRole, setLocalRole] = useState<UserRole>(user.role);
-  const [localPdvId, setLocalPdvId] = useState<string>(user.pdvId || '');
-  const isUpdatingRef = useRef(false);
-  const firestore = useFirestore();
-  const { toast } = useToast();
-
-  // Opções = PDVs do evento/organização selecionados + (se houver) a barraca já atribuída ao usuário
-  const pdvOptions = useMemo(() => {
-    if (user.pdvId && !pdvs.some((p) => p.id === user.pdvId)) {
-      const assigned = allPdvs.find((p) => p.id === user.pdvId);
-      if (assigned) return [assigned, ...pdvs];
-    }
-    return pdvs;
-  }, [pdvs, allPdvs, user.pdvId]);
-
-  useEffect(() => {
-    setLocalRole(user.role);
-    setLocalPdvId(user.pdvId || '');
-  }, [user.role, user.pdvId]);
-
-  const handleRoleChange = useCallback(
-    async (value: string) => {
-      if (isUpdatingRef.current) return;
-      const newRole = value as UserRole;
-      setLocalRole(newRole);
-      isUpdatingRef.current = true;
-      try {
-        const updatePayload: Record<string, any> = { role: newRole };
-        if (newRole !== 'PDV') {
-          // If changed away from PDV, clear pdvId
-          updatePayload.pdvId = deleteField();
-          setLocalPdvId('');
-        }
-        await updateDoc(doc(firestore, 'users', user.id), updatePayload);
-        toast({ title: 'Função atualizada!', description: `${user.name} → ${ROLE_LABELS[newRole]}` });
-      } catch (err) {
-        console.error(err);
-        setLocalRole(user.role);
-        toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível atualizar a função.' });
-      } finally {
-        isUpdatingRef.current = false;
-      }
-    },
-    [firestore, user, toast],
-  );
-
-  const handlePdvChange = useCallback(
-    async (newPdvId: string) => {
-      setLocalPdvId(newPdvId);
-      try {
-        await updateDoc(doc(firestore, 'users', user.id), {
-          pdvId: newPdvId,
-        });
-        const pdvName = pdvs.find((p) => p.id === newPdvId)?.nome || newPdvId;
-        toast({ title: 'Barraca Vinculada!', description: `${user.name} agora opera: ${pdvName}` });
-      } catch (err) {
-        console.error(err);
-        setLocalPdvId(user.pdvId || '');
-        toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível vincular a barraca.' });
-      }
-    },
-    [firestore, user, pdvs, toast],
-  );
-
-  if (user.role === 'SUPERADMIN' || user.email === 'thiagoddsm@gmail.com') {
-    return <RoleBadge role={user.role} />;
-  }
-
-  return (
-    <div className="flex flex-col gap-1.5 w-full max-w-[220px]">
-      <Select value={localRole} onValueChange={handleRoleChange}>
-        <SelectTrigger className="h-8 text-xs font-medium">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {(Object.keys(ROLE_LABELS) as UserRole[])
-            .filter((r) => r !== 'SUPERADMIN')
-            .map((r) => (
-              <SelectItem key={r} value={r} className="text-xs">
-                {ROLE_LABELS[r]}
-              </SelectItem>
-            ))}
-        </SelectContent>
-      </Select>
-
-      {/* When role is PDV, show dedicated PDV / Barraca selector */}
-      {localRole === 'PDV' && (
-        <div className="flex flex-col gap-1 p-1.5 bg-orange-50/70 border border-orange-200 rounded-md animate-in fade-in duration-200">
-          <span className="text-[10px] font-bold text-orange-800 uppercase tracking-wider flex items-center gap-1">
-            🏪 Barraca / PDV:
-          </span>
-          <Select value={localPdvId} onValueChange={handlePdvChange} disabled={pdvOptions.length === 0}>
-            <SelectTrigger className="h-7 text-xs bg-white border-orange-300 font-semibold text-orange-950">
-              <SelectValue
-                placeholder={
-                  pdvOptions.length === 0
-                    ? 'Nenhuma barraca neste evento'
-                    : 'Selecione a barraca...'
-                }
-              />
-            </SelectTrigger>
-            <SelectContent>
-              {pdvOptions.map((p) => (
-                <SelectItem key={p.id} value={p.id} className="text-xs">
-                  {p.nome}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
-    </div>
-  );
-});
-GlobalRoleManager.displayName = 'GlobalRoleManager';
-
-// ---------------------------------------------------------------------------
-// Data hook
+// Data Hook
 // ---------------------------------------------------------------------------
 function useAdminUsersData() {
   const [users, setUsers] = useState<UserProfile[] | null>(null);
@@ -608,7 +129,7 @@ function useAdminUsersData() {
     };
   }, [firestore]);
 
-  // Eventos de cada organização em tempo real (sem cache que possa ficar vazio)
+  // Real-time events per tenant
   const tenantIdsKey = (tenants ?? []).map((t) => t.id).sort().join('|');
   useEffect(() => {
     if (!firestore || !tenantIdsKey) return;
@@ -625,45 +146,30 @@ function useAdminUsersData() {
 }
 
 // ---------------------------------------------------------------------------
-// Page
+// Page Component
 // ---------------------------------------------------------------------------
 export default function UsersPage() {
   const { users, tenants, pdvs, eventsByTenant } = useAdminUsersData();
-  const { currentTenant, currentEvent } = useTenant();
 
   const isLoading = users === null || tenants === null || pdvs === null;
 
   const stableTenants = useMemo(() => tenants ?? [], [tenants]);
   const stablePdvs = useMemo(() => pdvs ?? [], [pdvs]);
 
-  // PDVs selecionáveis: somente os da organização/evento escolhidos no topo
-  const scopedPdvs = useMemo(
-    () =>
-      stablePdvs
-        .filter(
-          (p) =>
-            !!currentTenant &&
-            p.tenant_id === currentTenant.id &&
-            (!currentEvent || p.event_id === currentEvent.id) &&
-            p.nome !== 'Caixa Central',
-        )
-        .sort((a, b) => a.nome.localeCompare(b.nome)),
-    [stablePdvs, currentTenant, currentEvent],
-  );
-
   const columns: ColumnDef<UserProfile>[] = useMemo(
     () => [
       {
         accessorKey: 'name',
-        header: 'Nome',
-        filterFn: (row, id, value) => {
-          const val = String(row.getValue(id) ?? '').toLowerCase();
-          return val.includes(String(value ?? '').toLowerCase());
+        header: 'Usuário',
+        cell: ({ row }) => {
+          const user = row.original;
+          return (
+            <div className="flex flex-col gap-0.5">
+              <span className="font-bold text-sm text-foreground">{user.name}</span>
+              <span className="text-xs text-muted-foreground font-mono">{user.email || 'Sem e-mail'}</span>
+            </div>
+          );
         },
-      },
-      {
-        accessorKey: 'email',
-        header: 'Email',
         filterFn: (row, id, value) => {
           const val = String(row.getValue(id) ?? '').toLowerCase();
           return val.includes(String(value ?? '').toLowerCase());
@@ -671,15 +177,23 @@ export default function UsersPage() {
       },
       {
         accessorKey: 'role',
-        header: 'Função (global)',
+        header: 'Função',
         cell: ({ row }) => {
           const user = row.original;
+          const isVisitante = user.role === 'VISITANTE';
+
           return (
-            <div className="flex flex-col gap-1">
-              <RoleBadge role={user.role} />
-              <GlobalRoleManager user={user} pdvs={scopedPdvs} allPdvs={stablePdvs} />
-              {user.role === 'VISITANTE' && (
-                <VisitanteAlert user={user} tenants={stableTenants} pdvs={stablePdvs} />
+            <div className="flex flex-col gap-1.5 items-start">
+              <UserRoleBadge role={user.role} />
+
+              {/* Show note if pending request */}
+              {isVisitante && user.requestedTenantId && (
+                <div className="flex items-center gap-1 text-[11px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                  <AlertTriangle className="h-3 w-3 shrink-0 text-amber-600" />
+                  <span>
+                    Pediu: <strong>{user.requestedRole === 'PDV' ? 'Barraca' : 'Caixa'}</strong>
+                  </span>
+                </div>
               )}
             </div>
           );
@@ -687,37 +201,111 @@ export default function UsersPage() {
         filterFn: (row, id, value) => value.includes(row.getValue(id)),
       },
       {
-        id: 'acessoPorOrganizacao',
-        header: 'Acesso por Organização',
+        id: 'acessoResumo',
+        header: 'Organização & Barraca Atribuída',
         cell: ({ row }) => {
           const user = row.original;
+
+          // Find tenant
+          const userTenantIds = Object.keys(user.tenants || {}).filter(
+            (tid) => stableTenants.some((t) => t.id === tid)
+          );
+          const primaryTenantId = userTenantIds[0] || user.requestedTenantId;
+          const tenant = stableTenants.find((t) => t.id === primaryTenantId);
+
+          // Find assigned PDV
+          const assignedPdv = user.pdvId
+            ? stablePdvs.find((p) => p.id === user.pdvId)
+            : null;
+
+          // Find event
+          const tenantEvents = primaryTenantId ? eventsByTenant[primaryTenantId] || [] : [];
+          const eventId =
+            assignedPdv?.event_id ||
+            user.tenants?.[primaryTenantId || '']?.allowedEventIds?.[0] ||
+            user.requestedEventId;
+          const event = tenantEvents.find((e) => e.id === eventId);
+
+          if (!tenant && !assignedPdv) {
+            return (
+              <span className="text-xs text-muted-foreground italic">
+                Nenhum acesso configurado
+              </span>
+            );
+          }
+
           return (
-            <TenantAccessPanel
+            <div className="flex flex-col gap-1 text-xs">
+              {tenant && (
+                <div className="flex items-center gap-1.5 text-foreground font-medium">
+                  <Building2 className="h-3.5 w-3.5 text-primary shrink-0" />
+                  <span>{tenant.name}</span>
+                </div>
+              )}
+
+              {event && (
+                <div className="flex items-center gap-1.5 text-muted-foreground">
+                  <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <span>{event.name}</span>
+                </div>
+              )}
+
+              {user.role === 'PDV' && (
+                <div className="flex items-center gap-1.5 pt-0.5">
+                  <Badge
+                    variant="outline"
+                    className="text-xs font-bold text-orange-900 bg-orange-50 border-orange-300 gap-1"
+                  >
+                    <Store className="h-3.5 w-3.5 text-orange-600" />
+                    {assignedPdv ? assignedPdv.nome : 'Barraca não definida'}
+                  </Badge>
+                </div>
+              )}
+            </div>
+          );
+        },
+      },
+      {
+        id: 'acoes',
+        header: 'Ação',
+        cell: ({ row }) => {
+          const user = row.original;
+          const isMasterAdmin = user.email === 'thiagoddsm@gmail.com' || user.id === 'thiagoddsm';
+
+          if (isMasterAdmin) {
+            return (
+              <Badge variant="secondary" className="text-xs text-purple-900 bg-purple-50">
+                Acesso Total (Master)
+              </Badge>
+            );
+          }
+
+          return (
+            <EditUserAccessDialog
               user={user}
               tenants={stableTenants}
               eventsByTenant={eventsByTenant}
+              allPdvs={stablePdvs}
             />
           );
         },
       },
     ],
-    [stableTenants, stablePdvs, scopedPdvs, eventsByTenant],
+    [stableTenants, stablePdvs, eventsByTenant],
   );
 
   const userFilterColumns = useMemo(
     () => [
       { columnId: 'name', placeholder: 'Buscar por nome…' },
-      { columnId: 'email', placeholder: 'Buscar por email…' },
       {
         columnId: 'role',
         placeholder: 'Filtrar por função…',
         options: [
           { value: 'SUPERADMIN', label: 'Super Admin' },
           { value: 'ADMIN_ORGANIZACAO', label: 'Admin Organização' },
-          { value: 'ADMIN_EVENTO', label: 'Admin Evento' },
-          { value: 'CAIXA', label: 'Caixa' },
-          { value: 'PDV', label: 'PDV' },
-          { value: 'VISITANTE', label: 'Visitante' },
+          { value: 'CAIXA', label: 'Caixa Central' },
+          { value: 'PDV', label: 'Operador de Barraca' },
+          { value: 'VISITANTE', label: 'Aguardando Aprovação' },
         ],
       },
     ],
@@ -729,12 +317,12 @@ export default function UsersPage() {
       <Card>
         <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4">
           <div>
-            <CardTitle className="flex items-center gap-2">
-              <UserCog />
-              Gerenciar Usuários
+            <CardTitle className="flex items-center gap-2 text-lg sm:text-xl font-bold">
+              <UserCog className="h-5 w-5 text-primary" />
+              Gerenciar Voluntários & Permissões
             </CardTitle>
-            <CardDescription>
-              Visualize e gerencie as funções e permissões dos usuários do sistema.
+            <CardDescription className="text-xs sm:text-sm">
+              Defina a organização, o evento e a barraca (PDV) de cada voluntário em passos simples.
             </CardDescription>
           </div>
           <CreateUserDialog />
@@ -754,4 +342,3 @@ export default function UsersPage() {
     </div>
   );
 }
-
