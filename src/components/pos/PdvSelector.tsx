@@ -17,6 +17,9 @@ import {
   Settings,
   ChevronRight,
   Pencil,
+  Tv,
+  ChefHat,
+  ExternalLink,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth-context';
 import { useTenant } from '@/hooks/use-tenant-context';
@@ -109,6 +112,32 @@ export default function PdvSelector({ pdvs, operatorCounts = {}, onPdvSelect }: 
             </Link>
           </Button>
         )}
+
+        {/* Quick Launch TV & KDS for any booth */}
+        <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-purple-100/60">
+          <Button
+            variant="outline"
+            size="sm"
+            asChild
+            className="h-9 rounded-xl border-purple-200 bg-purple-50/50 hover:bg-purple-100/70 text-purple-700 text-xs font-semibold flex items-center justify-center gap-1.5 shadow-xs transition-colors"
+          >
+            <Link href="/painel" target="_blank">
+              <Tv className="h-3.5 w-3.5" />
+              Painel TV Cliente
+            </Link>
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            asChild
+            className="h-9 rounded-xl border-amber-200 bg-amber-50/50 hover:bg-amber-100/70 text-amber-800 text-xs font-semibold flex items-center justify-center gap-1.5 shadow-xs transition-colors"
+          >
+            <Link href="/producao" target="_blank">
+              <ChefHat className="h-3.5 w-3.5" />
+              Cozinha (KDS)
+            </Link>
+          </Button>
+        </div>
       </div>
 
       {/* Grid of PDVs */}
@@ -200,7 +229,32 @@ export default function PdvSelector({ pdvs, operatorCounts = {}, onPdvSelect }: 
                       ? 'Livre para operar'
                       : `${opCount} operador${opCount > 1 ? 'es' : ''}`}
                   </span>
-                  <ChevronRight className="h-4 w-4 text-slate-400 group-hover:text-purple-600 group-hover:translate-x-0.5 transition-all shrink-0" />
+
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      title="Abrir Painel TV Cliente"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        window.open(`/painel?pdv=${pdv.id}`, '_blank');
+                      }}
+                      className="p-1 rounded-md text-slate-400 hover:text-purple-600 hover:bg-purple-50 transition-colors"
+                    >
+                      <Tv className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      title="Abrir Tela de Produção / KDS"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        window.open(`/producao?pdv=${pdv.id}`, '_blank');
+                      }}
+                      className="p-1 rounded-md text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition-colors"
+                    >
+                      <ChefHat className="h-3.5 w-3.5" />
+                    </button>
+                    <ChevronRight className="h-4 w-4 text-slate-400 group-hover:text-purple-600 group-hover:translate-x-0.5 transition-all ml-0.5" />
+                  </div>
                 </div>
               </div>
             );

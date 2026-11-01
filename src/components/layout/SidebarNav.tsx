@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, ShoppingCart, WalletCards, Users, List, UserCog, BookUser, Building2, Store, Globe } from "lucide-react";
+import { LayoutDashboard, ShoppingCart, WalletCards, Users, List, UserCog, BookUser, Building2, Store, Globe, ChefHat, Tv } from "lucide-react";
 import { SidebarHeader, SidebarMenu, SidebarMenuItem, SidebarMenuButton, useSidebar } from "@/components/ui/sidebar";
 import { useAuth } from "@/hooks/use-auth-context";
 import { Logo } from "./Logo";
@@ -15,6 +15,8 @@ const allNavItems = [
     { href: '/transactions', icon: List, label: 'Transações', roles: ADMIN_ROLES },
     { href: '/cashier', icon: WalletCards, label: 'Caixa', roles: ADMIN_ROLES },
     { href: '/pos', icon: ShoppingCart, label: 'PDV', roles: ['SUPERADMIN', 'ADMIN_ORGANIZACAO', 'PDV'] },
+    { href: '/pos/kds', icon: ChefHat, label: 'Cozinha (KDS)', roles: ['SUPERADMIN', 'ADMIN_ORGANIZACAO', 'ADMIN_EVENTO', 'PDV'] },
+    { href: '/pos/painel', icon: Tv, label: 'Painel TV (Cliente)', roles: ['SUPERADMIN', 'ADMIN_ORGANIZACAO', 'ADMIN_EVENTO', 'PDV'] },
     { href: '/admin/pdvs', icon: Store, label: 'Gerenciar PDVs', roles: ['SUPERADMIN', 'ADMIN_ORGANIZACAO', 'ADMIN_EVENTO'] },
     { href: '/manual', icon: BookUser, label: 'Manual', roles: ['SUPERADMIN', 'ADMIN_ORGANIZACAO', 'ADMIN_EVENTO', 'CAIXA', 'PDV'] },
     { href: '/admin/tenants', icon: Building2, label: 'Organizações', roles: ['SUPERADMIN', 'ADMIN_ORGANIZACAO'] },

@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/utils';
 import type { Pdv, MenuItem, Card as CardType, PdvIngredient } from '@/lib/definitions';
-import { CheckCircle2, XCircle, Loader2, ShoppingCart, X, ArrowLeft, Trash2, Pencil, QrCode, MessageSquarePlus, MessageSquare, Camera, PackagePlus, AlertTriangle } from 'lucide-react';
+import { CheckCircle2, XCircle, Loader2, ShoppingCart, X, ArrowLeft, Trash2, Pencil, QrCode, MessageSquarePlus, MessageSquare, Camera, PackagePlus, AlertTriangle, ExternalLink, ChefHat, Tv } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useFirestore } from '@/firebase';
 import { collection, onSnapshot, query, orderBy, doc, getDocs, where, limit, getDoc } from 'firebase/firestore';
@@ -23,6 +23,7 @@ import QrScannerDialog from '../common/QrScannerDialog';
 import PdvWhatsappDialog from './PdvWhatsappDialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import OrderKanban from './OrderKanban';
+import KitchenDisplay from './KitchenDisplay';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Label } from '../ui/label';
 import { useTenant } from '@/hooks/use-tenant-context';
@@ -185,6 +186,7 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv; onGoBack?: (
   const firestore = useFirestore();
 
   const [livePdv, setLivePdv] = useState<Pdv>(pdv);
+  const [ordersViewMode, setOrdersViewMode] = useState<'kanban' | 'kds'>('kanban');
   const [state, formAction] = useActionState(processSale, initialState);
   const [confirmation, setConfirmation] = useState<{ status: 'success' | 'error'; message: string; details?: string } | null>(null);
   
@@ -801,8 +803,65 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv; onGoBack?: (
               </div>
             )}
         </TabsContent>
-        <TabsContent value="acompanhamento">
-            <OrderKanban pdvId={pdv.id} />
+        <TabsContent value="acompanhamento" className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 bg-card rounded-2xl border shadow-xs">
+                {/* Switcher entre Kanban e KDS */}
+                <div className="flex items-center gap-1 bg-muted/80 p-1 rounded-xl">
+                    <button
+                        type="button"
+                        onClick={() => setOrdersViewMode('kanban')}
+                        className={cn(
+                            "px-3 py-1.5 text-xs font-semibold rounded-lg transition-all",
+                            ordersViewMode === 'kanban' ? "bg-background text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"
+                        )}
+                    >
+                        Kanban (Colunas)
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setOrdersViewMode('kds')}
+                        className={cn(
+                            "px-3 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5",
+                            ordersViewMode === 'kds' ? "bg-amber-500 text-slate-950 shadow-xs font-bold" : "text-muted-foreground hover:text-foreground"
+                        )}
+                    >
+                        <ChefHat className="h-3.5 w-3.5" />
+                        Modo Cozinha (KDS)
+                    </button>
+                </div>
+
+                {/* Atalhos para Abrir em Tela Cheia / TV */}
+                <div className="flex items-center gap-2">
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-8 text-xs gap-1.5 border-purple-200 bg-purple-50/60 hover:bg-purple-100 text-purple-700 shadow-xs"
+                        onClick={() => window.open(`/painel?pdv=${pdv.id}`, '_blank')}
+                    >
+                        <Tv className="h-3.5 w-3.5" />
+                        <span>Abrir Painel TV</span>
+                        <ExternalLink className="h-3 w-3 opacity-60" />
+                    </Button>
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-8 text-xs gap-1.5 border-amber-300 bg-amber-50/60 hover:bg-amber-100 text-amber-800 shadow-xs"
+                        onClick={() => window.open(`/producao?pdv=${pdv.id}`, '_blank')}
+                    >
+                        <ChefHat className="h-3.5 w-3.5" />
+                        <span>KDS Tela Cheia</span>
+                        <ExternalLink className="h-3 w-3 opacity-60" />
+                    </Button>
+                </div>
+            </div>
+
+            {ordersViewMode === 'kanban' ? (
+                <OrderKanban pdvId={pdv.id} />
+            ) : (
+                <KitchenDisplay pdvId={pdv.id} pdvNome={pdv.nome} isEmbedded={true} />
+            )}
         </TabsContent>
     </Tabs>
 
