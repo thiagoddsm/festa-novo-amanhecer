@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/utils';
 import type { Pdv, MenuItem, Card as CardType, PdvIngredient } from '@/lib/definitions';
-import { CheckCircle2, XCircle, Loader2, ShoppingCart, X, ArrowLeft, Trash2, Pencil, QrCode, MessageSquarePlus, MessageSquare, Camera, PackagePlus, AlertTriangle, ExternalLink, ChefHat, Tv } from 'lucide-react';
+import { CheckCircle2, XCircle, Loader2, ShoppingCart, X, ArrowLeft, Trash2, Pencil, QrCode, MessageSquarePlus, MessageSquare, Camera, PackagePlus, AlertTriangle, ExternalLink, ChefHat, Tv, Clock, Flame, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useFirestore } from '@/firebase';
 import { collection, onSnapshot, query, orderBy, doc, getDocs, where, limit, getDoc } from 'firebase/firestore';
@@ -30,6 +30,79 @@ import { useTenant } from '@/hooks/use-tenant-context';
 import { Checkbox } from '../ui/checkbox';
 import { useAuth } from '@/hooks/use-auth-context';
 import { getPdvIconConfig } from '@/lib/pdv-icons';
+
+
+function getQueueEstimate(ordersCount: number) {
+  if (ordersCount === 0) {
+    return {
+      title: 'Cozinha livre (sem fila)',
+      timeText: '~3 a 5 min (Imediato)',
+      containerClass: 'bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200',
+      iconClass: 'bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300',
+      badgeClass: 'bg-emerald-100/90 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700',
+      headerClass: 'bg-emerald-50/90 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300',
+      mobileChipClass: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300',
+    };
+  }
+
+  if (ordersCount === 1) {
+    return {
+      title: '1 pedido na frente',
+      timeText: '~5 a 8 min',
+      containerClass: 'bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200',
+      iconClass: 'bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300',
+      badgeClass: 'bg-emerald-100/90 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700',
+      headerClass: 'bg-emerald-50/90 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300',
+      mobileChipClass: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300',
+    };
+  }
+
+  if (ordersCount <= 3) {
+    return {
+      title: `${ordersCount} pedidos na frente`,
+      timeText: '~8 a 12 min',
+      containerClass: 'bg-amber-50/80 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200',
+      iconClass: 'bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300',
+      badgeClass: 'bg-amber-100/90 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-700',
+      headerClass: 'bg-amber-50/90 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300',
+      mobileChipClass: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300',
+    };
+  }
+
+  if (ordersCount <= 6) {
+    return {
+      title: `${ordersCount} pedidos na frente`,
+      timeText: '~12 a 18 min',
+      containerClass: 'bg-amber-50/80 dark:bg-amber-950/30 border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200',
+      iconClass: 'bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300',
+      badgeClass: 'bg-amber-100/90 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-700',
+      headerClass: 'bg-amber-50/90 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300',
+      mobileChipClass: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300',
+    };
+  }
+
+  if (ordersCount <= 10) {
+    return {
+      title: `${ordersCount} pedidos na frente`,
+      timeText: '~20 a 30 min',
+      containerClass: 'bg-orange-50/80 dark:bg-orange-950/30 border-orange-200 dark:border-orange-800 text-orange-900 dark:text-orange-200',
+      iconClass: 'bg-orange-100 dark:bg-orange-900/60 text-orange-700 dark:text-orange-300',
+      badgeClass: 'bg-orange-100/90 dark:bg-orange-900/40 text-orange-800 dark:text-orange-300 border-orange-300 dark:border-orange-700',
+      headerClass: 'bg-orange-50/90 dark:bg-orange-950/40 border-orange-200 dark:border-orange-800 text-orange-800 dark:text-orange-300',
+      mobileChipClass: 'bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300',
+    };
+  }
+
+  return {
+    title: `${ordersCount} pedidos na frente (Fila intensa)`,
+    timeText: '+30 min de espera',
+    containerClass: 'bg-rose-50/80 dark:bg-rose-950/30 border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200',
+    iconClass: 'bg-rose-100 dark:bg-rose-900/60 text-rose-700 dark:text-rose-300',
+    badgeClass: 'bg-rose-100/90 dark:bg-rose-900/40 text-rose-800 dark:text-rose-300 border-rose-300 dark:border-rose-700',
+    headerClass: 'bg-rose-50/90 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300',
+    mobileChipClass: 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300',
+  };
+}
 
 const initialState: {
     status: 'idle' | 'success' | 'error';
@@ -188,7 +261,15 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv; onGoBack?: (
   const [livePdv, setLivePdv] = useState<Pdv>(pdv);
   const [ordersViewMode, setOrdersViewMode] = useState<'kanban' | 'kds'>('kanban');
   const [state, formAction] = useActionState(processSale, initialState);
-  const [confirmation, setConfirmation] = useState<{ status: 'success' | 'error'; message: string; details?: string } | null>(null);
+  const [confirmation, setConfirmation] = useState<{
+    status: 'success' | 'error';
+    message: string;
+    details?: string;
+    orderNumber?: string;
+    queueEstimate?: string;
+  } | null>(null);
+  const [ordersInQueue, setOrdersInQueue] = useState<number>(0);
+  const [itemsInQueue, setItemsInQueue] = useState<number>(0);
   
   const [menuItems, setMenuItems] = useState<MenuItem[] | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -206,6 +287,50 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv; onGoBack?: (
   const formRef = useRef<HTMLFormElement>(null);
 
   const total = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
+
+  // Escuta pedidos em preparo na cozinha deste PDV em tempo real
+  useEffect(() => {
+    if (!firestore || !pdv.id) return;
+    const ordersRef = collection(firestore, 'orders');
+    const q = query(
+      ordersRef,
+      where('pdv_id', '==', pdv.id),
+      where('status', 'in', ['PENDENTE', 'EM_PREPARO'])
+    );
+
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        let orderCount = 0;
+        let itemCount = 0;
+
+        snapshot.docs.forEach((d) => {
+          const data = d.data();
+          if (currentTenant && data.tenant_id && data.tenant_id !== currentTenant.id) return;
+          if (currentEvent && data.event_id && data.event_id !== currentEvent.id) return;
+
+          orderCount++;
+          if (Array.isArray(data.items)) {
+            itemCount += data.items.reduce(
+              (acc: number, item: any) => acc + (item.quantity || 1),
+              0
+            );
+          }
+        });
+
+        setOrdersInQueue(orderCount);
+        setItemsInQueue(itemCount);
+      },
+      (err) => {
+        console.error('Error listening to queue orders:', err);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [firestore, pdv.id, currentTenant, currentEvent]);
+
+  const queueEstimate = getQueueEstimate(ordersInQueue);
+
 
   // Sync PDV data in real-time (especially WhatsApp status)
   useEffect(() => {
@@ -275,8 +400,10 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv; onGoBack?: (
     } else if (state.status === 'success') {
       setConfirmation({
         status: 'success',
-        message: 'Venda Aprovada',
+        message: 'Venda Aprovada!',
+        orderNumber: state.data?.order_number,
         details: `Novo saldo: ${formatCurrency(state.data.novo_saldo_centavos)}`,
+        queueEstimate: `${ordersInQueue} ${ordersInQueue === 1 ? 'pedido' : 'pedidos'} na frente (${queueEstimate.timeText})`,
       });
       // Reset form state
       formRef.current?.reset();
@@ -287,7 +414,7 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv; onGoBack?: (
       setCardError(null);
     }
 
-    const timer = setTimeout(() => setConfirmation(null), 3000);
+    const timer = setTimeout(() => setConfirmation(null), 4000);
     return () => clearTimeout(timer);
   }, [state]);
 
@@ -480,6 +607,16 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv; onGoBack?: (
                   <TabsTrigger value="venda" className="text-xs sm:text-sm px-2.5 sm:px-3">Venda</TabsTrigger>
                   <TabsTrigger value="acompanhamento" className="text-xs sm:text-sm px-2.5 sm:px-3">Pedidos</TabsTrigger>
               </TabsList>
+
+              {/* Live Queue Pill in POS Header */}
+              <div className={cn(
+                "hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-semibold border shadow-2xs shrink-0 transition-colors",
+                queueEstimate.headerClass
+              )}>
+                <Clock className="h-3.5 w-3.5 shrink-0" />
+                <span>{ordersInQueue === 0 ? 'Cozinha Livre' : `${ordersInQueue} ${ordersInQueue === 1 ? 'pedido' : 'pedidos'} na frente`}</span>
+                <span className="opacity-75 text-[11px] font-normal">({queueEstimate.timeText})</span>
+              </div>
 
               {/* WhatsApp Connection Button */}
               {livePdv.whatsapp?.status === 'CONNECTED' ? (
@@ -763,6 +900,32 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv; onGoBack?: (
                                 <input type="hidden" name="usuario_responsavel" value={user?.name || 'Sistema'} />
                                 <input type="hidden" name="tenant_id" value={currentTenant?.id || ''} />
                                 <input type="hidden" name="event_id" value={currentEvent?.id || ''} />
+                                {/* Estimativa de Fila e Tempo de Espera para passar ao cliente */}
+                                <div className={cn(
+                                    "p-2.5 rounded-xl border flex items-center justify-between gap-2 shadow-2xs transition-all",
+                                    queueEstimate.containerClass
+                                )}>
+                                    <div className="flex items-center gap-2.5 min-w-0">
+                                        <div className={cn("p-1.5 sm:p-2 rounded-lg shrink-0", queueEstimate.iconClass)}>
+                                            <Clock className="h-4 w-4 stroke-[2.5]" />
+                                        </div>
+                                        <div className="min-w-0">
+                                            <p className="text-xs font-bold leading-tight flex items-center gap-1.5 truncate">
+                                                <span>{queueEstimate.title}</span>
+                                                {itemsInQueue > 0 && ordersInQueue > 0 && (
+                                                    <span className="text-[10px] font-normal opacity-75">({itemsInQueue} {itemsInQueue === 1 ? 'item' : 'itens'})</span>
+                                                )}
+                                            </p>
+                                            <p className="text-[11px] leading-tight mt-0.5 opacity-90">
+                                                Estimativa p/ cliente: <strong className="font-bold underline decoration-dotted">{queueEstimate.timeText}</strong>
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 border", queueEstimate.badgeClass)}>
+                                        {ordersInQueue === 0 ? 'Fila Livre' : `${ordersInQueue} na fila`}
+                                    </span>
+                                </div>
+
                                 <SubmitButton 
                                     disabled={cart.length === 0 || !cardData} 
                                     hasItems={cart.length > 0}
@@ -783,9 +946,15 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv; onGoBack?: (
             {cart.length > 0 && (
               <div className="lg:hidden fixed bottom-0 inset-x-0 p-3 bg-card/95 backdrop-blur-md border-t border-border shadow-2xl z-40 flex items-center justify-between gap-3 animate-in slide-in-from-bottom duration-200">
                 <div className="min-w-0">
-                  <p className="text-[11px] text-muted-foreground font-medium truncate">
-                    {cart.reduce((a, b) => a + b.quantity, 0)} {cart.reduce((a, b) => a + b.quantity, 0) === 1 ? 'item' : 'itens'} no carrinho
-                  </p>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <p className="text-[11px] text-muted-foreground font-medium truncate">
+                      {cart.reduce((a, b) => a + b.quantity, 0)} {cart.reduce((a, b) => a + b.quantity, 0) === 1 ? 'item' : 'itens'}
+                    </p>
+                    <span className="text-muted-foreground text-xs">•</span>
+                    <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded", queueEstimate.mobileChipClass)}>
+                      ⏱ {queueEstimate.timeText} ({ordersInQueue} na fila)
+                    </span>
+                  </div>
                   <p className="text-lg font-black text-foreground leading-tight">
                     {formatCurrency(total)}
                   </p>
@@ -887,17 +1056,38 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv; onGoBack?: (
       {confirmation && (
         <div
           className={cn(
-            'fixed inset-0 z-50 flex flex-col items-center justify-center text-white transition-opacity',
-            confirmation.status === 'success' ? 'bg-green-500/95' : 'bg-red-500/95'
+            'fixed inset-0 z-50 flex flex-col items-center justify-center text-white transition-opacity p-6 text-center',
+            confirmation.status === 'success' ? 'bg-emerald-600/95' : 'bg-red-500/95'
           )}
         >
           {confirmation.status === 'success' ? (
-            <CheckCircle2 className="h-24 w-24" />
+            <CheckCircle2 className="h-20 w-20 sm:h-24 sm:w-24" />
           ) : (
-            <XCircle className="h-24 w-24" />
+            <XCircle className="h-20 w-20 sm:h-24 sm:w-24" />
           )}
-          <h2 className="mt-4 text-4xl font-bold">{confirmation.message}</h2>
-          {confirmation.details && <p className="mt-2 text-lg">{confirmation.details}</p>}
+          <h2 className="mt-4 text-3xl sm:text-4xl font-black">{confirmation.message}</h2>
+          {confirmation.orderNumber && (
+            <div className="mt-3 px-6 py-2 rounded-2xl bg-white/20 border border-white/30 backdrop-blur-xs">
+              <p className="text-xs uppercase tracking-wider font-semibold opacity-90">Senha do Pedido</p>
+              <p className="text-4xl sm:text-5xl font-black font-mono tracking-tight">#{confirmation.orderNumber}</p>
+            </div>
+          )}
+          {confirmation.queueEstimate && (
+            <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/15 border border-white/25 text-sm sm:text-base font-medium">
+              <Clock className="h-4 w-4" />
+              <span>{confirmation.queueEstimate}</span>
+            </div>
+          )}
+          {confirmation.details && <p className="mt-2 text-sm sm:text-base opacity-90 font-mono">{confirmation.details}</p>}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setConfirmation(null)}
+            className="mt-6 bg-white/10 hover:bg-white/20 border-white/40 text-white rounded-xl h-10 px-6 font-semibold"
+          >
+            Fechar
+          </Button>
         </div>
       )}
     </>

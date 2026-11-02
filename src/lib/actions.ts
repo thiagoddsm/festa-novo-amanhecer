@@ -359,6 +359,7 @@ export async function processSale(
             return {
                 novo_saldo_centavos,
                 cardId: cardDoc.id,
+                order_number: orderNumber,
             };
         });
 
@@ -368,7 +369,10 @@ export async function processSale(
         return {
             status: 'success',
             message: 'Venda aprovada!',
-            data: { novo_saldo_centavos: saleResult.novo_saldo_centavos }
+            data: { 
+                novo_saldo_centavos: saleResult.novo_saldo_centavos,
+                order_number: saleResult.order_number,
+            }
         };
 
     } catch (error) {
