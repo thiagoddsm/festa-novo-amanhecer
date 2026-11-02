@@ -28,6 +28,13 @@ import {
   Flame,
 } from 'lucide-react';
 
+import {
+  detectBoothCategory,
+  getItemSlots,
+  calculateQueueTotals,
+  type BoothCategory,
+} from '@/lib/queue-estimator';
+
 interface CustomerDisplayProps {
   pdvId?: string;
   pdvNome?: string;
@@ -181,6 +188,11 @@ export default function CustomerDisplay({
     return { inPrepOrders: inPrep, readyOrders: ready };
   }, [orders]);
 
+  const category = useMemo(() => detectBoothCategory(pdvNome), [pdvNome]);
+  const queueTotals = useMemo(() => {
+    return calculateQueueTotals(inPrepOrders, category);
+  }, [inPrepOrders, category]);
+
   return (
     <div
       className={`min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-between font-sans select-none ${
@@ -279,7 +291,27 @@ export default function CustomerDisplay({
                 <h2 className="text-base sm:text-xl font-black text-amber-400 uppercase tracking-wider">
                   Em Preparo
                 </h2>
-                <p className="text-[11px] text-slate-400">Na chapa / montagem</p>
+                <p className="text-[11px] text-slate-400">
+                  {category === 'HAMBURGUER' && queueTotals.totalSlots > 0
+                    ? `Na chapa (${queueTotals.totalSlots} ${queueTotals.totalSlots === 1 ? 'carne' : 'carnes'})`
+                    : category === 'PASTEL'
+                    ? 'No tacho / fritura'
+                    : category === 'BATATA_FRITA'
+                    ? 'Nas fritadeiras'
+                    : category === 'PIZZA'
+                    ? 'No forno de pizza'
+                    : category === 'CHURRASCO'
+                    ? 'Na brasa / grelha'
+                    : category === 'CALDO'
+                    ? 'No caldeirão'
+                    : category === 'MASSA'
+                    ? 'Nos rechauds'
+                    : category === 'BEBIDA'
+                    ? 'No balcão / freezer'
+                    : category === 'DOCE'
+                    ? 'Na vitrine'
+                    : 'Na cozinha / montagem'}
+                </p>
               </div>
             </div>
             <Badge className="bg-amber-500/20 text-amber-400 border border-amber-500/40 font-black text-sm px-2.5 py-0.5">

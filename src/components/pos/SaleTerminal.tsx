@@ -30,93 +30,7 @@ import { useTenant } from '@/hooks/use-tenant-context';
 import { Checkbox } from '../ui/checkbox';
 import { useAuth } from '@/hooks/use-auth-context';
 import { getPdvIconConfig } from '@/lib/pdv-icons';
-
-
-function getQueueEstimate(ordersCount: number, itemsCount: number = 0) {
-  // Total de carnes / lanches em preparo na fila das 2 chapas (capacidade 12 carnes cada chapa = 24 total)
-  const carnesNaFila = itemsCount > 0 ? itemsCount : Math.ceil(ordersCount * 1.5);
-
-  if (ordersCount === 0 && carnesNaFila === 0) {
-    return {
-      title: 'Chapas livres (sem fila)',
-      timeText: '~3 a 5 min (Imediato)',
-      chapaInfo: '2 chapas livres • Início imediato',
-      containerClass: 'bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200',
-      iconClass: 'bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300',
-      badgeClass: 'bg-emerald-100/90 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700',
-      headerClass: 'bg-emerald-50/90 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300',
-      mobileChipClass: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300',
-    };
-  }
-
-  // Até 12 carnes: cabe tudo na 1ª rodada da chapa
-  if (carnesNaFila <= 12) {
-    return {
-      title: `${ordersCount} ${ordersCount === 1 ? 'pedido' : 'pedidos'} • ${carnesNaFila} ${carnesNaFila === 1 ? 'lanche' : 'lanches'} na frente`,
-      timeText: '~5 a 8 min',
-      chapaInfo: '1ª rodada (cabe na chapa atual)',
-      containerClass: 'bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200',
-      iconClass: 'bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300',
-      badgeClass: 'bg-emerald-100/90 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700',
-      headerClass: 'bg-emerald-50/90 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300',
-      mobileChipClass: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300',
-    };
-  }
-
-  // 13 a 24 carnes: 2ª rodada ou distribuído entre as 2 chapas (artesanal e tradicional)
-  if (carnesNaFila <= 24) {
-    return {
-      title: `${ordersCount} pedidos • ${carnesNaFila} lanches na frente`,
-      timeText: '~8 a 14 min',
-      chapaInfo: '2ª rodada nas 2 chapas',
-      containerClass: 'bg-amber-50/80 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200',
-      iconClass: 'bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300',
-      badgeClass: 'bg-amber-100/90 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-700',
-      headerClass: 'bg-amber-50/90 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300',
-      mobileChipClass: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300',
-    };
-  }
-
-  // 25 a 36 carnes: ~3 rodadas de chapa
-  if (carnesNaFila <= 36) {
-    return {
-      title: `${ordersCount} pedidos • ${carnesNaFila} lanches na frente`,
-      timeText: '~15 a 22 min',
-      chapaInfo: '~3ª rodada nas chapas',
-      containerClass: 'bg-amber-50/80 dark:bg-amber-950/30 border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200',
-      iconClass: 'bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300',
-      badgeClass: 'bg-amber-100/90 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-700',
-      headerClass: 'bg-amber-50/90 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300',
-      mobileChipClass: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300',
-    };
-  }
-
-  // 37 a 48 carnes: ~4 rodadas nas chapas
-  if (carnesNaFila <= 48) {
-    return {
-      title: `${ordersCount} pedidos • ${carnesNaFila} lanches na frente`,
-      timeText: '~22 a 30 min',
-      chapaInfo: '~4ª rodada nas chapas',
-      containerClass: 'bg-orange-50/80 dark:bg-orange-950/30 border-orange-200 dark:border-orange-800 text-orange-900 dark:text-orange-200',
-      iconClass: 'bg-orange-100 dark:bg-orange-900/60 text-orange-700 dark:text-orange-300',
-      badgeClass: 'bg-orange-100/90 dark:bg-orange-900/40 text-orange-800 dark:text-orange-300 border-orange-300 dark:border-orange-700',
-      headerClass: 'bg-orange-50/90 dark:bg-orange-950/40 border-orange-200 dark:border-orange-800 text-orange-800 dark:text-orange-300',
-      mobileChipClass: 'bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300',
-    };
-  }
-
-  // Acima de 48 carnes: fila intensa
-  return {
-    title: `${ordersCount} pedidos • ${carnesNaFila} lanches (Fila intensa)`,
-    timeText: '+30 min de espera',
-    chapaInfo: '+4 rodadas nas chapas',
-    containerClass: 'bg-rose-50/80 dark:bg-rose-950/30 border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200',
-    iconClass: 'bg-rose-100 dark:bg-rose-900/60 text-rose-700 dark:text-rose-300',
-    badgeClass: 'bg-rose-100/90 dark:bg-rose-900/40 text-rose-800 dark:text-rose-300 border-rose-300 dark:border-rose-700',
-    headerClass: 'bg-rose-50/90 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300',
-    mobileChipClass: 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300',
-  };
-}
+import { detectBoothCategory, getItemSlots, getQueueEstimate } from '@/lib/queue-estimator';
 
 const initialState: {
     status: 'idle' | 'success' | 'error';
@@ -284,6 +198,7 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv; onGoBack?: (
   } | null>(null);
   const [ordersInQueue, setOrdersInQueue] = useState<number>(0);
   const [itemsInQueue, setItemsInQueue] = useState<number>(0);
+  const [slotsInQueue, setSlotsInQueue] = useState<number>(0);
   
   const [menuItems, setMenuItems] = useState<MenuItem[] | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -316,7 +231,9 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv; onGoBack?: (
       q,
       (snapshot) => {
         let orderCount = 0;
-        let itemCount = 0;
+        let unitCount = 0;
+        let slotCount = 0;
+        const category = detectBoothCategory(pdv.nome, pdv.icon);
 
         snapshot.docs.forEach((d) => {
           const data = d.data();
@@ -325,15 +242,17 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv; onGoBack?: (
 
           orderCount++;
           if (Array.isArray(data.items)) {
-            itemCount += data.items.reduce(
-              (acc: number, item: any) => acc + (item.quantity || 1),
-              0
-            );
+            data.items.forEach((item: any) => {
+              const res = getItemSlots(item, category);
+              unitCount += res.units;
+              slotCount += res.slots;
+            });
           }
         });
 
         setOrdersInQueue(orderCount);
-        setItemsInQueue(itemCount);
+        setItemsInQueue(unitCount);
+        setSlotsInQueue(slotCount);
       },
       (err) => {
         console.error('Error listening to queue orders:', err);
@@ -341,9 +260,10 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv; onGoBack?: (
     );
 
     return () => unsubscribe();
-  }, [firestore, pdv.id, currentTenant, currentEvent]);
+  }, [firestore, pdv.id, pdv.nome, pdv.icon, currentTenant, currentEvent]);
 
-  const queueEstimate = getQueueEstimate(ordersInQueue, itemsInQueue);
+  const boothCategory = detectBoothCategory(pdv.nome, pdv.icon);
+  const queueEstimate = getQueueEstimate(boothCategory, ordersInQueue, itemsInQueue, slotsInQueue);
 
 
   // Sync PDV data in real-time (especially WhatsApp status)
@@ -645,8 +565,8 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv; onGoBack?: (
                 queueEstimate.headerClass
               )}>
                 <Clock className="h-3.5 w-3.5 shrink-0" />
-                <span>{ordersInQueue === 0 ? 'Chapas Livres' : `${ordersInQueue} ped. • ${itemsInQueue} lanches`}</span>
-                <span className="opacity-75 text-[11px] font-normal">({queueEstimate.timeText})</span>
+                <span>{ordersInQueue === 0 ? queueEstimate.detailInfo : `${ordersInQueue} ped. • ${queueEstimate.unitLabel}`}</span>
+                <span className="opacity-80 text-[11px] font-bold">({queueEstimate.timeText})</span>
               </div>
 
               {/* WhatsApp Connection Button */}

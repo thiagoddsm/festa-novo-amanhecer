@@ -40,6 +40,14 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 
+import {
+  detectBoothCategory,
+  getItemSlots,
+  getQueueEstimate,
+  calculateCustomerWaitEstimate,
+  type BoothCategory,
+} from '@/lib/queue-estimator';
+
 export interface PublicOrderTrackerProps {
   tenantId?: string | null;
   eventId?: string | null;
@@ -63,15 +71,6 @@ function formatTimestamp(ts: unknown): Date {
   if (ts instanceof Date) return ts;
   if (typeof ts === 'string') return new Date(ts);
   return new Date();
-}
-
-function calculateGriddleEstimate(position: number, totalCarnes: number) {
-  if (position <= 0) return { time: '~3 a 5 min', info: 'Início imediato nas chapas' };
-  if (position === 1) return { time: '~5 a 8 min', info: '1ª rodada (na chapa agora)' };
-  if (position <= 3) return { time: '~8 a 14 min', info: '1ª ou 2ª rodada nas 2 chapas' };
-  if (position <= 6) return { time: '~12 a 18 min', info: '~2ª rodada nas chapas' };
-  if (position <= 10) return { time: '~18 a 25 min', info: '~3ª rodada nas chapas' };
-  return { time: '+30 min', info: 'Fila intensa nas chapas' };
 }
 
 export default function PublicOrderTracker({
@@ -340,9 +339,14 @@ export default function PublicOrderTracker({
     return () => unsubscribe();
   }, [firestore, selectedPdvId, soundEnabled, searchQuery]);
 
+  const activePdv = (allPdvs || []).find((p) => p.id === selectedPdvId);
+  const boothCategory: BoothCategory = useMemo(() => {
+    return detectBoothCategory(activePdv?.nome, activePdv?.icon);
+  }, [activePdv]);
+
   // Split and sort orders
-  const { inPrepOrders, readyOrders, totalItemsInPrep } = useMemo(() => {
-    if (!orders) return { inPrepOrders: [], readyOrders: [], totalItemsInPrep: 0 };
+  const { inPrepOrders, readyOrders, totalUnitsInPrep, totalSlotsInPrep } = useMemo(() => {
+    if (!orders) return { inPrepOrders: [], readyOrders: [], totalUnitsInPrep: 0, totalSlotsInPrep: 0 };
 
     // FIFO: Oldest order first
     const inPrep = orders
@@ -362,15 +366,24 @@ export default function PublicOrderTracker({
         return db - da;
       });
 
-    let itemsCount = 0;
+    let units = 0;
+    let slots = 0;
     inPrep.forEach((o) => {
       if (Array.isArray(o.items)) {
-        itemsCount += o.items.reduce((sum, item) => sum + (item.quantity || 1), 0);
+        o.items.forEach((it) => {
+          const res = getItemSlots(it, boothCategory);
+          units += res.units;
+          slots += res.slots;
+        });
       }
     });
 
-    return { inPrepOrders: inPrep, readyOrders: ready, totalItemsInPrep: itemsCount };
-  }, [orders]);
+    return { inPrepOrders: inPrep, readyOrders: ready, totalUnitsInPrep: units, totalSlotsInPrep: slots };
+  }, [orders, boothCategory]);
+
+  const queueEstimate = useMemo(() => {
+    return getQueueEstimate(boothCategory, inPrepOrders.length, totalUnitsInPrep, totalSlotsInPrep);
+  }, [boothCategory, inPrepOrders.length, totalUnitsInPrep, totalSlotsInPrep]);
 
   // Find user's searched order
   const matchedOrderInfo = useMemo(() => {
@@ -402,7 +415,18 @@ export default function PublicOrderTracker({
     if (prepIndex >= 0) {
       const match = inPrepOrders[prepIndex];
       const position = prepIndex + 1;
-      const estimate = calculateGriddleEstimate(prepIndex, totalItemsInPrep);
+
+      let slotsAhead = 0;
+      for (let i = 0; i < prepIndex; i++) {
+        const ord = inPrepOrders[i];
+        if (Array.isArray(ord.items)) {
+          ord.items.forEach((it) => {
+            slotsAhead += getItemSlots(it, boothCategory).slots;
+          });
+        }
+      }
+
+      const estimate = calculateCustomerWaitEstimate(boothCategory, prepIndex, slotsAhead);
       return {
         order: match,
         status: 'EM_PREPARO' as const,
@@ -412,9 +436,8 @@ export default function PublicOrderTracker({
     }
 
     return null;
-  }, [searchQuery, orders, readyOrders, inPrepOrders, totalItemsInPrep]);
+  }, [searchQuery, orders, readyOrders, inPrepOrders, boothCategory]);
 
-  const activePdv = (allPdvs || []).find((p) => p.id === selectedPdvId);
   const activeEvent = useMemo(() => {
     return events.find((e) => e.id === selectedEventId) || null;
   }, [events, selectedEventId]);
@@ -616,10 +639,10 @@ export default function PublicOrderTracker({
                   </div>
                   <p className="text-xs text-slate-400 mt-0.5">
                     {inPrepOrders.length === 0
-                      ? 'Chapas livres sem fila de espera'
+                      ? queueEstimate.detailInfo
                       : `${inPrepOrders.length} ${
                           inPrepOrders.length === 1 ? 'pedido' : 'pedidos'
-                        } em preparo (${totalItemsInPrep} lanches)`}
+                        } em preparo (${queueEstimate.unitLabel}) • ${queueEstimate.timeText}`}
                   </p>
                 </div>
               </div>
@@ -692,7 +715,7 @@ export default function PublicOrderTracker({
                         <span>Você é o #{matchedOrderInfo.position} da fila de preparo</span>
                       </div>
                       <p className="text-xs sm:text-sm text-slate-300">
-                        Tempo estimado nas chapas: <strong className="text-white font-bold">{matchedOrderInfo.estimate.time}</strong>{' '}
+                        Tempo estimado: <strong className="text-white font-bold">{matchedOrderInfo.estimate.time}</strong>{' '}
                         <span className="opacity-75">({matchedOrderInfo.estimate.info})</span>
                       </p>
                     </div>
@@ -808,7 +831,7 @@ export default function PublicOrderTracker({
                               {order.items?.reduce((s, it) => s + (it.quantity || 1), 0) || 1} item(ns)
                             </span>
                             <span className="text-amber-400/90 font-medium">
-                              {calculateGriddleEstimate(idx, totalItemsInPrep).time}
+                              {calculateCustomerWaitEstimate(boothCategory, idx, 0).time}
                             </span>
                           </div>
                         </div>

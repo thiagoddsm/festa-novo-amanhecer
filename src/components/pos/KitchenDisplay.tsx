@@ -36,6 +36,11 @@ import {
   ArrowLeft,
 } from 'lucide-react';
 import Link from 'next/link';
+import {
+  detectBoothCategory,
+  calculateQueueTotals,
+  type BoothCategory,
+} from '@/lib/queue-estimator';
 
 interface KitchenDisplayProps {
   pdvId?: string;
@@ -257,6 +262,14 @@ export default function KitchenDisplay({
     };
   }, [orders]);
 
+  const category = useMemo(() => detectBoothCategory(pdvNome), [pdvNome]);
+  const inPrepOrders = useMemo(() => {
+    return (orders || []).filter((o) => o.status === 'PENDENTE' || o.status === 'EM_PREPARO');
+  }, [orders]);
+  const queueTotals = useMemo(() => {
+    return calculateQueueTotals(inPrepOrders, category);
+  }, [inPrepOrders, category]);
+
   // Filtered orders com ordenação estrita pela hora do pedido (FIFO)
   const { visibleOrders, inPrepList } = useMemo(() => {
     if (!orders) return { visibleOrders: [], inPrepList: [] };
@@ -340,7 +353,25 @@ export default function KitchenDisplay({
               </Badge>
             </div>
             <p className="text-xs text-slate-400 flex items-center gap-2">
-              <span>Fila de montagem & chapa</span>
+              <span>
+                {category === 'HAMBURGUER'
+                  ? queueTotals.totalSlots > 0
+                    ? `Fila de montagem • ${queueTotals.totalSlots} carnes na chapa`
+                    : 'Fila de montagem & chapa'
+                  : category === 'PASTEL'
+                  ? `Fritadeiras & tachos • ${queueTotals.totalUnits} pastéis`
+                  : category === 'BATATA_FRITA'
+                  ? `Fritadeiras & cestos • ${queueTotals.totalUnits} porções`
+                  : category === 'PIZZA'
+                  ? `Forno de pizza • ${queueTotals.totalUnits} pizzas`
+                  : category === 'CHURRASCO'
+                  ? `Grelha & brasa • ${queueTotals.totalUnits} espetos`
+                  : category === 'CALDO'
+                  ? `Caldeirões & rechauds • ${queueTotals.totalUnits} caldos`
+                  : category === 'CACHORRO_QUENTE'
+                  ? `Prensas de hot dog • ${queueTotals.totalUnits} lanches`
+                  : 'Fila de produção & montagem'}
+              </span>
               <span className="text-slate-600">•</span>
               <span className="text-slate-300 font-mono font-medium">{currentTime}</span>
             </p>
