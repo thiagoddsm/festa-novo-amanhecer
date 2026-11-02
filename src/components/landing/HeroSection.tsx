@@ -56,7 +56,7 @@ export default function HeroSection() {
             size="lg"
             className="w-full sm:w-auto rounded-2xl border-emerald-300 bg-emerald-50/80 hover:bg-emerald-100 text-emerald-800 font-bold text-sm h-12 px-6 shadow-xs flex items-center gap-2"
           >
-            <Link href="/pedidos">
+            <Link href="/igreja-batista-da-manha/pedidos">
               <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping mr-1" />
               <BellRing className="mr-1.5 h-4 w-4 text-emerald-600" />
               Acompanhar Pedido ao Vivo

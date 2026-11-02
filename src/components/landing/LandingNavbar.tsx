@@ -54,7 +54,7 @@ export default function LandingNavbar() {
             size="sm"
             className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs text-xs font-bold gap-1.5"
           >
-            <Link href="/pedidos">
+            <Link href="/igreja-batista-da-manha/pedidos">
               <span className="h-2 w-2 rounded-full bg-emerald-300 animate-ping shrink-0" />
               <BellRing className="h-3.5 w-3.5 shrink-0" />
               <span>Acompanhar Pedido</span>
@@ -107,7 +107,7 @@ export default function LandingNavbar() {
         <div className="md:hidden border-b border-purple-100 bg-white/95 px-4 pt-2 pb-4 shadow-lg backdrop-blur-md animate-in slide-in-from-top-2">
           <nav className="flex flex-col space-y-2">
             <Link
-              href="/pedidos"
+              href="/igreja-batista-da-manha/pedidos"
               onClick={() => setMobileMenuOpen(false)}
               className="flex items-center gap-2 rounded-xl bg-emerald-600 p-2.5 text-xs font-bold text-white shadow-xs"
             >

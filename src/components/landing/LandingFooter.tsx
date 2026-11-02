@@ -24,7 +24,7 @@ export default function LandingFooter() {
           {/* Quick Staff Button & Live Tracking */}
           <div className="flex flex-col sm:flex-row items-center gap-2.5">
             <Link
-              href="/pedidos"
+              href="/igreja-batista-da-manha/pedidos"
               className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-emerald-200 bg-emerald-50/70 hover:bg-emerald-100 text-emerald-800 text-xs font-bold shadow-2xs transition-all"
             >
               <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping" />

@@ -4,7 +4,7 @@ import { Suspense, useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { FirebaseClientProvider, useFirestore } from '@/firebase';
 import CustomerDisplay from '@/components/pos/CustomerDisplay';
-import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { type Pdv } from '@/lib/definitions';
 import { Store, Tv, Loader2, ArrowRight, Smartphone } from 'lucide-react';
 import { getPdvIconConfig } from '@/lib/pdv-icons';
@@ -14,6 +14,8 @@ import Link from 'next/link';
 function PainelContent() {
   const searchParams = useSearchParams();
   const pdvParam = searchParams.get('pdv');
+  const tenantParam = searchParams.get('tenant') || 'igreja-batista-da-manha';
+  const eventParam = searchParams.get('event') || 'DoKmbiQ8pd3M71yTC9iA';
 
   const firestore = useFirestore();
   const [allPdvs, setAllPdvs] = useState<Pdv[] | null>(null);
@@ -26,16 +28,22 @@ function PainelContent() {
     }
   }, [pdvParam]);
 
-  // Load all PDVs for the selector fallback
+  // Load all PDVs for the selector fallback, filtered by tenant and active event
   useEffect(() => {
     if (!firestore) return;
     const pdvRef = collection(firestore, 'pdvs');
-    const q = query(pdvRef, orderBy('nome', 'asc'));
+    const q = query(
+      pdvRef,
+      where('tenant_id', '==', tenantParam),
+      where('event_id', '==', eventParam)
+    );
 
     const unsubscribe = onSnapshot(
       q,
       (snapshot) => {
-        const fetched = snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as Pdv));
+        const fetched = snapshot.docs
+          .map((d) => ({ id: d.id, ...d.data() } as Pdv))
+          .sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
         setAllPdvs(fetched);
       },
       (err) => {
@@ -45,7 +53,7 @@ function PainelContent() {
     );
 
     return () => unsubscribe();
-  }, [firestore]);
+  }, [firestore, tenantParam, eventParam]);
 
   const activePdv = (allPdvs || []).find((p) => p.id === selectedPdvId);
 

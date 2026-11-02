@@ -8,10 +8,20 @@ import { Loader2 } from 'lucide-react';
 
 function PedidosContent() {
   const searchParams = useSearchParams();
+  const tenant = searchParams.get('tenant') || searchParams.get('igreja') || 'igreja-batista-da-manha';
+  const event = searchParams.get('event') || searchParams.get('evento');
   const pdv = searchParams.get('pdv');
   const busca = searchParams.get('busca') || searchParams.get('senha');
 
-  return <PublicOrderTracker initialPdvId={pdv} initialQuery={busca} />;
+  return (
+    <PublicOrderTracker
+      tenantId={tenant}
+      eventId={event}
+      initialPdvId={pdv}
+      initialQuery={busca}
+      basePath="/pedidos"
+    />
+  );
 }
 
 export default function PedidosPage() {

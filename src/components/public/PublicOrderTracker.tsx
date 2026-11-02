@@ -7,8 +7,10 @@ import {
   query,
   where,
   onSnapshot,
-  orderBy,
   Timestamp,
+  getDoc,
+  getDocs,
+  doc,
 } from 'firebase/firestore';
 import { type Pdv, type Order } from '@/lib/definitions';
 import { getPdvIconConfig } from '@/lib/pdv-icons';
@@ -31,13 +33,29 @@ import {
   UtensilsCrossed,
   Layers,
   ChevronRight,
+  ChevronDown,
+  Calendar,
+  Building2,
   ExternalLink,
 } from 'lucide-react';
 import Link from 'next/link';
 
-interface PublicOrderTrackerProps {
+export interface PublicOrderTrackerProps {
+  tenantId?: string | null;
+  eventId?: string | null;
   initialPdvId?: string | null;
   initialQuery?: string | null;
+  basePath?: string;
+}
+
+interface EventItem {
+  id: string;
+  name?: string;
+  nome?: string;
+  slug?: string;
+  status?: string;
+  active?: boolean;
+  created_at?: unknown;
 }
 
 function formatTimestamp(ts: unknown): Date {
@@ -57,11 +75,22 @@ function calculateGriddleEstimate(position: number, totalCarnes: number) {
 }
 
 export default function PublicOrderTracker({
+  tenantId = 'igreja-batista-da-manha',
+  eventId,
   initialPdvId,
   initialQuery = '',
+  basePath,
 }: PublicOrderTrackerProps) {
   const firestore = useFirestore();
 
+  // Tenant and Event resolution
+  const [resolvedTenantId, setResolvedTenantId] = useState<string>(tenantId || 'igreja-batista-da-manha');
+  const [tenantName, setTenantName] = useState<string>('Igreja Batista da Manhã');
+  const [events, setEvents] = useState<EventItem[]>([]);
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(eventId || null);
+  const [showEventSelector, setShowEventSelector] = useState(false);
+
+  // PDVs and Orders
   const [allPdvs, setAllPdvs] = useState<Pdv[] | null>(null);
   const [selectedPdvId, setSelectedPdvId] = useState<string | null>(initialPdvId || null);
   const [orders, setOrders] = useState<Order[] | null>(null);
@@ -83,7 +112,6 @@ export default function PublicOrderTracker({
     }
   }, []);
 
-  // Save search query to localStorage when user searches a number
   const handleSearchChange = (val: string) => {
     setSearchQuery(val);
     if (val.trim()) {
@@ -98,20 +126,137 @@ export default function PublicOrderTracker({
     localStorage.removeItem('festapay_my_order');
   };
 
-  // 1. Load active PDVs
+  // Sync props if changed
   useEffect(() => {
-    if (!firestore) return;
+    if (tenantId) setResolvedTenantId(tenantId);
+  }, [tenantId]);
+
+  useEffect(() => {
+    if (eventId) setSelectedEventId(eventId);
+  }, [eventId]);
+
+  // 1. Resolve Tenant and its Events
+  useEffect(() => {
+    if (!firestore || !resolvedTenantId) return;
+
+    let isMounted = true;
+
+    async function loadTenantAndEvents() {
+      try {
+        let actualTenantId = resolvedTenantId;
+        let tName = 'Igreja Batista da Manhã';
+
+        // Check if resolvedTenantId matches doc id
+        const tDocRef = doc(firestore!, 'tenants', resolvedTenantId);
+        const tDocSnap = await getDoc(tDocRef);
+
+        if (tDocSnap.exists()) {
+          const tData = tDocSnap.data();
+          tName = tData?.name || tData?.nome || resolvedTenantId;
+        } else {
+          // Try finding by slug
+          const slugQuery = query(
+            collection(firestore!, 'tenants'),
+            where('slug', '==', resolvedTenantId)
+          );
+          const slugSnap = await getDocs(slugQuery);
+          if (!slugSnap.empty) {
+            const firstDoc = slugSnap.docs[0];
+            actualTenantId = firstDoc.id;
+            const tData = firstDoc.data();
+            tName = tData?.name || tData?.nome || resolvedTenantId;
+          }
+        }
+
+        if (!isMounted) return;
+        setTenantName(tName);
+        setResolvedTenantId(actualTenantId);
+
+        // Fetch events under tenants/{actualTenantId}/events
+        let loadedEvents: EventItem[] = [];
+        const subEventsSnap = await getDocs(
+          collection(firestore!, 'tenants', actualTenantId, 'events')
+        );
+
+        if (!subEventsSnap.empty) {
+          loadedEvents = subEventsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        } else {
+          // Fallback to top-level events
+          const topEventsSnap = await getDocs(
+            query(collection(firestore!, 'events'), where('tenant_id', '==', actualTenantId))
+          );
+          loadedEvents = topEventsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        }
+
+        if (!isMounted) return;
+        setEvents(loadedEvents);
+
+        // Resolve active event
+        if (eventId) {
+          const cleanParam = eventId.toLowerCase().trim();
+          const matched = loadedEvents.find(
+            (e) =>
+              e.id.toLowerCase() === cleanParam ||
+              e.slug?.toLowerCase() === cleanParam ||
+              (e.name || e.nome || '').toLowerCase().replace(/\s+/g, '-') === cleanParam
+          );
+          if (matched) {
+            setSelectedEventId(matched.id);
+            return;
+          }
+        }
+
+        // If no eventId or not matched, select active festival
+        const activeEvents = loadedEvents.filter(
+          (e) => e.status === 'ACTIVE' || e.active === true
+        );
+        // Prefer event that mentions 2026 and not 'teste'
+        const festival2026 = activeEvents.find((e) => {
+          const n = (e.name || e.nome || '').toLowerCase();
+          return n.includes('2026') && !n.includes('teste');
+        });
+
+        const chosen = festival2026 || activeEvents[0] || loadedEvents[0];
+        if (chosen) {
+          setSelectedEventId(chosen.id);
+        }
+      } catch (err) {
+        console.error('Error loading tenant and events:', err);
+      }
+    }
+
+    loadTenantAndEvents();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [firestore, resolvedTenantId, eventId]);
+
+  // 2. Load active PDVs strictly filtered by tenant_id AND event_id
+  useEffect(() => {
+    if (!firestore || !resolvedTenantId || !selectedEventId) {
+      return;
+    }
+
     const pdvRef = collection(firestore, 'pdvs');
-    const q = query(pdvRef, orderBy('nome', 'asc'));
+    // Using simple where clauses without orderBy to avoid needing a Firestore composite index
+    const q = query(
+      pdvRef,
+      where('tenant_id', '==', resolvedTenantId),
+      where('event_id', '==', selectedEventId)
+    );
 
     const unsubscribe = onSnapshot(
       q,
       (snapshot) => {
-        const fetched = snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as Pdv));
+        const fetched = snapshot.docs
+          .map((d) => ({ id: d.id, ...d.data() } as Pdv))
+          .sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+
         setAllPdvs(fetched);
 
-        // If no PDV selected, default to first or let user choose
-        if (!selectedPdvId && fetched.length > 0 && initialPdvId) {
+        // If initialPdvId was given and exists in this event, select it
+        if (!selectedPdvId && initialPdvId && fetched.some((p) => p.id === initialPdvId)) {
           setSelectedPdvId(initialPdvId);
         }
       },
@@ -122,7 +267,7 @@ export default function PublicOrderTracker({
     );
 
     return () => unsubscribe();
-  }, [firestore, initialPdvId]);
+  }, [firestore, resolvedTenantId, selectedEventId, initialPdvId]);
 
   // 2. Load active orders for selected PDV in real-time
   const knownReadyRef = useRef<Set<string>>(new Set());
@@ -253,25 +398,78 @@ export default function PublicOrderTracker({
   }, [searchQuery, orders, readyOrders, inPrepOrders, totalItemsInPrep]);
 
   const activePdv = (allPdvs || []).find((p) => p.id === selectedPdvId);
+  const activeEvent = useMemo(() => {
+    return events.find((e) => e.id === selectedEventId) || null;
+  }, [events, selectedEventId]);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-purple-500 selection:text-white">
       {/* Top Navbar */}
       <header className="sticky top-0 z-40 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 px-4 py-3">
         <div className="max-w-3xl mx-auto flex items-center justify-between gap-3">
-          <Link href="/" className="flex items-center gap-2 group">
-            <div className="h-9 w-9 rounded-xl bg-purple-600 flex items-center justify-center text-white font-black text-sm shadow-sm group-hover:scale-105 transition-transform">
+          <div className="flex items-center gap-2 group">
+            <Link
+              href="/"
+              className="h-9 w-9 rounded-xl bg-purple-600 flex items-center justify-center text-white font-black text-sm shadow-sm hover:scale-105 transition-transform shrink-0"
+            >
               FP
-            </div>
-            <div>
-              <p className="text-xs font-bold text-white tracking-tight leading-none group-hover:text-purple-400 transition-colors">
-                Festa Novo Amanhecer
+            </Link>
+            <div className="min-w-0">
+              <p className="text-xs font-bold text-white tracking-tight leading-none truncate">
+                {tenantName}
               </p>
-              <p className="text-[10px] text-purple-400 font-semibold leading-tight">
-                Acompanhamento ao Vivo
-              </p>
+
+              {/* Event switcher or title */}
+              {events.length > 1 ? (
+                <div className="relative mt-0.5">
+                  <button
+                    onClick={() => setShowEventSelector(!showEventSelector)}
+                    className="flex items-center gap-1 text-[11px] text-purple-400 font-semibold hover:text-purple-300 transition-colors"
+                  >
+                    <span className="truncate max-w-[180px] sm:max-w-xs">
+                      {activeEvent?.name || activeEvent?.nome || 'Festa 2026'}
+                    </span>
+                    <ChevronDown className="h-3 w-3 shrink-0" />
+                  </button>
+
+                  {/* Dropdown if clicked */}
+                  {showEventSelector && (
+                    <div className="absolute left-0 mt-1.5 w-64 rounded-xl bg-slate-900 border border-slate-700 shadow-2xl p-1.5 z-50 animate-in fade-in zoom-in-95">
+                      <p className="text-[10px] uppercase font-bold text-slate-400 px-2 py-1">
+                        Selecione o Evento / Festa
+                      </p>
+                      {events.map((evt) => (
+                        <button
+                          key={evt.id}
+                          onClick={() => {
+                            setSelectedEventId(evt.id);
+                            setSelectedPdvId(null);
+                            setShowEventSelector(false);
+                          }}
+                          className={`w-full text-left px-2.5 py-2 rounded-lg text-xs font-medium flex items-center justify-between transition-colors ${
+                            evt.id === selectedEventId
+                              ? 'bg-purple-600 text-white font-bold'
+                              : 'text-slate-300 hover:bg-slate-800'
+                          }`}
+                        >
+                          <span className="truncate">{evt.name || evt.nome}</span>
+                          {(evt.id === 'DoKmbiQ8pd3M71yTC9iA' || evt.status === 'ACTIVE') && (
+                            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-semibold ml-1">
+                              Atual
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="text-[10px] text-purple-400 font-semibold leading-tight mt-0.5">
+                  {activeEvent?.name || activeEvent?.nome || 'Acompanhamento ao Vivo'}
+                </p>
+              )}
             </div>
-          </Link>
+          </div>
 
           {/* Sound Toggle & Switch Booth */}
           <div className="flex items-center gap-2">
@@ -677,7 +875,7 @@ export default function PublicOrderTracker({
       {/* Footer Helper */}
       <footer className="border-t border-slate-900 bg-slate-950/80 p-4 text-center text-xs text-slate-500">
         <p>
-          Festa Novo Amanhecer 2026 • Apresente seu comprovante ou cartão na bancada de retirada.
+          {activeEvent?.name || activeEvent?.nome || 'Festa Novo Amanhecer 2026'} • Apresente seu comprovante ou cartão na bancada de retirada.
         </p>
       </footer>
     </div>
