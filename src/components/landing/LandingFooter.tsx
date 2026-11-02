@@ -21,14 +21,21 @@ export default function LandingFooter() {
             </p>
           </div>
 
-          {/* Quick Staff Button */}
-          <div className="flex flex-col sm:flex-row items-center gap-3">
+          {/* Quick Staff Button & Live Tracking */}
+          <div className="flex flex-col sm:flex-row items-center gap-2.5">
+            <Link
+              href="/pedidos"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-emerald-200 bg-emerald-50/70 hover:bg-emerald-100 text-emerald-800 text-xs font-bold shadow-2xs transition-all"
+            >
+              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping" />
+              <span>Acompanhar Pedido ao Vivo</span>
+            </Link>
             <Link
               href={user ? (user.role === 'PDV' ? '/pos' : '/dashboard') : '/login'}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold shadow-2xs transition-all hover:border-purple-300"
+              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold shadow-2xs transition-all hover:border-purple-300"
             >
               <Shield className="h-4 w-4 text-purple-600" />
-              <span>{user ? 'Acessar Painel Operacional' : 'Área Restrita da Equipe & Admin'}</span>
+              <span>{user ? 'Painel da Equipe' : 'Área da Equipe'}</span>
             </Link>
           </div>
         </div>

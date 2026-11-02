@@ -6,8 +6,10 @@ import { FirebaseClientProvider, useFirestore } from '@/firebase';
 import CustomerDisplay from '@/components/pos/CustomerDisplay';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { type Pdv } from '@/lib/definitions';
-import { Store, Tv, Loader2, ArrowRight } from 'lucide-react';
+import { Store, Tv, Loader2, ArrowRight, Smartphone } from 'lucide-react';
 import { getPdvIconConfig } from '@/lib/pdv-icons';
+import { Button } from '@/components/ui/button';
+import Link from 'next/link';
 
 function PainelContent() {
   const searchParams = useSearchParams();
@@ -73,6 +75,21 @@ function PainelContent() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-4 sm:p-8 font-sans">
       <div className="w-full max-w-2xl space-y-6">
+        {/* Mobile Suggestion Banner */}
+        <div className="flex justify-center">
+          <Button
+            asChild
+            variant="outline"
+            size="sm"
+            className="bg-purple-950/60 border-purple-500/40 text-purple-300 hover:text-white rounded-xl text-xs gap-2 shadow-xs"
+          >
+            <Link href="/pedidos">
+              <Smartphone className="h-4 w-4 text-purple-400" />
+              Acessando pelo celular? Acompanhe seu pedido aqui
+            </Link>
+          </Button>
+        </div>
+
         {/* Header */}
         <div className="text-center space-y-2">
           <div className="inline-flex h-16 w-16 rounded-3xl bg-purple-600/20 text-purple-400 items-center justify-center border border-purple-500/30 mb-2">

@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { Logo } from '@/components/layout/Logo';
 import { Button } from '@/components/ui/button';
-import { Shield, Menu, X, ArrowRight, Sparkles, UserCheck } from 'lucide-react';
+import { Shield, Menu, X, ArrowRight, Sparkles, UserCheck, BellRing } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth-context';
 
 export default function LandingNavbar() {
@@ -47,8 +47,20 @@ export default function LandingNavbar() {
           ))}
         </nav>
 
-        {/* Right CTA: Staff / Admin Access */}
+        {/* Right CTA: Live Order Tracking + Staff Access */}
         <div className="hidden sm:flex items-center gap-2">
+          <Button
+            asChild
+            size="sm"
+            className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs text-xs font-bold gap-1.5"
+          >
+            <Link href="/pedidos">
+              <span className="h-2 w-2 rounded-full bg-emerald-300 animate-ping shrink-0" />
+              <BellRing className="h-3.5 w-3.5 shrink-0" />
+              <span>Acompanhar Pedido</span>
+            </Link>
+          </Button>
+
           {user ? (
             <Button
               asChild
@@ -94,6 +106,16 @@ export default function LandingNavbar() {
       {mobileMenuOpen && (
         <div className="md:hidden border-b border-purple-100 bg-white/95 px-4 pt-2 pb-4 shadow-lg backdrop-blur-md animate-in slide-in-from-top-2">
           <nav className="flex flex-col space-y-2">
+            <Link
+              href="/pedidos"
+              onClick={() => setMobileMenuOpen(false)}
+              className="flex items-center gap-2 rounded-xl bg-emerald-600 p-2.5 text-xs font-bold text-white shadow-xs"
+            >
+              <span className="h-2 w-2 rounded-full bg-emerald-300 animate-ping" />
+              <BellRing className="h-4 w-4" />
+              <span>Acompanhar Meu Pedido ao Vivo</span>
+            </Link>
+
             {navLinks.map((link) => (
               <a
                 key={link.href}

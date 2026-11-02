@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { Button } from '@/components/ui/button';
 import { Sparkles, Utensils, CreditCard, BellRing, Users, MapPin, Calendar } from 'lucide-react';
@@ -37,7 +38,7 @@ export default function HeroSection() {
         </p>
 
         {/* CTAs */}
-        <div className="mt-6 sm:mt-8 flex flex-col sm:flex-row items-center justify-center gap-3 max-w-md mx-auto">
+        <div className="mt-6 sm:mt-8 flex flex-col sm:flex-row items-center justify-center gap-3 max-w-2xl mx-auto flex-wrap">
           <Button
             asChild
             size="lg"
@@ -53,11 +54,24 @@ export default function HeroSection() {
             asChild
             variant="outline"
             size="lg"
+            className="w-full sm:w-auto rounded-2xl border-emerald-300 bg-emerald-50/80 hover:bg-emerald-100 text-emerald-800 font-bold text-sm h-12 px-6 shadow-xs flex items-center gap-2"
+          >
+            <Link href="/pedidos">
+              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping mr-1" />
+              <BellRing className="mr-1.5 h-4 w-4 text-emerald-600" />
+              Acompanhar Pedido ao Vivo
+            </Link>
+          </Button>
+
+          <Button
+            asChild
+            variant="outline"
+            size="lg"
             className="w-full sm:w-auto rounded-2xl border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-sm h-12 px-6 shadow-xs"
           >
             <a href="#como-funciona">
               <CreditCard className="mr-2 h-4 w-4 text-purple-600" />
-              Como Funciona o Cartão
+              Como Funciona
             </a>
           </Button>
         </div>
