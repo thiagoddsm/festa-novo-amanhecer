@@ -4,7 +4,7 @@ import { Suspense, useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { FirebaseClientProvider, useFirestore } from '@/firebase';
 import KitchenDisplay from '@/components/pos/KitchenDisplay';
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { collection, doc, getDoc, onSnapshot, query, where } from 'firebase/firestore';
 import { type Pdv } from '@/lib/definitions';
 import { ChefHat, Loader2, ArrowRight } from 'lucide-react';
 import { getPdvIconConfig } from '@/lib/pdv-icons';
@@ -13,11 +13,13 @@ function ProducaoContent() {
   const searchParams = useSearchParams();
   const pdvParam = searchParams.get('pdv');
   const tenantParam = searchParams.get('tenant') || 'igreja-batista-da-manha';
-  const eventParam = searchParams.get('event') || 'DoKmbiQ8pd3M71yTC9iA';
+  const eventParam = searchParams.get('event');
 
   const firestore = useFirestore();
   const [allPdvs, setAllPdvs] = useState<Pdv[] | null>(null);
   const [selectedPdvId, setSelectedPdvId] = useState<string | null>(pdvParam);
+  const [directPdv, setDirectPdv] = useState<{ id: string; nome: string } | null>(null);
+  const [loadingDirect, setLoadingDirect] = useState(false);
 
   // Sync param if changed
   useEffect(() => {
@@ -26,14 +28,51 @@ function ProducaoContent() {
     }
   }, [pdvParam]);
 
-  // Load all PDVs for the selector fallback, filtered by tenant and active event
+  // 1. If a specific PDV ID is in the URL, load it directly so it works regardless of event
+  useEffect(() => {
+    if (!firestore || !selectedPdvId) {
+      setDirectPdv(null);
+      return;
+    }
+
+    let isMounted = true;
+    setLoadingDirect(true);
+
+    async function loadDirectPdv() {
+      try {
+        const pdvDoc = await getDoc(doc(firestore!, 'pdvs', selectedPdvId!));
+        if (pdvDoc.exists()) {
+          const data = pdvDoc.data();
+          if (isMounted) {
+            setDirectPdv({
+              id: pdvDoc.id,
+              nome: data.nome || 'Cozinha',
+            });
+          }
+        }
+      } catch (err) {
+        console.error('Error loading direct PDV for KDS:', err);
+      } finally {
+        if (isMounted) setLoadingDirect(false);
+      }
+    }
+
+    loadDirectPdv();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [firestore, selectedPdvId]);
+
+  // 2. Load all PDVs for the selector fallback if no direct PDV
   useEffect(() => {
     if (!firestore) return;
+    const targetEvent = eventParam || 'DoKmbiQ8pd3M71yTC9iA';
     const pdvRef = collection(firestore, 'pdvs');
     const q = query(
       pdvRef,
       where('tenant_id', '==', tenantParam),
-      where('event_id', '==', eventParam)
+      where('event_id', '==', targetEvent)
     );
 
     const unsubscribe = onSnapshot(
@@ -53,14 +92,36 @@ function ProducaoContent() {
     return () => unsubscribe();
   }, [firestore, tenantParam, eventParam]);
 
-  const activePdv = (allPdvs || []).find((p) => p.id === selectedPdvId);
-
-  // If a PDV is selected (via URL query or picker), show full-screen KDS
-  if (selectedPdvId && activePdv) {
+  // If direct PDV was found (via ?pdv=...), show full-screen KDS immediately
+  if (selectedPdvId && directPdv) {
     return (
       <KitchenDisplay
-        pdvId={activePdv.id}
-        pdvNome={activePdv.nome}
+        pdvId={directPdv.id}
+        pdvNome={directPdv.nome}
+        onBack={() => {
+          setSelectedPdvId(null);
+          setDirectPdv(null);
+        }}
+      />
+    );
+  }
+
+  // If still loading direct PDV
+  if (loadingDirect || (selectedPdvId && directPdv === null && allPdvs === null)) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-400 gap-3">
+        <Loader2 className="h-10 w-10 animate-spin text-amber-500" />
+        <p className="text-sm font-semibold">Carregando Tela de Produção...</p>
+      </div>
+    );
+  }
+
+  const activeFromList = (allPdvs || []).find((p) => p.id === selectedPdvId);
+  if (selectedPdvId && activeFromList) {
+    return (
+      <KitchenDisplay
+        pdvId={activeFromList.id}
+        pdvNome={activeFromList.nome}
         onBack={() => setSelectedPdvId(null)}
       />
     );

@@ -4,7 +4,7 @@ import { Suspense, useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { FirebaseClientProvider, useFirestore } from '@/firebase';
 import CustomerDisplay from '@/components/pos/CustomerDisplay';
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { collection, doc, getDoc, onSnapshot, query, where } from 'firebase/firestore';
 import { type Pdv } from '@/lib/definitions';
 import { Store, Tv, Loader2, ArrowRight, Smartphone } from 'lucide-react';
 import { getPdvIconConfig } from '@/lib/pdv-icons';
@@ -15,11 +15,13 @@ function PainelContent() {
   const searchParams = useSearchParams();
   const pdvParam = searchParams.get('pdv');
   const tenantParam = searchParams.get('tenant') || 'igreja-batista-da-manha';
-  const eventParam = searchParams.get('event') || 'DoKmbiQ8pd3M71yTC9iA';
+  const eventParam = searchParams.get('event');
 
   const firestore = useFirestore();
   const [allPdvs, setAllPdvs] = useState<Pdv[] | null>(null);
   const [selectedPdvId, setSelectedPdvId] = useState<string | null>(pdvParam);
+  const [directPdv, setDirectPdv] = useState<{ id: string; nome: string; eventName: string } | null>(null);
+  const [loadingDirect, setLoadingDirect] = useState(false);
 
   // Sync param if changed
   useEffect(() => {
@@ -28,14 +30,65 @@ function PainelContent() {
     }
   }, [pdvParam]);
 
-  // Load all PDVs for the selector fallback, filtered by tenant and active event
+  // 1. If a specific PDV ID is in the URL, load it directly so it works regardless of event
+  useEffect(() => {
+    if (!firestore || !selectedPdvId) {
+      setDirectPdv(null);
+      return;
+    }
+
+    let isMounted = true;
+    setLoadingDirect(true);
+
+    async function loadDirectPdv() {
+      try {
+        const pdvDoc = await getDoc(doc(firestore!, 'pdvs', selectedPdvId!));
+        if (pdvDoc.exists()) {
+          const data = pdvDoc.data();
+          let evName = 'Festa Novo Amanhecer 2026';
+
+          if (data.tenant_id && data.event_id) {
+            try {
+              const evDoc = await getDoc(doc(firestore!, 'tenants', data.tenant_id, 'events', data.event_id));
+              if (evDoc.exists()) {
+                evName = evDoc.data().name || evDoc.data().nome || evName;
+              }
+            } catch (e) {
+              // Ignore event lookup error
+            }
+          }
+
+          if (isMounted) {
+            setDirectPdv({
+              id: pdvDoc.id,
+              nome: data.nome || 'Barraca',
+              eventName: evName,
+            });
+          }
+        }
+      } catch (err) {
+        console.error('Error loading direct PDV for TV panel:', err);
+      } finally {
+        if (isMounted) setLoadingDirect(false);
+      }
+    }
+
+    loadDirectPdv();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [firestore, selectedPdvId]);
+
+  // 2. Load all PDVs for the selector fallback if no direct PDV
   useEffect(() => {
     if (!firestore) return;
+    const targetEvent = eventParam || 'DoKmbiQ8pd3M71yTC9iA';
     const pdvRef = collection(firestore, 'pdvs');
     const q = query(
       pdvRef,
       where('tenant_id', '==', tenantParam),
-      where('event_id', '==', eventParam)
+      where('event_id', '==', targetEvent)
     );
 
     const unsubscribe = onSnapshot(
@@ -55,21 +108,44 @@ function PainelContent() {
     return () => unsubscribe();
   }, [firestore, tenantParam, eventParam]);
 
-  const activePdv = (allPdvs || []).find((p) => p.id === selectedPdvId);
-
-  // If a PDV is selected (via URL query or picker), show full-screen Customer TV Display
-  if (selectedPdvId && activePdv) {
+  // If direct PDV was found (via ?pdv=...), show TV display immediately
+  if (selectedPdvId && directPdv) {
     return (
       <CustomerDisplay
-        pdvId={activePdv.id}
-        pdvNome={activePdv.nome}
+        pdvId={directPdv.id}
+        pdvNome={directPdv.nome}
+        eventName={directPdv.eventName}
+        onBack={() => {
+          setSelectedPdvId(null);
+          setDirectPdv(null);
+        }}
+      />
+    );
+  }
+
+  // If still loading direct PDV or PDVs list
+  if (loadingDirect || (selectedPdvId && directPdv === null && allPdvs === null)) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-400 gap-3">
+        <Loader2 className="h-10 w-10 animate-spin text-purple-500" />
+        <p className="text-sm font-semibold">Carregando painel de chamadas da barraca...</p>
+      </div>
+    );
+  }
+
+  const activeFromList = (allPdvs || []).find((p) => p.id === selectedPdvId);
+  if (selectedPdvId && activeFromList) {
+    return (
+      <CustomerDisplay
+        pdvId={activeFromList.id}
+        pdvNome={activeFromList.nome}
         eventName="Festa Novo Amanhecer 2026"
         onBack={() => setSelectedPdvId(null)}
       />
     );
   }
 
-  // If still loading PDVs
+  // If still loading PDVs list
   if (allPdvs === null) {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-400 gap-3">

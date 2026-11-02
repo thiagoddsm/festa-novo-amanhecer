@@ -191,6 +191,23 @@ export default function PublicOrderTracker({
         if (!isMounted) return;
         setEvents(loadedEvents);
 
+        // If a specific PDV was provided in props or URL, detect its event directly
+        if (initialPdvId) {
+          try {
+            const directPdvSnap = await getDoc(doc(firestore!, 'pdvs', initialPdvId));
+            if (directPdvSnap.exists()) {
+              const pData = directPdvSnap.data();
+              if (pData.event_id) {
+                setSelectedEventId(pData.event_id);
+                setSelectedPdvId(initialPdvId);
+                return;
+              }
+            }
+          } catch (e) {
+            // Ignore direct lookup error
+          }
+        }
+
         // Resolve active event
         if (eventId) {
           const cleanParam = eventId.toLowerCase().trim();

@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/utils';
 import type { Pdv, MenuItem, Card as CardType, PdvIngredient } from '@/lib/definitions';
-import { CheckCircle2, XCircle, Loader2, ShoppingCart, X, ArrowLeft, Trash2, Pencil, QrCode, MessageSquarePlus, MessageSquare, Camera, PackagePlus, AlertTriangle, ExternalLink, ChefHat, Tv, Clock, Flame, Zap } from 'lucide-react';
+import { CheckCircle2, XCircle, Loader2, ShoppingCart, X, ArrowLeft, Trash2, Pencil, QrCode, MessageSquarePlus, MessageSquare, Camera, PackagePlus, AlertTriangle, ExternalLink, ChefHat, Tv, Clock, Flame, Zap, Smartphone } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useFirestore } from '@/firebase';
 import { collection, onSnapshot, query, orderBy, doc, getDocs, where, limit, getDoc } from 'firebase/firestore';
@@ -1031,14 +1031,14 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv; onGoBack?: (
                     </button>
                 </div>
 
-                {/* Atalhos para Abrir em Tela Cheia / TV */}
-                <div className="flex items-center gap-2">
+                {/* Atalhos para Abrir em Tela Cheia / TV / Celular */}
+                <div className="flex items-center gap-2 flex-wrap">
                     <Button
                         type="button"
                         variant="outline"
                         size="sm"
                         className="h-8 text-xs gap-1.5 border-purple-200 bg-purple-50/60 hover:bg-purple-100 text-purple-700 shadow-xs"
-                        onClick={() => window.open(`/painel?pdv=${pdv.id}`, '_blank')}
+                        onClick={() => window.open(`/painel?pdv=${pdv.id}&event=${pdv.event_id || currentEvent?.id || ''}&tenant=${pdv.tenant_id || currentTenant?.id || ''}`, '_blank')}
                     >
                         <Tv className="h-3.5 w-3.5" />
                         <span>Abrir Painel TV</span>
@@ -1049,10 +1049,21 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv; onGoBack?: (
                         variant="outline"
                         size="sm"
                         className="h-8 text-xs gap-1.5 border-amber-300 bg-amber-50/60 hover:bg-amber-100 text-amber-800 shadow-xs"
-                        onClick={() => window.open(`/producao?pdv=${pdv.id}`, '_blank')}
+                        onClick={() => window.open(`/producao?pdv=${pdv.id}&event=${pdv.event_id || currentEvent?.id || ''}&tenant=${pdv.tenant_id || currentTenant?.id || ''}`, '_blank')}
                     >
                         <ChefHat className="h-3.5 w-3.5" />
                         <span>KDS Tela Cheia</span>
+                        <ExternalLink className="h-3 w-3 opacity-60" />
+                    </Button>
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-8 text-xs gap-1.5 border-emerald-300 bg-emerald-50/60 hover:bg-emerald-100 text-emerald-800 shadow-xs"
+                        onClick={() => window.open(`/${pdv.tenant_id || currentTenant?.id || 'igreja-batista-da-manha'}/pedidos?pdv=${pdv.id}`, '_blank')}
+                    >
+                        <Smartphone className="h-3.5 w-3.5 text-emerald-600" />
+                        <span>Link Cliente (Celular)</span>
                         <ExternalLink className="h-3 w-3 opacity-60" />
                     </Button>
                 </div>
