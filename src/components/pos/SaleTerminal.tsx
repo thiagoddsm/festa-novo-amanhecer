@@ -32,11 +32,15 @@ import { useAuth } from '@/hooks/use-auth-context';
 import { getPdvIconConfig } from '@/lib/pdv-icons';
 
 
-function getQueueEstimate(ordersCount: number) {
-  if (ordersCount === 0) {
+function getQueueEstimate(ordersCount: number, itemsCount: number = 0) {
+  // Total de carnes / lanches em preparo na fila das 2 chapas (capacidade 12 carnes cada chapa = 24 total)
+  const carnesNaFila = itemsCount > 0 ? itemsCount : Math.ceil(ordersCount * 1.5);
+
+  if (ordersCount === 0 && carnesNaFila === 0) {
     return {
-      title: 'Cozinha livre (sem fila)',
+      title: 'Chapas livres (sem fila)',
       timeText: '~3 a 5 min (Imediato)',
+      chapaInfo: '2 chapas livres • Início imediato',
       containerClass: 'bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200',
       iconClass: 'bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300',
       badgeClass: 'bg-emerald-100/90 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700',
@@ -45,10 +49,12 @@ function getQueueEstimate(ordersCount: number) {
     };
   }
 
-  if (ordersCount === 1) {
+  // Até 12 carnes: cabe tudo na 1ª rodada da chapa
+  if (carnesNaFila <= 12) {
     return {
-      title: '1 pedido na frente',
+      title: `${ordersCount} ${ordersCount === 1 ? 'pedido' : 'pedidos'} • ${carnesNaFila} ${carnesNaFila === 1 ? 'lanche' : 'lanches'} na frente`,
       timeText: '~5 a 8 min',
+      chapaInfo: '1ª rodada (cabe na chapa atual)',
       containerClass: 'bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200',
       iconClass: 'bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300',
       badgeClass: 'bg-emerald-100/90 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700',
@@ -57,10 +63,12 @@ function getQueueEstimate(ordersCount: number) {
     };
   }
 
-  if (ordersCount <= 3) {
+  // 13 a 24 carnes: 2ª rodada ou distribuído entre as 2 chapas (artesanal e tradicional)
+  if (carnesNaFila <= 24) {
     return {
-      title: `${ordersCount} pedidos na frente`,
-      timeText: '~8 a 12 min',
+      title: `${ordersCount} pedidos • ${carnesNaFila} lanches na frente`,
+      timeText: '~8 a 14 min',
+      chapaInfo: '2ª rodada nas 2 chapas',
       containerClass: 'bg-amber-50/80 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200',
       iconClass: 'bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300',
       badgeClass: 'bg-amber-100/90 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-700',
@@ -69,10 +77,12 @@ function getQueueEstimate(ordersCount: number) {
     };
   }
 
-  if (ordersCount <= 6) {
+  // 25 a 36 carnes: ~3 rodadas de chapa
+  if (carnesNaFila <= 36) {
     return {
-      title: `${ordersCount} pedidos na frente`,
-      timeText: '~12 a 18 min',
+      title: `${ordersCount} pedidos • ${carnesNaFila} lanches na frente`,
+      timeText: '~15 a 22 min',
+      chapaInfo: '~3ª rodada nas chapas',
       containerClass: 'bg-amber-50/80 dark:bg-amber-950/30 border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200',
       iconClass: 'bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300',
       badgeClass: 'bg-amber-100/90 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-700',
@@ -81,10 +91,12 @@ function getQueueEstimate(ordersCount: number) {
     };
   }
 
-  if (ordersCount <= 10) {
+  // 37 a 48 carnes: ~4 rodadas nas chapas
+  if (carnesNaFila <= 48) {
     return {
-      title: `${ordersCount} pedidos na frente`,
-      timeText: '~20 a 30 min',
+      title: `${ordersCount} pedidos • ${carnesNaFila} lanches na frente`,
+      timeText: '~22 a 30 min',
+      chapaInfo: '~4ª rodada nas chapas',
       containerClass: 'bg-orange-50/80 dark:bg-orange-950/30 border-orange-200 dark:border-orange-800 text-orange-900 dark:text-orange-200',
       iconClass: 'bg-orange-100 dark:bg-orange-900/60 text-orange-700 dark:text-orange-300',
       badgeClass: 'bg-orange-100/90 dark:bg-orange-900/40 text-orange-800 dark:text-orange-300 border-orange-300 dark:border-orange-700',
@@ -93,9 +105,11 @@ function getQueueEstimate(ordersCount: number) {
     };
   }
 
+  // Acima de 48 carnes: fila intensa
   return {
-    title: `${ordersCount} pedidos na frente (Fila intensa)`,
+    title: `${ordersCount} pedidos • ${carnesNaFila} lanches (Fila intensa)`,
     timeText: '+30 min de espera',
+    chapaInfo: '+4 rodadas nas chapas',
     containerClass: 'bg-rose-50/80 dark:bg-rose-950/30 border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200',
     iconClass: 'bg-rose-100 dark:bg-rose-900/60 text-rose-700 dark:text-rose-300',
     badgeClass: 'bg-rose-100/90 dark:bg-rose-900/40 text-rose-800 dark:text-rose-300 border-rose-300 dark:border-rose-700',
@@ -329,7 +343,7 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv; onGoBack?: (
     return () => unsubscribe();
   }, [firestore, pdv.id, currentTenant, currentEvent]);
 
-  const queueEstimate = getQueueEstimate(ordersInQueue);
+  const queueEstimate = getQueueEstimate(ordersInQueue, itemsInQueue);
 
 
   // Sync PDV data in real-time (especially WhatsApp status)
@@ -438,11 +452,22 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv; onGoBack?: (
     setCart(currentCart => {
       const existingItemIndex = currentCart.findIndex(cartItem => cartItem.id === item.id && !cartItem.observation);
       if (existingItemIndex > -1) {
-          const newCart = [...currentCart];
-          newCart[existingItemIndex].quantity += 1;
-          return newCart;
+        return currentCart.map((cartItem, idx) =>
+          idx === existingItemIndex
+            ? { ...cartItem, quantity: cartItem.quantity + 1 }
+            : cartItem
+        );
       }
-      return [...currentCart, { id: item.id, name: item.nome, price: item.preco_centavos, quantity: 1, ingredientes: item.ingredientes }];
+      return [
+        ...currentCart,
+        {
+          id: item.id,
+          name: item.nome,
+          price: item.preco_centavos,
+          quantity: 1,
+          ingredientes: item.ingredientes,
+        },
+      ];
     });
   };
 
@@ -479,14 +504,20 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv; onGoBack?: (
         );
 
         if (existingItemWithNewObsIndex > -1) {
-            // Merge quantities
-            newCart[existingItemWithNewObsIndex].quantity += item.quantity;
-            // Remove the original item
-            return newCart.filter((_, index) => index !== itemIndex);
+            // Merge quantities immutably
+            return currentCart
+              .map((cartItem, index) => {
+                if (index === existingItemWithNewObsIndex) {
+                  return { ...cartItem, quantity: cartItem.quantity + item.quantity };
+                }
+                return cartItem;
+              })
+              .filter((_, index) => index !== itemIndex);
         } else {
-            // Just update the observation
-             newCart[itemIndex] = { ...item, observation };
-             return newCart;
+             // Just update the observation immutably
+             return currentCart.map((cartItem, index) =>
+               index === itemIndex ? { ...cartItem, observation } : cartItem
+             );
         }
       });
   };
@@ -614,7 +645,7 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv; onGoBack?: (
                 queueEstimate.headerClass
               )}>
                 <Clock className="h-3.5 w-3.5 shrink-0" />
-                <span>{ordersInQueue === 0 ? 'Cozinha Livre' : `${ordersInQueue} ${ordersInQueue === 1 ? 'pedido' : 'pedidos'} na frente`}</span>
+                <span>{ordersInQueue === 0 ? 'Chapas Livres' : `${ordersInQueue} ped. • ${itemsInQueue} lanches`}</span>
                 <span className="opacity-75 text-[11px] font-normal">({queueEstimate.timeText})</span>
               </div>
 
@@ -918,6 +949,7 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv; onGoBack?: (
                                             </p>
                                             <p className="text-[11px] leading-tight mt-0.5 opacity-90">
                                                 Estimativa p/ cliente: <strong className="font-bold underline decoration-dotted">{queueEstimate.timeText}</strong>
+                                                <span className="opacity-80 ml-1.5 font-medium">({queueEstimate.chapaInfo})</span>
                                             </p>
                                         </div>
                                     </div>
