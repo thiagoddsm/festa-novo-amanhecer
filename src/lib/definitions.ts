@@ -255,4 +255,20 @@ export type Order = {
   notification_route?: 'PDV' | 'EVENT_FALLBACK';
   notification_error?: string;
   notified_at?: Timestamp;
+
+  /** Métricas de Tempo de Preparo e Log */
+  ready_at?: Timestamp;
+  delivered_at?: Timestamp;
+  prep_time_seconds?: number;
+  prep_time_formatted?: string;
+  total_time_seconds?: number;
+  total_time_formatted?: string;
+  status_history?: Array<{
+    status: string;
+    timestamp: Timestamp;
+    prep_time_seconds?: number;
+    prep_time_formatted?: string;
+    total_time_seconds?: number;
+    total_time_formatted?: string;
+  }>;
 };

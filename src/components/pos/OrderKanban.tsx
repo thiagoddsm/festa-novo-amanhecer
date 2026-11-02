@@ -9,7 +9,7 @@ import { updateOrderStatus } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '../ui/skeleton';
 import { ScrollArea } from '../ui/scroll-area';
-import { Loader2, ArrowRightCircle, MessageSquare, Check, AlertCircle } from 'lucide-react';
+import { Loader2, ArrowRightCircle, MessageSquare, Check, AlertCircle, Clock } from 'lucide-react';
 import { DndProvider, useDrag, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { TouchBackend } from 'react-dnd-touch-backend';
@@ -93,6 +93,71 @@ const formatTimestamp = (ts: unknown): Date => {
     return new Date(ts);
   }
   return new Date();
+}
+
+
+function KanbanPrepBadge({ order }: { order: Order }) {
+  const [elapsed, setElapsed] = useState('');
+  const [level, setLevel] = useState<'normal' | 'warn' | 'urgent'>('normal');
+
+  const isEmPreparo = order.status === 'PENDENTE' || order.status === 'EM_PREPARO';
+
+  useEffect(() => {
+    if (!isEmPreparo) return;
+    const createdDate = formatTimestamp(order.created_at);
+    const update = () => {
+      const diffSec = Math.max(0, Math.floor((Date.now() - createdDate.getTime()) / 1000));
+      const m = Math.floor(diffSec / 60);
+      const s = diffSec % 60;
+      setElapsed(`${m}m ${s.toString().padStart(2, '0')}s`);
+      if (m >= 15) setLevel('urgent');
+      else if (m >= 8) setLevel('warn');
+      else setLevel('normal');
+    };
+    update();
+    const interval = setInterval(update, 5000);
+    return () => clearInterval(interval);
+  }, [order.created_at, isEmPreparo]);
+
+  if (isEmPreparo) {
+    if (level === 'urgent') {
+      return (
+        <span className="inline-flex items-center gap-1 text-[11px] font-black text-rose-600 dark:text-rose-400 animate-pulse bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 rounded-md">
+          <Clock className="h-3 w-3 stroke-[2.5]" /> {elapsed}
+        </span>
+      );
+    }
+    if (level === 'warn') {
+      return (
+        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-md">
+          <Clock className="h-3 w-3" /> {elapsed}
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-md">
+        <Clock className="h-3 w-3" /> {elapsed}
+      </span>
+    );
+  }
+
+  if (order.status === 'PRONTO' && order.prep_time_formatted) {
+    return (
+      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800">
+        <Check className="h-3 w-3 stroke-[2.5]" /> Pronto em {order.prep_time_formatted}
+      </span>
+    );
+  }
+
+  if (order.status === 'ENTREGUE' && order.prep_time_formatted) {
+    return (
+      <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground bg-muted/60 px-2 py-0.5 rounded">
+        Preparo: {order.prep_time_formatted}
+      </span>
+    );
+  }
+
+  return null;
 }
 
 const OrderCard = ({ order }: { order: Order }) => {

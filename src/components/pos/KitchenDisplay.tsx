@@ -90,9 +90,9 @@ function ElapsedTimeBadge({ createdAt }: { createdAt: unknown }) {
   }
 
   return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-slate-800 text-slate-300 border border-slate-700">
-      <Clock className="h-3 w-3 text-slate-400" />
-      {minutes}m
+    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-slate-800/90 text-emerald-400 border border-slate-700">
+      <Clock className="h-3.5 w-3.5 text-emerald-400" />
+      {minutes}m {seconds.toString().padStart(2, '0')}s
     </span>
   );
 }
@@ -257,25 +257,52 @@ export default function KitchenDisplay({
     };
   }, [orders]);
 
-  // Filtered orders
-  const visibleOrders = useMemo(() => {
-    if (!orders) return [];
+  // Filtered orders com ordenação estrita pela hora do pedido (FIFO)
+  const { visibleOrders, inPrepList } = useMemo(() => {
+    if (!orders) return { visibleOrders: [], inPrepList: [] };
 
+    // Fila estritamente ordenada por ordem de chegada (hora do pedido ascendente)
+    const inPrep = orders
+      .filter((o) => o.status === 'PENDENTE' || o.status === 'EM_PREPARO')
+      .sort((a, b) => {
+        const da = formatTimestamp(a.created_at).getTime();
+        const db = formatTimestamp(b.created_at).getTime();
+        return da - db; // FIFO: mais antigo primeiro
+      });
+
+    // Prontos ordenados pelos mais recentes primeiro
+    const prontos = orders
+      .filter((o) => o.status === 'PRONTO')
+      .sort((a, b) => {
+        const da = formatTimestamp(a.ready_at || a.updated_at || a.created_at).getTime();
+        const db = formatTimestamp(b.ready_at || b.updated_at || b.created_at).getTime();
+        return db - da;
+      });
+
+    // Entregues
+    const entregues = orders
+      .filter((o) => o.status === 'ENTREGUE')
+      .sort((a, b) => {
+        const da = formatTimestamp(a.delivered_at || a.updated_at || a.created_at).getTime();
+        const db = formatTimestamp(b.delivered_at || b.updated_at || b.created_at).getTime();
+        return db - da;
+      })
+      .slice(0, 30);
+
+    let list: Order[] = [];
     if (filterMode === 'ATIVOS') {
-      return orders.filter(
-        (o) => o.status === 'PENDENTE' || o.status === 'EM_PREPARO' || o.status === 'PRONTO'
-      );
+      list = [...inPrep, ...prontos];
+    } else if (filterMode === 'EM_PREPARO') {
+      list = inPrep;
+    } else if (filterMode === 'PRONTO') {
+      list = prontos;
+    } else if (filterMode === 'ENTREGUE') {
+      list = entregues;
+    } else {
+      list = orders;
     }
-    if (filterMode === 'EM_PREPARO') {
-      return orders.filter((o) => o.status === 'PENDENTE' || o.status === 'EM_PREPARO');
-    }
-    if (filterMode === 'PRONTO') {
-      return orders.filter((o) => o.status === 'PRONTO');
-    }
-    if (filterMode === 'ENTREGUE') {
-      return orders.filter((o) => o.status === 'ENTREGUE').slice(-20);
-    }
-    return orders;
+
+    return { visibleOrders: list, inPrepList: inPrep };
   }, [orders, filterMode]);
 
   return (
@@ -458,44 +485,64 @@ export default function KitchenDisplay({
                   }`}
                 >
                   {/* Card Header */}
-                  <div
-                    className={`p-3.5 border-b flex items-start justify-between gap-2 ${
-                      isPronto
-                        ? 'bg-emerald-950/40 border-emerald-500/30'
-                        : 'bg-slate-800/40 border-slate-800'
-                    }`}
-                  >
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-black text-2xl sm:text-3xl tracking-tight text-white font-mono">
-                          #{order.order_number}
-                        </span>
-                        {isPronto && (
-                          <Badge className="bg-emerald-500 text-slate-950 font-black text-[10px] px-2">
-                            PRONTO
-                          </Badge>
-                        )}
-                        {isEmPreparo && (
-                          <Badge className="bg-amber-500/20 text-amber-400 border border-amber-500/30 font-bold text-[10px] px-2">
-                            NA CHAPA
-                          </Badge>
-                        )}
-                      </div>
-                      <p className="text-sm font-bold text-slate-300 truncate max-w-[170px] sm:max-w-[200px]">
-                        {order.cliente_nome || 'Cliente'}
-                      </p>
-                    </div>
+                  {(() => {
+                    const queuePos = inPrepList.findIndex((o) => o.id === order.id);
+                    return (
+                      <div
+                        className={`p-3.5 border-b flex items-start justify-between gap-2 ${
+                          isPronto
+                            ? 'bg-emerald-950/40 border-emerald-500/30'
+                            : 'bg-slate-800/40 border-slate-800'
+                        }`}
+                      >
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-black text-2xl sm:text-3xl tracking-tight text-white font-mono">
+                              #{order.order_number}
+                            </span>
+                            {isEmPreparo && queuePos >= 0 && (
+                              <Badge className="bg-amber-500 text-slate-950 font-black text-[10px] px-2 shadow-xs">
+                                #{queuePos + 1} NA FILA
+                              </Badge>
+                            )}
+                            {isPronto && (
+                              <Badge className="bg-emerald-500 text-slate-950 font-black text-[10px] px-2 shadow-xs">
+                                PRONTO
+                              </Badge>
+                            )}
+                            {isEntregue && (
+                              <Badge className="bg-slate-700 text-slate-300 font-bold text-[10px] px-2">
+                                ENTREGUE
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-sm font-bold text-slate-300 truncate max-w-[170px] sm:max-w-[200px] mt-0.5">
+                            {order.cliente_nome || 'Cliente'}
+                          </p>
+                        </div>
 
-                    <div className="flex flex-col items-end gap-1">
-                      <ElapsedTimeBadge createdAt={order.created_at} />
-                      <span className="text-[10px] font-mono text-slate-500">
-                        {formatTimestamp(order.created_at).toLocaleTimeString('pt-BR', {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
-                      </span>
-                    </div>
-                  </div>
+                        <div className="flex flex-col items-end gap-1 shrink-0">
+                          {isEmPreparo ? (
+                            <ElapsedTimeBadge createdAt={order.created_at} />
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-black bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                              <Check className="h-3 w-3 stroke-[3]" />
+                              {order.prep_time_formatted ? `Pronto em ${order.prep_time_formatted}` : 'Pronto'}
+                            </span>
+                          )}
+                          <span className="text-[10px] font-mono text-slate-400 flex items-center gap-1">
+                            <span>Pedido:</span>
+                            <strong className="text-slate-300 font-semibold">
+                              {formatTimestamp(order.created_at).toLocaleTimeString('pt-BR', {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                            </strong>
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {/* Card Items List */}
                   <div className="p-3.5 flex-1 space-y-2.5">

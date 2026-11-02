@@ -296,7 +296,7 @@ export default function CustomerDisplay({
               </div>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-2 gap-2.5">
-                {inPrepOrders.map((order) => (
+                {inPrepOrders.map((order, idx) => (
                   <div
                     key={order.id}
                     className="p-3 rounded-2xl bg-slate-800/60 border border-slate-700/60 flex flex-col justify-between shadow-xs transition-transform hover:scale-[1.02]"
@@ -305,11 +305,18 @@ export default function CustomerDisplay({
                       <span className="font-mono font-black text-xl sm:text-2xl text-amber-300">
                         #{order.order_number}
                       </span>
-                      <span className="h-2 w-2 rounded-full bg-amber-400 animate-ping shrink-0" />
+                      <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                        #{idx + 1} da fila
+                      </span>
                     </div>
-                    <p className="font-semibold text-xs sm:text-sm text-slate-200 truncate mt-1">
-                      {order.cliente_nome || 'Cliente'}
-                    </p>
+                    <div className="mt-1.5 flex items-center justify-between gap-1">
+                      <p className="font-semibold text-xs sm:text-sm text-slate-200 truncate">
+                        {order.cliente_nome || 'Cliente'}
+                      </p>
+                      <span className="text-[10px] font-mono text-slate-400 shrink-0">
+                        {formatTimestamp(order.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -392,10 +399,17 @@ export default function CustomerDisplay({
                       </div>
 
                       {/* Customer Name */}
-                      <div className="pt-2 border-t border-white/20">
-                        <p className="font-black text-base sm:text-xl lg:text-2xl truncate uppercase tracking-wide">
+                      <div className="pt-2 border-t border-white/20 flex items-center justify-between gap-2">
+                        <p className="font-black text-base sm:text-xl lg:text-2xl truncate uppercase tracking-wide min-w-0">
                           {order.cliente_nome || 'Cliente'}
                         </p>
+                        {order.prep_time_formatted && (
+                          <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
+                            isNewest ? 'bg-white/20 text-white' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                          }`}>
+                            ⏱ {order.prep_time_formatted}
+                          </span>
+                        )}
                       </div>
                     </div>
                   );

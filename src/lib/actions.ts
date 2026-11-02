@@ -32,6 +32,7 @@ import {
   runTransaction as clientRunTransaction,
   Timestamp as ClientTimestamp,
   deleteField as clientDeleteField,
+  arrayUnion as clientArrayUnion,
 } from 'firebase/firestore';
 import { firebaseConfig } from '@/firebase/config';
 
@@ -1461,10 +1462,62 @@ export async function updateOrderStatus(orderId: string, newStatus: Order['statu
 
     try {
         const orderRef = clientDoc(db, 'orders', validated.data.orderId);
-        await clientUpdateDoc(orderRef, {
+        const orderSnap = await clientGetDoc(orderRef);
+        const orderData = orderSnap.exists() ? (orderSnap.data() as Partial<Order>) : null;
+
+        const now = ClientTimestamp.now();
+        const updatePayload: Record<string, any> = {
             status: validated.data.newStatus,
-            updated_at: ClientTimestamp.now(),
-        });
+            updated_at: now,
+        };
+
+        const historyEntry: Record<string, any> = {
+            status: validated.data.newStatus,
+            timestamp: now,
+        };
+
+        // When order is marked as PRONTO: calculate preparation time from created_at
+        if (validated.data.newStatus === 'PRONTO') {
+            updatePayload.ready_at = now;
+            if (orderData?.created_at) {
+                const createdDate = typeof orderData.created_at?.toDate === 'function' 
+                    ? orderData.created_at.toDate() 
+                    : new Date(orderData.created_at as unknown as string);
+                const diffMs = Math.max(0, Date.now() - createdDate.getTime());
+                const prepSeconds = Math.floor(diffMs / 1000);
+                const m = Math.floor(prepSeconds / 60);
+                const s = prepSeconds % 60;
+                const prepFormatted = m > 0 ? `${m}m ${s.toString().padStart(2, '0')}s` : `${s}s`;
+
+                updatePayload.prep_time_seconds = prepSeconds;
+                updatePayload.prep_time_formatted = prepFormatted;
+
+                historyEntry.prep_time_seconds = prepSeconds;
+                historyEntry.prep_time_formatted = prepFormatted;
+            }
+        } else if (validated.data.newStatus === 'ENTREGUE') {
+            updatePayload.delivered_at = now;
+            if (orderData?.created_at) {
+                const createdDate = typeof orderData.created_at?.toDate === 'function' 
+                    ? orderData.created_at.toDate() 
+                    : new Date(orderData.created_at as unknown as string);
+                const diffMs = Math.max(0, Date.now() - createdDate.getTime());
+                const totalSeconds = Math.floor(diffMs / 1000);
+                const m = Math.floor(totalSeconds / 60);
+                const s = totalSeconds % 60;
+                const totalFormatted = m > 0 ? `${m}m ${s.toString().padStart(2, '0')}s` : `${s}s`;
+
+                updatePayload.total_time_seconds = totalSeconds;
+                updatePayload.total_time_formatted = totalFormatted;
+
+                historyEntry.total_time_seconds = totalSeconds;
+                historyEntry.total_time_formatted = totalFormatted;
+            }
+        }
+
+        updatePayload.status_history = clientArrayUnion(historyEntry);
+
+        await clientUpdateDoc(orderRef, updatePayload);
         
         // If the order is ready, trigger a notification
         if (validated.data.newStatus === 'PRONTO') {
