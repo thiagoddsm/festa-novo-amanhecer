@@ -1648,6 +1648,29 @@ export async function deleteTransactions(transactionIds: string[]): Promise<Acti
                 batch.delete(doc.ref);
             });
         }
+
+        // Adjust card balance if deleting recharges/sales
+        for (const id of transactionIds) {
+            try {
+                const txSnap = await clientGetDoc(clientDoc(db, 'transactions', id));
+                if (txSnap.exists()) {
+                    const tx = txSnap.data() as Transaction;
+                    if (tx.cartao_id) {
+                        const cardRef = clientDoc(db, 'cards', tx.cartao_id);
+                        const cardSnap = await clientGetDoc(cardRef);
+                        if (cardSnap.exists()) {
+                            const cdata = cardSnap.data() as Card;
+                            if (tx.tipo === 'RECARGA') {
+                                const newBal = Math.max(0, (cdata.saldo_centavos || 0) - (tx.valor_centavos || 0));
+                                batch.update(cardRef, { saldo_centavos: newBal, updated_at: ClientTimestamp.now() });
+                            }
+                        }
+                    }
+                }
+            } catch (err) {
+                console.warn('Erro ao ajustar saldo do cartão ao excluir transação:', err);
+            }
+        }
         
         // Delete the transactions themselves
         transactionIds.forEach(id => {

@@ -7,7 +7,7 @@ import { formatCurrency, formatDateTime } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { List, Package, User, CornerDownRight, UserCog, Undo2, Loader2, ArrowRightLeft } from 'lucide-react';
+import { List, Package, User, CornerDownRight, UserCog, Undo2, Loader2, ArrowRightLeft, Trash2 } from 'lucide-react';
 import { DataTable } from '@/components/ui/data-table';
 import { type ColumnDef, type Row } from '@tanstack/react-table';
 import jsPDF from 'jspdf';
@@ -143,6 +143,52 @@ const getTipoVariant = (tipo: string) => {
     );
 }
 
+function DeleteButton({ transaction, user }: { transaction: TransactionDetails, user: any }) {
+    const [isPending, startTransition] = useTransition();
+    const { toast } = useToast();
+
+    if (!user || !['SUPERADMIN', 'ADMIN_ORGANIZACAO'].includes(user.role ?? '')) {
+        return null;
+    }
+
+    const handleDelete = () => {
+        startTransition(async () => {
+            const result = await deleteTransactions([transaction.id]);
+            toast({
+                title: result?.status === 'success' ? 'Sucesso!' : 'Erro!',
+                description: result.message,
+                variant: result?.status === 'success' ? 'default' : 'destructive'
+            });
+        });
+    };
+
+    return (
+        <AlertDialog>
+            <AlertDialogTrigger asChild>
+                <Button variant="ghost" size="sm" className="h-8 text-destructive hover:text-destructive hover:bg-destructive/10" disabled={isPending}>
+                    {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4 mr-1.5" />}
+                    Excluir
+                </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Excluir Transação</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        Tem certeza que deseja excluir permanentemente esta transação de {formatCurrency(transaction.valor_centavos)}?
+                        Esta ação removerá o registro do histórico.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                        Confirmar Exclusão
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+    );
+}
+
 const getColumns = (user: any): ColumnDef<TransactionDetails>[] => [
     {
         accessorKey: 'pdv_nome',
@@ -203,7 +249,12 @@ const getColumns = (user: any): ColumnDef<TransactionDetails>[] => [
     {
         id: 'actions',
         header: 'Ações',
-        cell: ({ row }) => <ReversalButton transaction={row.original} user={user} />,
+        cell: ({ row }) => (
+            <div className="flex items-center gap-1 justify-end">
+                <ReversalButton transaction={row.original} user={user} />
+                <DeleteButton transaction={row.original} user={user} />
+            </div>
+        ),
     },
 ]
 
