@@ -13,11 +13,13 @@ import { type ColumnDef, type Row } from '@tanstack/react-table';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useAuth } from '@/hooks/use-auth-context';
-import { deleteTransactions, reverseTransaction } from '@/lib/actions';
+import { deleteTransactions, deleteTransaction, reverseTransaction } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 import { useCollection } from '@/firebase/firestore/use-collection';
 import { useMemoFirebase } from '@/firebase/provider';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 
 
@@ -114,7 +116,7 @@ const getTipoVariant = (tipo: string) => {
     }
     
     // Disable if transaction is a refund or transfer
-    if (transaction.tipo === 'REEMBOLSO' || transaction.tipo === 'TRANSFER_IN' || transaction.tipo === 'TRANSFER_OUT' || !user || !['SUPERADMIN', 'ADMIN_ORGANIZACAO'].includes(user.role ?? '')) {
+    if (transaction.tipo === 'REEMBOLSO' || transaction.tipo === 'TRANSFER_IN' || transaction.tipo === 'TRANSFER_OUT' || !user || !['SUPERADMIN', 'ADMIN', 'ADMIN_ORGANIZACAO', 'ADMIN_EVENTO'].includes(user.role ?? '')) {
         return null;
     }
 
@@ -143,44 +145,106 @@ const getTipoVariant = (tipo: string) => {
     );
 }
 
-function DeleteButton({ transaction, user }: { transaction: TransactionDetails, user: any }) {
+function DeleteTransactionButton({ transaction, user }: { transaction: TransactionDetails, user: any }) {
     const [isPending, startTransition] = useTransition();
+    const [adjustBalance, setAdjustBalance] = useState(true);
+    const [open, setOpen] = useState(false);
     const { toast } = useToast();
 
-    if (!user || !['SUPERADMIN', 'ADMIN_ORGANIZACAO'].includes(user.role ?? '')) {
+    if (!user || !['SUPERADMIN', 'ADMIN', 'ADMIN_ORGANIZACAO', 'ADMIN_EVENTO'].includes(user.role ?? '')) {
         return null;
     }
 
     const handleDelete = () => {
         startTransition(async () => {
-            const result = await deleteTransactions([transaction.id]);
+            const result = await deleteTransaction(transaction.id, adjustBalance);
             toast({
-                title: result?.status === 'success' ? 'Sucesso!' : 'Erro!',
+                title: result?.status === 'success' ? 'Excluído!' : 'Erro!',
                 description: result.message,
                 variant: result?.status === 'success' ? 'default' : 'destructive'
             });
+            if (result?.status === 'success') {
+                setOpen(false);
+            }
         });
     };
 
     return (
-        <AlertDialog>
+        <AlertDialog open={open} onOpenChange={setOpen}>
             <AlertDialogTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-8 text-destructive hover:text-destructive hover:bg-destructive/10" disabled={isPending}>
-                    {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4 mr-1.5" />}
+                <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="h-8 text-destructive hover:text-destructive hover:bg-destructive/10" 
+                    disabled={isPending}
+                    title="Excluir Transação"
+                >
+                    {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4 mr-1 text-destructive" />}
                     Excluir
                 </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
                 <AlertDialogHeader>
-                    <AlertDialogTitle>Excluir Transação</AlertDialogTitle>
-                    <AlertDialogDescription>
-                        Tem certeza que deseja excluir permanentemente esta transação de {formatCurrency(transaction.valor_centavos)}?
-                        Esta ação removerá o registro do histórico.
+                    <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+                        <Trash2 className="h-5 w-5" /> Confirmar Exclusão de Transação
+                    </AlertDialogTitle>
+                    <AlertDialogDescription asChild>
+                        <div className="space-y-3 pt-2 text-left text-sm text-muted-foreground">
+                            <p>
+                                Você está prestes a excluir permanentemente esta transação:
+                            </p>
+                            <div className="bg-muted p-3 rounded-md text-xs space-y-1 font-mono text-foreground border">
+                                <div><strong>Tipo:</strong> {transaction.tipo}</div>
+                                <div><strong>Valor:</strong> {formatCurrency(transaction.valor_centavos)}</div>
+                                <div><strong>PDV:</strong> {transaction.pdv_nome}</div>
+                                <div><strong>Cartão:</strong> {transaction.card_qr_code_id} {transaction.nome_cliente ? `(${transaction.nome_cliente})` : ''}</div>
+                                <div><strong>Data:</strong> {formatDateTime(formatTimestamp(transaction.created_at))}</div>
+                                {transaction.usuario_responsavel && (
+                                    <div><strong>Responsável:</strong> {transaction.usuario_responsavel}</div>
+                                )}
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                                Esta ação excluirá o registro da transação e seus pedidos associados da base de dados.
+                            </p>
+                            {transaction.cartao_id && (
+                                <div className="flex items-start gap-2 pt-2 border-t mt-3">
+                                    <Checkbox 
+                                        id={`adjust-balance-${transaction.id}`} 
+                                        checked={adjustBalance} 
+                                        onCheckedChange={(v) => setAdjustBalance(!!v)}
+                                        className="mt-0.5"
+                                    />
+                                    <div className="grid gap-1 leading-none">
+                                        <Label 
+                                            htmlFor={`adjust-balance-${transaction.id}`}
+                                            className="text-xs font-semibold cursor-pointer text-foreground"
+                                        >
+                                            Ajustar saldo do cartão vinculado
+                                        </Label>
+                                        <p className="text-[11px] text-muted-foreground">
+                                            {transaction.tipo === 'RECARGA' 
+                                                ? 'Subtrai o valor da recarga do saldo atual do cartão.' 
+                                                : transaction.tipo === 'VENDA' 
+                                                ? 'Devolve o valor da venda ao saldo do cartão.'
+                                                : 'Reverte o impacto desta transação no saldo do cartão.'}
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                    <AlertDialogCancel disabled={isPending}>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction 
+                        onClick={(e) => {
+                            e.preventDefault();
+                            handleDelete();
+                        }}
+                        disabled={isPending}
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    >
+                        {isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                         Confirmar Exclusão
                     </AlertDialogAction>
                 </AlertDialogFooter>
@@ -248,11 +312,11 @@ const getColumns = (user: any): ColumnDef<TransactionDetails>[] => [
     },
     {
         id: 'actions',
-        header: 'Ações',
+        header: () => <div className="text-right">Ações</div>,
         cell: ({ row }) => (
-            <div className="flex items-center gap-1 justify-end">
+            <div className="flex items-center justify-end gap-1">
                 <ReversalButton transaction={row.original} user={user} />
-                <DeleteButton transaction={row.original} user={user} />
+                <DeleteTransactionButton transaction={row.original} user={user} />
             </div>
         ),
     },
@@ -406,7 +470,7 @@ export default function TransactionsPage() {
             data={filteredTransactions}
             renderSubComponent={SubRowComponent}
             onGeneratePdf={generatePDF}
-            onDeleteSelected={['SUPERADMIN', 'ADMIN_ORGANIZACAO'].includes(user?.role ?? '') ? handleDeleteSelected : undefined}
+            onDeleteSelected={['SUPERADMIN', 'ADMIN', 'ADMIN_ORGANIZACAO', 'ADMIN_EVENTO'].includes(user?.role ?? '') ? handleDeleteSelected : undefined}
             filterColumns={[
                 {
                     columnId: 'card_qr_code_id',

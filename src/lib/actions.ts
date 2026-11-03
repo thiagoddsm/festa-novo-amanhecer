@@ -1627,6 +1627,80 @@ export async function deleteCards(cardIds: string[]): Promise<ActionState> {
     }
 }
 
+export async function deleteTransaction(
+    transactionId: string, 
+    adjustBalance: boolean = false
+): Promise<ActionState> {
+    const db = getWebDb();
+    if (!transactionId) {
+        return { status: 'error', message: 'ID da transação não fornecido.' };
+    }
+
+    try {
+        const txRef = clientDoc(db, 'transactions', transactionId);
+        const txSnap = await clientGetDoc(txRef);
+        
+        if (!txSnap.exists()) {
+            return { status: 'error', message: 'Transação não encontrada.' };
+        }
+
+        const txData = txSnap.data() as Transaction;
+        const batch = clientWriteBatch(db);
+
+        // 1. Adjust card balance if requested and card exists
+        if (adjustBalance && txData.cartao_id) {
+            const cardRef = clientDoc(db, 'cards', txData.cartao_id);
+            const cardSnap = await clientGetDoc(cardRef);
+            if (cardSnap.exists()) {
+                const cardData = cardSnap.data() as Card;
+                let newBalance = cardData.saldo_centavos || 0;
+
+                if (txData.tipo === 'RECARGA' || txData.tipo === 'TRANSFER_IN') {
+                    // Recharge added money, so deleting it removes money from card
+                    newBalance = Math.max(0, newBalance - (txData.valor_centavos || 0));
+                } else if (txData.tipo === 'VENDA' || txData.tipo === 'TRANSFER_OUT') {
+                    // Sale took money away, so deleting it refunds the card
+                    newBalance = newBalance + (txData.valor_centavos || 0);
+                } else if (txData.tipo === 'REEMBOLSO') {
+                    // Reimbursement refunded money to card, so deleting it removes that refund
+                    newBalance = Math.max(0, newBalance - (txData.valor_centavos || 0));
+                }
+
+                batch.update(cardRef, { 
+                    saldo_centavos: newBalance,
+                    updated_at: ClientTimestamp.now()
+                });
+            }
+        }
+
+        // 2. Delete associated orders
+        const ordersQuery = clientQuery(
+            clientCollection(db, 'orders'),
+            clientWhere('transaction_id', '==', transactionId)
+        );
+        const ordersSnapshot = await clientGetDocs(ordersQuery);
+        ordersSnapshot.forEach(doc => {
+            batch.delete(doc.ref);
+        });
+
+        // 3. Delete the transaction itself
+        batch.delete(txRef);
+
+        await batch.commit();
+
+        return { 
+            status: 'success', 
+            message: 'Transação e pedidos vinculados excluídos com sucesso.' 
+        };
+    } catch (error: any) {
+        console.error("Error deleting single transaction:", error);
+        return { 
+            status: 'error', 
+            message: error?.message || 'Erro ao excluir transação.' 
+        };
+    }
+}
+
 export async function deleteTransactions(transactionIds: string[]): Promise<ActionState> {
     const db = getWebDb();
     if (!transactionIds || transactionIds.length === 0) {
@@ -1647,29 +1721,6 @@ export async function deleteTransactions(transactionIds: string[]): Promise<Acti
             ordersSnapshot.forEach(doc => {
                 batch.delete(doc.ref);
             });
-        }
-
-        // Adjust card balance if deleting recharges/sales
-        for (const id of transactionIds) {
-            try {
-                const txSnap = await clientGetDoc(clientDoc(db, 'transactions', id));
-                if (txSnap.exists()) {
-                    const tx = txSnap.data() as Transaction;
-                    if (tx.cartao_id) {
-                        const cardRef = clientDoc(db, 'cards', tx.cartao_id);
-                        const cardSnap = await clientGetDoc(cardRef);
-                        if (cardSnap.exists()) {
-                            const cdata = cardSnap.data() as Card;
-                            if (tx.tipo === 'RECARGA') {
-                                const newBal = Math.max(0, (cdata.saldo_centavos || 0) - (tx.valor_centavos || 0));
-                                batch.update(cardRef, { saldo_centavos: newBal, updated_at: ClientTimestamp.now() });
-                            }
-                        }
-                    }
-                }
-            } catch (err) {
-                console.warn('Erro ao ajustar saldo do cartão ao excluir transação:', err);
-            }
         }
         
         // Delete the transactions themselves
