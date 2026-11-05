@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { Logo } from '@/components/layout/Logo';
 import { Button } from '@/components/ui/button';
-import { Shield, Menu, X, ArrowRight, Sparkles, UserCheck, BellRing, Gift } from 'lucide-react';
+import { Shield, Menu, X, UserCheck, BellRing } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth-context';
 
 export default function LandingNavbar() {
@@ -12,58 +12,47 @@ export default function LandingNavbar() {
   const { user } = useAuth();
 
   const navLinks = [
-    { label: 'Sobre a Festa', href: '/#sobre' },
-    { label: '🎬 Vídeo da Festa', href: '/#video-festa', highlight: true },
-    { label: 'Barracas & Cardápio', href: '/#barracas' },
-    { label: 'Como Funciona (Cashless)', href: '/#como-funciona' },
+    { label: 'Sobre', href: '/#sobre' },
+    { label: 'Barracas', href: '/#barracas' },
+    { label: 'Como Funciona', href: '/#como-funciona' },
     { label: 'Horários & Local', href: '/#localizacao' },
   ];
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-purple-100/60 bg-white/85 backdrop-blur-md transition-all">
+    <header className="sticky top-0 z-50 w-full border-b border-slate-100 bg-white/90 backdrop-blur-md transition-all">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
         {/* Brand / Logo */}
-        <Link href="/" className="flex items-center gap-2.5 group">
+        <Link href="/" className="flex items-center gap-2 group">
           <Logo className="text-purple-600 scale-90" />
-          <div className="hidden sm:flex flex-col">
+          <div className="flex flex-col">
             <span className="text-xs font-bold text-slate-900 tracking-tight leading-none group-hover:text-purple-600 transition-colors">
               Festa Novo Amanhecer
             </span>
             <span className="text-[10px] text-purple-600 font-semibold tracking-wide">
-              Edição 2026 • Igreja Batista
+              Igreja Batista da Manhã • 2026
             </span>
           </div>
         </Link>
 
-        {/* Desktop Nav Links */}
-        <nav className="hidden md:flex items-center gap-5">
+        {/* Clean Desktop Nav Links */}
+        <nav className="hidden md:flex items-center gap-6">
           {navLinks.map((link) => (
-            link.highlight ? (
-              <Link
-                key={link.href}
-                href={link.href}
-                className="text-xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-300/80 px-2.5 py-1 rounded-full transition-all flex items-center gap-1 shadow-2xs hover:scale-105"
-              >
-                {link.label}
-              </Link>
-            ) : (
-              <a
-                key={link.href}
-                href={link.href}
-                className="text-xs font-medium text-slate-600 hover:text-purple-600 transition-colors"
-              >
-                {link.label}
-              </a>
-            )
+            <a
+              key={link.href}
+              href={link.href}
+              className="text-xs font-medium text-slate-600 hover:text-purple-600 transition-colors py-1"
+            >
+              {link.label}
+            </a>
           ))}
         </nav>
 
-        {/* Right CTA: Live Order Tracking + Staff Access */}
-        <div className="hidden sm:flex items-center gap-2">
+        {/* Right Actions: Clean & Balanced */}
+        <div className="hidden sm:flex items-center gap-3">
           <Button
             asChild
             size="sm"
-            className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs text-xs font-bold gap-1.5"
+            className="rounded-full bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs text-xs font-bold gap-1.5 h-8.5 px-3.5"
           >
             <Link href="/igreja-batista-da-manha/pedidos">
               <span className="h-2 w-2 rounded-full bg-emerald-300 animate-ping shrink-0" />
@@ -73,29 +62,22 @@ export default function LandingNavbar() {
           </Button>
 
           {user ? (
-            <Button
-              asChild
-              size="sm"
-              className="rounded-xl bg-purple-600 hover:bg-purple-700 text-white shadow-xs text-xs font-semibold"
+            <Link
+              href={user.role === 'PDV' ? '/pos' : '/dashboard'}
+              className="inline-flex items-center gap-1 text-xs font-semibold text-purple-700 hover:text-purple-800 bg-purple-50 hover:bg-purple-100 px-3 py-1.5 rounded-full transition-colors"
             >
-              <Link href={user.role === 'PDV' ? '/pos' : '/dashboard'}>
-                <UserCheck className="mr-1.5 h-3.5 w-3.5" />
-                Painel da Equipe
-                <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
-              </Link>
-            </Button>
+              <UserCheck className="h-3.5 w-3.5" />
+              <span>Painel</span>
+            </Link>
           ) : (
-            <Button
-              asChild
-              variant="outline"
-              size="sm"
-              className="rounded-xl border-purple-200 bg-purple-50/50 hover:bg-purple-100 text-purple-700 shadow-2xs text-xs font-semibold"
+            <Link
+              href="/login"
+              className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-purple-700 px-2 py-1 transition-colors"
+              title="Acesso da Equipe / Staff"
             >
-              <Link href="/login">
-                <Shield className="mr-1.5 h-3.5 w-3.5 text-purple-600" />
-                Acesso da Equipe
-              </Link>
-            </Button>
+              <Shield className="h-3.5 w-3.5" />
+              <span>Equipe</span>
+            </Link>
           )}
         </div>
 
@@ -115,17 +97,8 @@ export default function LandingNavbar() {
 
       {/* Mobile dropdown */}
       {mobileMenuOpen && (
-        <div className="md:hidden border-b border-purple-100 bg-white/95 px-4 pt-2 pb-4 shadow-lg backdrop-blur-md animate-in slide-in-from-top-2">
+        <div className="md:hidden border-b border-slate-100 bg-white/98 px-4 pt-2 pb-4 shadow-lg backdrop-blur-md">
           <nav className="flex flex-col space-y-2">
-            <a
-              href="/#video-festa"
-              onClick={() => setMobileMenuOpen(false)}
-              className="flex items-center gap-2 rounded-xl bg-purple-600 p-2.5 text-xs font-bold text-white shadow-xs"
-            >
-              <Sparkles className="h-4 w-4 text-amber-300" />
-              <span>🎬 Assista ao Vídeo da Festa</span>
-            </a>
-
             <Link
               href="/igreja-batista-da-manha/pedidos"
               onClick={() => setMobileMenuOpen(false)}
@@ -146,16 +119,16 @@ export default function LandingNavbar() {
                 {link.label}
               </a>
             ))}
+
             <div className="pt-2 border-t border-slate-100 mt-1">
-              <Button
-                asChild
-                className="w-full rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold py-2.5"
+              <Link
+                href={user ? (user.role === 'PDV' ? '/pos' : '/dashboard') : '/login'}
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center justify-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-purple-700 p-2 rounded-lg bg-slate-50"
               >
-                <Link href={user ? (user.role === 'PDV' ? '/pos' : '/dashboard') : '/login'}>
-                  <Shield className="mr-1.5 h-4 w-4" />
-                  {user ? 'Acessar Painel da Equipe' : 'Área da Equipe / Acesso Staff'}
-                </Link>
-              </Button>
+                <Shield className="h-3.5 w-3.5 text-purple-600" />
+                <span>{user ? 'Acessar Painel da Equipe' : 'Área da Equipe / Acesso Staff'}</span>
+              </Link>
             </div>
           </nav>
         </div>
