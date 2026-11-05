@@ -4,7 +4,7 @@ import React from 'react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { Button } from '@/components/ui/button';
-import { Sparkles, Utensils, CreditCard, BellRing, Users, MapPin, Calendar } from 'lucide-react';
+import { Sparkles, Utensils, CreditCard, BellRing, Users, MapPin, Calendar, Gift, ChevronRight } from 'lucide-react';
 
 const CountdownTimer = dynamic(() => import('./CountdownTimer'), {
   ssr: false,
@@ -20,6 +20,18 @@ export default function HeroSection() {
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[300px] bg-purple-200/40 rounded-full blur-3xl pointer-events-none -z-10" />
 
       <div className="mx-auto max-w-5xl px-4 sm:px-6 text-center">
+        {/* Promotional Campaign Callout Badge */}
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-2 mb-4">
+          <Link
+            href="/vouchers"
+            className="inline-flex items-center gap-2 rounded-full border border-amber-300 bg-gradient-to-r from-amber-100 via-orange-100 to-amber-100 px-4 py-1.5 text-xs font-bold text-amber-900 shadow-xs hover:shadow-md hover:scale-105 transition-all group"
+          >
+            <Gift className="h-3.5 w-3.5 text-amber-600 animate-bounce" />
+            <span>Caça ao Tesouro: Encontre um dos 3 Vouchers de R$ 80!</span>
+            <ChevronRight className="h-3.5 w-3.5 text-amber-700 group-hover:translate-x-0.5 transition-transform" />
+          </Link>
+        </div>
+
         {/* Event tag */}
         <div className="inline-flex items-center gap-2 rounded-full border border-purple-200 bg-purple-50/80 px-3.5 py-1 text-xs font-semibold text-purple-700 shadow-2xs mb-5 animate-in fade-in zoom-in duration-500">
           <Sparkles className="h-3.5 w-3.5 text-purple-600" />

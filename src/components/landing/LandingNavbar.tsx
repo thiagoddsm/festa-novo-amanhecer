@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { Logo } from '@/components/layout/Logo';
 import { Button } from '@/components/ui/button';
-import { Shield, Menu, X, ArrowRight, Sparkles, UserCheck, BellRing } from 'lucide-react';
+import { Shield, Menu, X, ArrowRight, Sparkles, UserCheck, BellRing, Gift } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth-context';
 
 export default function LandingNavbar() {
@@ -12,10 +12,11 @@ export default function LandingNavbar() {
   const { user } = useAuth();
 
   const navLinks = [
-    { label: 'Sobre a Festa', href: '#sobre' },
-    { label: 'Barracas & Cardápio', href: '#barracas' },
-    { label: 'Como Funciona (Cashless)', href: '#como-funciona' },
-    { label: 'Horários & Local', href: '#localizacao' },
+    { label: 'Sobre a Festa', href: '/#sobre' },
+    { label: 'Barracas & Cardápio', href: '/#barracas' },
+    { label: 'Como Funciona (Cashless)', href: '/#como-funciona' },
+    { label: 'Horários & Local', href: '/#localizacao' },
+    { label: '🎁 Caça aos Vouchers (R$ 80)', href: '/vouchers', highlight: true },
   ];
 
   return (
@@ -35,15 +36,25 @@ export default function LandingNavbar() {
         </Link>
 
         {/* Desktop Nav Links */}
-        <nav className="hidden md:flex items-center gap-6">
+        <nav className="hidden md:flex items-center gap-5">
           {navLinks.map((link) => (
-            <a
-              key={link.href}
-              href={link.href}
-              className="text-xs font-medium text-slate-600 hover:text-purple-600 transition-colors"
-            >
-              {link.label}
-            </a>
+            link.highlight ? (
+              <Link
+                key={link.href}
+                href={link.href}
+                className="text-xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-300/80 px-2.5 py-1 rounded-full transition-all flex items-center gap-1 shadow-2xs hover:scale-105"
+              >
+                {link.label}
+              </Link>
+            ) : (
+              <a
+                key={link.href}
+                href={link.href}
+                className="text-xs font-medium text-slate-600 hover:text-purple-600 transition-colors"
+              >
+                {link.label}
+              </a>
+            )
           ))}
         </nav>
 
@@ -106,6 +117,15 @@ export default function LandingNavbar() {
       {mobileMenuOpen && (
         <div className="md:hidden border-b border-purple-100 bg-white/95 px-4 pt-2 pb-4 shadow-lg backdrop-blur-md animate-in slide-in-from-top-2">
           <nav className="flex flex-col space-y-2">
+            <Link
+              href="/vouchers"
+              onClick={() => setMobileMenuOpen(false)}
+              className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 p-2.5 text-xs font-bold text-white shadow-xs"
+            >
+              <Gift className="h-4 w-4" />
+              <span>🎁 Caça aos Vouchers (Ganhe R$ 80)</span>
+            </Link>
+
             <Link
               href="/igreja-batista-da-manha/pedidos"
               onClick={() => setMobileMenuOpen(false)}

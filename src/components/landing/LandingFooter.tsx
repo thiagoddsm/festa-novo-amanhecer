@@ -21,8 +21,14 @@ export default function LandingFooter() {
             </p>
           </div>
 
-          {/* Quick Staff Button & Live Tracking */}
+          {/* Quick Staff Button, Vouchers & Live Tracking */}
           <div className="flex flex-col sm:flex-row items-center gap-2.5">
+            <Link
+              href="/vouchers"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-bold shadow-2xs transition-all"
+            >
+              <span>🎁 Caça aos Vouchers (R$ 80)</span>
+            </Link>
             <Link
               href="/igreja-batista-da-manha/pedidos"
               className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-emerald-200 bg-emerald-50/70 hover:bg-emerald-100 text-emerald-800 text-xs font-bold shadow-2xs transition-all"
