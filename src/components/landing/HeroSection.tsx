@@ -28,9 +28,11 @@ const CountdownTimer = dynamic(() => import('./CountdownTimer'), {
   ),
 });
 
+const DEFAULT_VIDEO_ID = '2exxezTA8fI';
+
 export default function HeroSection() {
   // YouTube video state (persisted in localStorage or configurable via URL/input)
-  const [videoId, setVideoId] = useState<string>('');
+  const [videoId, setVideoId] = useState<string>(DEFAULT_VIDEO_ID);
   const [showConfig, setShowConfig] = useState(false);
   const [urlInput, setUrlInput] = useState('');
   const [isSaved, setIsSaved] = useState(false);
@@ -59,8 +61,11 @@ export default function HeroSection() {
       }
 
       const saved = localStorage.getItem('festapay_landing_video_id');
-      if (saved) {
-        setVideoId(saved);
+      if (saved && saved.trim().length === 11) {
+        setVideoId(saved.trim());
+      } else {
+        setVideoId(DEFAULT_VIDEO_ID);
+        localStorage.setItem('festapay_landing_video_id', DEFAULT_VIDEO_ID);
       }
     }
   }, []);

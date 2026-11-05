@@ -42,8 +42,8 @@ export default function VouchersCampaignPage() {
   // Revealed states for each riddle
   const [revealedRiddles, setRevealedRiddles] = useState<Record<number, boolean>>({});
   // YouTube video configuration (customizable by user on the page)
-  const [youtubeUrl, setYoutubeUrl] = useState<string>('https://www.youtube.com/watch?v=dQw4w9WgXcQ'); // placeholder
-  const [activeVideoId, setActiveVideoId] = useState<string>(''); // empty by default triggers elegant custom player preview
+  const [youtubeUrl, setYoutubeUrl] = useState<string>('https://youtu.be/2exxezTA8fI');
+  const [activeVideoId, setActiveVideoId] = useState<string>('2exxezTA8fI');
   const [showVideoInput, setShowVideoInput] = useState(false);
   const [tempVideoInput, setTempVideoInput] = useState('');
   const [copiedLink, setCopiedLink] = useState(false);
