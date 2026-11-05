@@ -13,10 +13,10 @@ export default function LandingNavbar() {
 
   const navLinks = [
     { label: 'Sobre a Festa', href: '/#sobre' },
+    { label: '🎬 Vídeo da Festa', href: '/#video-festa', highlight: true },
     { label: 'Barracas & Cardápio', href: '/#barracas' },
     { label: 'Como Funciona (Cashless)', href: '/#como-funciona' },
     { label: 'Horários & Local', href: '/#localizacao' },
-    { label: '🎁 Caça aos Vouchers (R$ 80)', href: '/vouchers', highlight: true },
   ];
 
   return (
@@ -117,14 +117,14 @@ export default function LandingNavbar() {
       {mobileMenuOpen && (
         <div className="md:hidden border-b border-purple-100 bg-white/95 px-4 pt-2 pb-4 shadow-lg backdrop-blur-md animate-in slide-in-from-top-2">
           <nav className="flex flex-col space-y-2">
-            <Link
-              href="/vouchers"
+            <a
+              href="/#video-festa"
               onClick={() => setMobileMenuOpen(false)}
-              className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 p-2.5 text-xs font-bold text-white shadow-xs"
+              className="flex items-center gap-2 rounded-xl bg-purple-600 p-2.5 text-xs font-bold text-white shadow-xs"
             >
-              <Gift className="h-4 w-4" />
-              <span>🎁 Caça aos Vouchers (Ganhe R$ 80)</span>
-            </Link>
+              <Sparkles className="h-4 w-4 text-amber-300" />
+              <span>🎬 Assista ao Vídeo da Festa</span>
+            </a>
 
             <Link
               href="/igreja-batista-da-manha/pedidos"
