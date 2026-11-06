@@ -22,6 +22,7 @@ const DEFAULT_YOUTUBE_ID = '2exxezTA8fI';
 
 export default function QrCodeVideoPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
   
   // Video source: could be direct MP4 (Firebase Storage) or a YouTube ID
   const [videoSrc, setVideoSrc] = useState<string>('');
@@ -130,7 +131,19 @@ export default function QrCodeVideoPage() {
         setIsPlaying(true);
       }
     } else {
-      setIsMuted(!isMuted);
+      const nextMuted = !isMuted;
+      setIsMuted(nextMuted);
+      if (iframeRef.current?.contentWindow) {
+        const func = nextMuted ? 'mute' : 'unMute';
+        iframeRef.current.contentWindow.postMessage(
+          JSON.stringify({ event: 'command', func: func, args: [] }),
+          '*'
+        );
+        iframeRef.current.contentWindow.postMessage(
+          JSON.stringify({ event: 'command', func: 'playVideo', args: [] }),
+          '*'
+        );
+      }
     }
   };
 
@@ -226,8 +239,9 @@ export default function QrCodeVideoPage() {
           ) : (
             <div className="w-full h-full relative">
               <iframe
+                ref={iframeRef}
                 className="w-full h-full scale-[1.02] pointer-events-auto"
-                src={`https://www.youtube-nocookie.com/embed/${youtubeId}?autoplay=1&mute=0&controls=0&loop=1&playlist=${youtubeId}&modestbranding=1&rel=0&playsinline=1`}
+                src={`https://www.youtube.com/embed/${youtubeId}?autoplay=1&mute=1&controls=1&playsinline=1&rel=0&loop=1&playlist=${youtubeId}&enablejsapi=1`}
                 title="Vídeo Festa Novo Amanhecer"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                 allowFullScreen
@@ -263,15 +277,13 @@ export default function QrCodeVideoPage() {
 
             {/* Quick Actions (Sound toggle, Share, Config) */}
             <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-              {isDirectVideo && (
-                <button
-                  onClick={handleToggleSound}
-                  className="w-9 h-9 rounded-full bg-black/60 hover:bg-black/80 backdrop-blur-md border border-white/20 flex items-center justify-center text-white transition-all hover:scale-105"
-                  title={isMuted ? 'Ativar Som' : 'Silenciar'}
-                >
-                  {isMuted ? <VolumeX className="h-4 w-4 text-red-400" /> : <Volume2 className="h-4 w-4 text-emerald-400" />}
-                </button>
-              )}
+              <button
+                onClick={handleToggleSound}
+                className="w-9 h-9 rounded-full bg-black/60 hover:bg-black/80 backdrop-blur-md border border-white/20 flex items-center justify-center text-white transition-all hover:scale-105"
+                title={isMuted ? 'Ativar Som' : 'Silenciar'}
+              >
+                {isMuted ? <VolumeX className="h-4 w-4 text-amber-400" /> : <Volume2 className="h-4 w-4 text-emerald-400" />}
+              </button>
 
               <button
                 onClick={copyShareLink}
@@ -296,11 +308,15 @@ export default function QrCodeVideoPage() {
         {/* CENTER OVERLAY: TAP TO UNMUTE / PAUSE INDICATOR          */}
         {/* ======================================================== */}
         <div className="relative z-20 flex-1 flex items-center justify-center pointer-events-none">
-          {isDirectVideo && isMuted && (
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-black/75 backdrop-blur-md border border-white/30 text-xs font-bold text-white shadow-xl animate-bounce">
+          {isMuted && (
+            <button
+              onClick={handleToggleSound}
+              type="button"
+              className="pointer-events-auto inline-flex items-center gap-2 px-4 py-2 sm:px-5 sm:py-2.5 rounded-full bg-black/80 hover:bg-black/95 backdrop-blur-md border border-amber-400/50 text-xs sm:text-sm font-extrabold text-amber-300 shadow-2xl animate-bounce transition-transform active:scale-95"
+            >
               <VolumeX className="h-4 w-4 text-amber-400" />
-              <span>Toque na tela para ativar o som 🔊</span>
-            </div>
+              <span>Toque para ativar o som 🔊</span>
+            </button>
           )}
 
           {isDirectVideo && !isPlaying && (
