@@ -238,7 +238,7 @@ export default function QrCodeVideoPage() {
 
         {/* Gradient overlays for readability */}
         <div className="absolute top-0 inset-x-0 h-32 bg-gradient-to-b from-black/80 via-black/30 to-transparent pointer-events-none z-10" />
-        <div className="absolute bottom-0 inset-x-0 h-64 bg-gradient-to-t from-black/95 via-black/70 to-transparent pointer-events-none z-10" />
+        <div className="absolute bottom-0 inset-x-0 h-44 bg-gradient-to-t from-black/95 via-black/60 to-transparent pointer-events-none z-10" />
 
         {/* ======================================================== */}
         {/* TOP BAR: PROGRESS + BRANDING + QUICK CONTROLS           */}
@@ -313,42 +313,42 @@ export default function QrCodeVideoPage() {
         {/* ======================================================== */}
         {/* BOTTOM SECTION: TITLE + INFO + CALL TO ACTION           */}
         {/* ======================================================== */}
-        <div className="relative z-20 p-5 space-y-3.5" onClick={(e) => e.stopPropagation()}>
-          {/* Key Event Badges */}
-          <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-bold text-slate-200">
-            <span className="flex items-center gap-1 bg-white/15 backdrop-blur-md px-2.5 py-1 rounded-lg border border-white/10">
-              <Calendar className="h-3 w-3 text-purple-400" />
-              13, 14 e 15 de Novembro
+        <div className="relative z-20 p-4 sm:p-5 pb-5 space-y-2.5" onClick={(e) => e.stopPropagation()}>
+          {/* Key Event Badges - Compact single line */}
+          <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-200">
+            <span className="flex items-center gap-1 bg-white/15 backdrop-blur-md px-2 py-0.5 rounded-full border border-white/10">
+              <Calendar className="h-2.5 w-2.5 text-purple-400" />
+              13 a 15 de Nov
             </span>
-            <span className="flex items-center gap-1 bg-white/15 backdrop-blur-md px-2.5 py-1 rounded-lg border border-white/10">
-              <MapPin className="h-3 w-3 text-rose-400" />
-              Mutondo, São Gonçalo
+            <span className="flex items-center gap-1 bg-white/15 backdrop-blur-md px-2 py-0.5 rounded-full border border-white/10">
+              <MapPin className="h-2.5 w-2.5 text-rose-400" />
+              Mutondo
             </span>
-            <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 px-2.5 py-1 rounded-lg">
+            <span className="bg-emerald-500/25 text-emerald-300 border border-emerald-400/30 px-2 py-0.5 rounded-full">
               Entrada Gratuita
             </span>
           </div>
 
-          {/* Heading */}
+          {/* Heading - Clean & compact */}
           <div>
-            <h2 className="text-xl sm:text-2xl font-black text-white leading-tight">
+            <h2 className="text-lg sm:text-xl font-black text-white leading-tight">
               Festa Novo Amanhecer 2026
             </h2>
-            <p className="text-xs text-slate-300 mt-1 leading-relaxed">
-              Hambúrguer na chapa, pastel, churrasco, batata frita, doces e brinquedos para as crianças na <strong>Igreja Batista da Manhã</strong>!
+            <p className="text-[11px] sm:text-xs text-slate-300 mt-0.5 line-clamp-1 leading-snug">
+              Gastronomia, pastel, churrasco, doces e brinquedos na <strong>Igreja Batista da Manhã</strong>!
             </p>
           </div>
 
-          {/* Action Buttons: Clean & Direct */}
-          <div className="pt-1 flex flex-col gap-2">
+          {/* Action Buttons: Side-by-side & Compact */}
+          <div className="pt-0.5 flex items-center gap-2">
             <Button
               asChild
-              size="lg"
-              className="w-full rounded-2xl bg-gradient-to-r from-purple-600 via-pink-600 to-amber-600 hover:from-purple-500 hover:to-amber-500 text-white font-extrabold text-sm shadow-xl shadow-purple-600/30 h-12"
+              size="default"
+              className="flex-1 rounded-xl bg-gradient-to-r from-purple-600 via-pink-600 to-amber-600 hover:from-purple-500 hover:to-amber-500 text-white font-extrabold text-xs sm:text-sm shadow-lg shadow-purple-600/30 h-10 px-3"
             >
               <Link href="/">
-                <span>Conhecer a Festa & Cardápio</span>
-                <ArrowRight className="h-4 w-4 ml-2" />
+                <span>Ver Cardápio & Festa</span>
+                <ArrowRight className="h-3.5 w-3.5 ml-1.5" />
               </Link>
             </Button>
 
@@ -356,10 +356,11 @@ export default function QrCodeVideoPage() {
               href="https://maps.google.com/?q=Travessa+Maria+Alice+121+Mutondo+Sao+Goncalo+RJ"
               target="_blank"
               rel="noopener noreferrer"
-              className="w-full inline-flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/15 text-white font-bold text-xs transition-all text-center"
+              className="h-10 px-3.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-white font-bold text-xs transition-all text-center flex items-center justify-center gap-1.5 shrink-0 backdrop-blur-md"
+              title="Como Chegar (Tv. Maria Alice, 121 - Mutondo)"
             >
-              <MapPin className="h-4 w-4 text-rose-400" />
-              <span>Como Chegar (Tv. Maria Alice, 121 - Mutondo)</span>
+              <MapPin className="h-3.5 w-3.5 text-rose-400" />
+              <span>Como Chegar</span>
             </a>
           </div>
         </div>
