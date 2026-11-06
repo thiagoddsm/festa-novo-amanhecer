@@ -262,14 +262,14 @@ export default function QrCodeVideoPage() {
           )}
         </div>
 
-        {/* Gradient overlays for readability */}
+        {/* Gradient overlays for readability (subtle so it doesn't hide video subtitles) */}
         <div className="absolute top-0 inset-x-0 h-32 bg-gradient-to-b from-black/80 via-black/30 to-transparent pointer-events-none z-10" />
-        <div className="absolute bottom-0 inset-x-0 h-44 bg-gradient-to-t from-black/95 via-black/60 to-transparent pointer-events-none z-10" />
+        <div className="absolute bottom-0 inset-x-0 h-28 bg-gradient-to-t from-black/90 via-black/50 to-transparent pointer-events-none z-10" />
 
         {/* ======================================================== */}
-        {/* TOP BAR: PROGRESS + BRANDING + QUICK CONTROLS           */}
+        {/* TOP BAR: PROGRESS + BRANDING + BADGES + QUICK CONTROLS   */}
         {/* ======================================================== */}
-        <div className="relative z-20 pt-3 px-4 flex flex-col gap-2.5">
+        <div className="relative z-20 pt-3 px-4 flex flex-col gap-2">
           {/* Stories-like Progress Bar (active for direct video) */}
           {isDirectVideo && (
             <div className="w-full h-1 bg-white/30 rounded-full overflow-hidden">
@@ -282,7 +282,7 @@ export default function QrCodeVideoPage() {
 
           <div className="flex items-center justify-between">
             {/* Event pill */}
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/50 backdrop-blur-md border border-white/20 text-xs font-bold text-white shadow-xs">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/60 backdrop-blur-md border border-white/20 text-xs font-bold text-white shadow-xs">
               <Sparkles className="h-3 w-3 text-amber-400 animate-pulse" />
               <span>Festa Novo Amanhecer 2026</span>
             </div>
@@ -314,6 +314,21 @@ export default function QrCodeVideoPage() {
               </button>
             </div>
           </div>
+
+          {/* Key Event Badges positioned at the TOP to free the video subtitles */}
+          <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-200">
+            <span className="flex items-center gap-1 bg-black/50 backdrop-blur-md px-2 py-0.5 rounded-full border border-white/15">
+              <Calendar className="h-2.5 w-2.5 text-purple-400" />
+              13 a 15 de Nov
+            </span>
+            <span className="flex items-center gap-1 bg-black/50 backdrop-blur-md px-2 py-0.5 rounded-full border border-white/15">
+              <MapPin className="h-2.5 w-2.5 text-rose-400" />
+              Mutondo
+            </span>
+            <span className="bg-emerald-500/25 text-emerald-300 border border-emerald-400/30 px-2 py-0.5 rounded-full backdrop-blur-md">
+              Entrada Gratuita
+            </span>
+          </div>
         </div>
 
         {/* ======================================================== */}
@@ -339,40 +354,15 @@ export default function QrCodeVideoPage() {
         </div>
 
         {/* ======================================================== */}
-        {/* BOTTOM SECTION: TITLE + INFO + CALL TO ACTION           */}
+        {/* BOTTOM SECTION: CLEAN BUTTONS TO AVOID COVERING SUBTITLES*/}
         {/* ======================================================== */}
-        <div className="relative z-20 p-4 sm:p-5 pb-5 space-y-2.5" onClick={(e) => e.stopPropagation()}>
-          {/* Key Event Badges - Compact single line */}
-          <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-200">
-            <span className="flex items-center gap-1 bg-white/15 backdrop-blur-md px-2 py-0.5 rounded-full border border-white/10">
-              <Calendar className="h-2.5 w-2.5 text-purple-400" />
-              13 a 15 de Nov
-            </span>
-            <span className="flex items-center gap-1 bg-white/15 backdrop-blur-md px-2 py-0.5 rounded-full border border-white/10">
-              <MapPin className="h-2.5 w-2.5 text-rose-400" />
-              Mutondo
-            </span>
-            <span className="bg-emerald-500/25 text-emerald-300 border border-emerald-400/30 px-2 py-0.5 rounded-full">
-              Entrada Gratuita
-            </span>
-          </div>
-
-          {/* Heading - Clean & compact */}
-          <div>
-            <h2 className="text-lg sm:text-xl font-black text-white leading-tight">
-              Festa Novo Amanhecer 2026
-            </h2>
-            <p className="text-[11px] sm:text-xs text-slate-300 mt-0.5 line-clamp-1 leading-snug">
-              Gastronomia, pastel, churrasco, doces e brinquedos na <strong>Igreja Batista da Manhã</strong>!
-            </p>
-          </div>
-
+        <div className="relative z-20 p-3 sm:p-4 pb-4 sm:pb-5" onClick={(e) => e.stopPropagation()}>
           {/* Action Buttons: Side-by-side & Compact */}
-          <div className="pt-0.5 flex items-center gap-2">
+          <div className="flex items-center gap-2">
             <Button
               asChild
               size="default"
-              className="flex-1 rounded-xl bg-gradient-to-r from-purple-600 via-pink-600 to-amber-600 hover:from-purple-500 hover:to-amber-500 text-white font-extrabold text-xs sm:text-sm shadow-lg shadow-purple-600/30 h-10 px-3"
+              className="flex-1 rounded-xl bg-gradient-to-r from-purple-600 via-pink-600 to-amber-600 hover:from-purple-500 hover:to-amber-500 text-white font-extrabold text-xs sm:text-sm shadow-xl shadow-purple-600/30 h-11 px-3"
             >
               <Link href="/">
                 <span>Ver Cardápio & Festa</span>
@@ -384,7 +374,7 @@ export default function QrCodeVideoPage() {
               href="https://maps.google.com/?q=Travessa+Maria+Alice+121+Mutondo+Sao+Goncalo+RJ"
               target="_blank"
               rel="noopener noreferrer"
-              className="h-10 px-3.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-white font-bold text-xs transition-all text-center flex items-center justify-center gap-1.5 shrink-0 backdrop-blur-md"
+              className="h-11 px-3.5 rounded-xl bg-black/60 hover:bg-black/80 border border-white/20 text-white font-bold text-xs transition-all text-center flex items-center justify-center gap-1.5 shrink-0 backdrop-blur-md shadow-lg"
               title="Como Chegar (Tv. Maria Alice, 121 - Mutondo)"
             >
               <MapPin className="h-3.5 w-3.5 text-rose-400" />
