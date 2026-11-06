@@ -17,16 +17,20 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
-// Default video: YouTube ID
+// Official direct video from Firebase Storage
+const OFFICIAL_FIREBASE_VIDEO_URL = 
+  'https://firebasestorage.googleapis.com/v0/b/studio-1424813022-71754.firebasestorage.app/o/Arquivos%20aleat%C3%B3rios%2FIMG_8498.MOV?alt=media&token=30bfbd64-9351-4ac2-b659-c247ed3e97b5';
+
+// Fallback / alternate YouTube ID
 const DEFAULT_YOUTUBE_ID = '2exxezTA8fI';
 
 export default function QrCodeVideoPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   
-  // Video source: could be direct MP4 (Firebase Storage) or a YouTube ID
-  const [videoSrc, setVideoSrc] = useState<string>('');
-  const [isDirectVideo, setIsDirectVideo] = useState<boolean>(false);
+  // Video source: defaults to official Firebase Storage video
+  const [videoSrc, setVideoSrc] = useState<string>(OFFICIAL_FIREBASE_VIDEO_URL);
+  const [isDirectVideo, setIsDirectVideo] = useState<boolean>(true);
   const [youtubeId, setYoutubeId] = useState<string>(DEFAULT_YOUTUBE_ID);
   
   // Playback state
@@ -93,12 +97,12 @@ export default function QrCodeVideoPage() {
       if (savedSrc && isDirectVideoUrl(savedSrc)) {
         setVideoSrc(savedSrc);
         setIsDirectVideo(true);
-      } else if (savedYt) {
+      } else if (savedYt && savedYt !== DEFAULT_YOUTUBE_ID) {
         setYoutubeId(savedYt);
         setIsDirectVideo(false);
       } else {
-        setYoutubeId(DEFAULT_YOUTUBE_ID);
-        setIsDirectVideo(false);
+        setVideoSrc(OFFICIAL_FIREBASE_VIDEO_URL);
+        setIsDirectVideo(true);
       }
     }
   }, []);
@@ -149,14 +153,14 @@ export default function QrCodeVideoPage() {
 
   // Tap screen to toggle play/pause or unmute
   const handleScreenClick = () => {
-    if (!hasInteracted && isMuted) {
+    if (isMuted) {
       handleToggleSound();
       return;
     }
 
     if (isDirectVideo && videoRef.current) {
       if (videoRef.current.paused) {
-        videoRef.current.play();
+        videoRef.current.play().catch(console.error);
         setIsPlaying(true);
       } else {
         videoRef.current.pause();
@@ -230,9 +234,17 @@ export default function QrCodeVideoPage() {
               src={videoSrc}
               className="w-full h-full object-cover"
               playsInline
+              // @ts-expect-error webkit-playsinline for legacy iOS
+              webkit-playsinline="true"
               autoPlay
               muted={isMuted}
               loop
+              preload="auto"
+              onError={() => {
+                console.warn('Direct video playback error, falling back to YouTube');
+                setIsDirectVideo(false);
+                setYoutubeId(DEFAULT_YOUTUBE_ID);
+              }}
               onTimeUpdate={handleTimeUpdate}
               onEnded={handleVideoEnded}
             />

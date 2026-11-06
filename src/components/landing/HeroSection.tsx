@@ -23,10 +23,28 @@ const CountdownTimer = dynamic(() => import('./CountdownTimer'), {
   ),
 });
 
+const OFFICIAL_FIREBASE_VIDEO_URL = 
+  'https://firebasestorage.googleapis.com/v0/b/studio-1424813022-71754.firebasestorage.app/o/Arquivos%20aleat%C3%B3rios%2FIMG_8498.MOV?alt=media&token=30bfbd64-9351-4ac2-b659-c247ed3e97b5';
+
 const DEFAULT_VIDEO_ID = '2exxezTA8fI';
 
 export default function HeroSection() {
+  const [videoSrc, setVideoSrc] = useState<string>(OFFICIAL_FIREBASE_VIDEO_URL);
+  const [isDirectVideo, setIsDirectVideo] = useState<boolean>(true);
   const [videoId, setVideoId] = useState<string>(DEFAULT_VIDEO_ID);
+
+  // Helper to check if URL is a direct video
+  const isDirectVideoUrl = (url: string) => {
+    if (!url) return false;
+    const lower = url.toLowerCase();
+    return (
+      lower.includes('firebasestorage.googleapis.com') ||
+      lower.endsWith('.mp4') ||
+      lower.endsWith('.webm') ||
+      lower.endsWith('.mov') ||
+      lower.includes('.mp4?')
+    );
+  };
 
   // Helper to extract YouTube video ID from URL or raw ID
   const extractYoutubeId = (url: string) => {
@@ -43,21 +61,22 @@ export default function HeroSection() {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
-      const paramVideo = params.get('v') || params.get('video');
+      const paramVideo = params.get('v') || params.get('video') || params.get('src');
       if (paramVideo) {
-        const extracted = extractYoutubeId(paramVideo);
-        setVideoId(extracted);
-        localStorage.setItem('festapay_landing_video_id', extracted);
+        if (isDirectVideoUrl(paramVideo)) {
+          setVideoSrc(paramVideo);
+          setIsDirectVideo(true);
+        } else {
+          const extracted = extractYoutubeId(paramVideo);
+          setVideoId(extracted);
+          setIsDirectVideo(false);
+        }
         return;
       }
 
-      const saved = localStorage.getItem('festapay_landing_video_id');
-      if (saved && saved.trim().length === 11) {
-        setVideoId(saved.trim());
-      } else {
-        setVideoId(DEFAULT_VIDEO_ID);
-        localStorage.setItem('festapay_landing_video_id', DEFAULT_VIDEO_ID);
-      }
+      // Default to official Firebase Storage video
+      setVideoSrc(OFFICIAL_FIREBASE_VIDEO_URL);
+      setIsDirectVideo(true);
     }
   }, []);
 
@@ -108,20 +127,34 @@ export default function HeroSection() {
         </div>
 
         {/* ======================================================== */}
-        {/* FEATURED EXPLANATORY YOUTUBE VIDEO ON COVER              */}
+        {/* FEATURED EXPLANATORY VIDEO ON COVER                      */}
         {/* ======================================================== */}
         <div id="video-festa" className="mt-7 sm:mt-8 max-w-3xl mx-auto">
           <div className="relative rounded-3xl p-1 bg-gradient-to-r from-purple-500/30 via-pink-500/20 to-amber-500/30 shadow-xl border border-purple-100">
             <div className="relative rounded-2xl overflow-hidden bg-slate-950 border border-slate-800 text-white shadow-2xl">
-              {/* 16:9 Responsive Video Viewport */}
-              <div className="relative w-full aspect-video">
-                <iframe
-                  className="w-full h-full"
-                  src={`https://www.youtube-nocookie.com/embed/${videoId}?autoplay=0&rel=0`}
-                  title="Vídeo Oficial da Festa Novo Amanhecer 2026"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                  allowFullScreen
-                />
+              {/* Responsive Video Viewport */}
+              <div className="relative w-full aspect-video flex items-center justify-center bg-black">
+                {isDirectVideo ? (
+                  <video
+                    src={videoSrc}
+                    controls
+                    playsInline
+                    preload="metadata"
+                    className="w-full h-full object-contain"
+                    onError={() => {
+                      setIsDirectVideo(false);
+                      setVideoId(DEFAULT_VIDEO_ID);
+                    }}
+                  />
+                ) : (
+                  <iframe
+                    className="w-full h-full"
+                    src={`https://www.youtube.com/embed/${videoId}?autoplay=0&rel=0`}
+                    title="Vídeo Oficial da Festa Novo Amanhecer 2026"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    allowFullScreen
+                  />
+                )}
               </div>
             </div>
           </div>
