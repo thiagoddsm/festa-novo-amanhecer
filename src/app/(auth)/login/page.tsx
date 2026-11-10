@@ -10,6 +10,7 @@ import { collection, getDocs, doc, setDoc } from 'firebase/firestore';
 import { useAuth as useFirebaseAuth } from '@/firebase';
 import { useFirestore } from '@/firebase';
 import { useAuth } from '@/hooks/use-auth-context';
+import { signupInProgress } from '@/hooks/use-auth-context';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 
@@ -270,6 +271,7 @@ function LoginPageContent() {
 
     setIsSubmitting(true);
     try {
+      signupInProgress.current = true;
       const credential = await createUserWithEmailAndPassword(
         firebaseAuth,
         signupEmail,
@@ -289,14 +291,15 @@ function LoginPageContent() {
 
       // Sign out immediately so they wait for admin approval
       await firebaseAuth.signOut();
+      signupInProgress.current = false;
 
       setSignupSuccess(true);
     } catch (error: any) {
       const message =
         error.code === 'auth/email-already-in-use'
           ? 'Este email já está cadastrado.'
-          : 'Não foi possível criar a conta.';
-      toast({ variant: 'destructive', title: 'Erro no Cadastro', description: message });
+          : error.code === 'auth/weak-password' ? 'Senha muito fraca. Use pelo menos 6 caracteres.' : error.code === 'auth/invalid-email' ? 'Email inválido.' : error.code === 'auth/network-request-failed' ? 'Sem conexão com a internet. Tente novamente.' : 'Não foi possível criar a conta.';
+      signupInProgress.current = false; toast({ variant: 'destructive', title: 'Erro no Cadastro', description: message });
     } finally {
       setIsSubmitting(false);
     }

@@ -13,6 +13,7 @@ import {
 } from 'firebase/firestore';
 import { type Order, type OrderItem } from '@/lib/definitions';
 import { updateOrderStatus } from '@/lib/actions';
+import CancelOrderButton from './CancelOrderButton';
 import { useToast } from '@/hooks/use-toast';
 import { soundPlayer } from '@/lib/audio';
 import { Button } from '@/components/ui/button';
@@ -680,6 +681,10 @@ export default function KitchenDisplay({
                         </button>
                       </div>
                     )}
+                    <CancelOrderButton
+                      order={order}
+                      className="h-9 w-full text-xs text-rose-400 hover:bg-rose-950/40 hover:text-rose-300 gap-1.5"
+                    />
                   </div>
                 </div>
               );

@@ -234,8 +234,7 @@ export default function QrCodeVideoPage() {
               src={videoSrc}
               className="w-full h-full object-cover"
               playsInline
-              // @ts-expect-error webkit-playsinline for legacy iOS
-              webkit-playsinline="true"
+              {...({ 'webkit-playsinline': 'true' } as any)}
               autoPlay
               muted={isMuted}
               loop

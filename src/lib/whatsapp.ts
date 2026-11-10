@@ -354,3 +354,211 @@ export async function sendWhatsappImage(to: string, imageUrl: string, caption: s
   }
   return { status: 'success', message: 'Imagem enviada com sucesso.', data: result };
 }
+
+
+// ---------------------------------------------------------------------------
+// Pairing Code (8 digits) — connect WhatsApp by typing a code instead of scanning a QR.
+// Ported from the "disparador-de-campanha" app (getEvolutionPairingCode).
+// ---------------------------------------------------------------------------
+
+export type PairingCodeResult = {
+  success: boolean;
+  instanceName: string;
+  pairingCode?: string;
+  phoneNumber?: string;
+  state?: string;
+  isAlreadyConnected?: boolean;
+  isQrCodeOnly?: boolean;
+  base64?: string | null;
+  error?: string;
+};
+
+/**
+ * Extracts a valid pairing PIN (6-12 chars, never a QR payload) from any Evolution v1/v2 response
+ * and formats 8-char codes as XXXX-XXXX.
+ */
+export function extractValidPairingPin(apiData: any): string | null {
+  if (!apiData) return null;
+  const candidates = [
+    apiData.pairingCode,
+    apiData.pairing_code,
+    apiData.pairing,
+    apiData.qrcode?.pairingCode,
+    apiData.qrcode?.pairing_code,
+    typeof apiData === 'string' ? apiData : null,
+  ];
+
+  for (const cand of candidates) {
+    if (cand && typeof cand === 'string') {
+      const clean = cand.trim().replace(/\s+/g, '');
+      if (
+        clean.length >= 6 &&
+        clean.length <= 12 &&
+        !clean.startsWith('2@') &&
+        !clean.startsWith('1@') &&
+        !clean.includes('@') &&
+        !clean.includes(',') &&
+        !clean.includes(';')
+      ) {
+        if (clean.length === 8 && !clean.includes('-')) {
+          return `${clean.slice(0, 4)}-${clean.slice(4)}`.toUpperCase();
+        }
+        return clean.toUpperCase();
+      }
+    }
+  }
+  return null;
+}
+
+async function evolutionRequest(path: string, init: RequestInit, customApiKey?: string): Promise<Response> {
+  return fetch(`${EVOLUTION_API_URL}${path}`, {
+    ...init,
+    headers: {
+      apikey: customApiKey || EVOLUTION_API_KEY,
+      'Content-Type': 'application/json',
+      ...(init.headers || {}),
+    },
+    cache: 'no-store',
+  });
+}
+
+/** Keeps notifications on the owner's phone and avoids unwanted behaviours on the paired instance. */
+async function applyInstanceSettings(instanceName: string, customApiKey?: string): Promise<void> {
+  const payload = JSON.stringify({
+    rejectCall: false,
+    msgCall: '',
+    groupsIgnore: false,
+    alwaysOnline: false,
+    readMessages: false,
+    readStatus: false,
+    syncFullHistory: false,
+  });
+  try {
+    let res = await evolutionRequest(`/settings/set/${instanceName}`, { method: 'POST', body: payload }, customApiKey);
+    if (!res.ok && (res.status === 404 || res.status === 405)) {
+      res = await evolutionRequest(`/instance/settings/${instanceName}`, { method: 'POST', body: payload }, customApiKey);
+    }
+  } catch (e) {
+    console.warn(`[Evolution API] Could not apply settings to ${instanceName}:`, e);
+  }
+}
+
+async function createPairingInstance(instanceName: string, cleanPhone: string, customApiKey?: string): Promise<void> {
+  await evolutionRequest(
+    '/instance/create',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        instanceName,
+        token: customApiKey || '',
+        qrcode: false,
+        number: cleanPhone,
+        integration: 'WHATSAPP-BAILEYS',
+      }),
+    },
+    customApiKey
+  ).catch(() => {});
+  await applyInstanceSettings(instanceName, customApiKey);
+}
+
+/**
+ * Requests the 8-digit pairing code for an instance.
+ * The user opens WhatsApp > Connected devices > Link a device > "Link with phone number" and types it.
+ */
+export async function getEvolutionPairingCode(
+  instanceName: string,
+  phoneNumber: string,
+  customApiKey?: string
+): Promise<PairingCodeResult> {
+  if (!phoneNumber) {
+    return { success: false, instanceName, error: 'Informe o número do WhatsApp para gerar o código.' };
+  }
+
+  const cleanPhone = formatWhatsAppNumber(phoneNumber);
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  const requestConnect = async (attempts: number, delayMs: number) => {
+    let lastData: any = {};
+    for (let attempt = 1; attempt <= attempts; attempt++) {
+      try {
+        const res = await evolutionRequest(`/instance/connect/${instanceName}?number=${cleanPhone}`, { method: 'GET' }, customApiKey);
+
+        if (res.status === 404) {
+          await createPairingInstance(instanceName, cleanPhone, customApiKey);
+          await sleep(1200);
+          continue;
+        }
+
+        const data = await res.json().catch(() => ({}));
+        lastData = data;
+        const pin = extractValidPairingPin(data);
+        if (pin) return { data, pin };
+      } catch (e) {
+        // retry
+      }
+      if (attempt < attempts) await sleep(delayMs);
+    }
+    return { data: lastData, pin: null as string | null };
+  };
+
+  try {
+    // 1. Already connected?
+    const stateCheck = await getEvolutionConnectionState(instanceName, customApiKey);
+    if (stateCheck.state === 'open') {
+      return {
+        success: false,
+        instanceName,
+        isAlreadyConnected: true,
+        error: `Esta instância já está conectada${stateCheck.phoneNumber ? ` (${stateCheck.phoneNumber})` : ''}. Desconecte-a antes de parear outro número.`,
+      };
+    }
+
+    // 2. Create the instance in pairing mode when it does not exist yet
+    if (stateCheck.state === 'not_found' || stateCheck.state === 'error') {
+      await createPairingInstance(instanceName, cleanPhone, customApiKey);
+      await sleep(1200);
+    }
+
+    let { data, pin } = await requestConnect(3, 1000);
+
+    // 3. Server answered with QR only: recreate the instance with qrcode:false + number to force pairing mode
+    if (!pin) {
+      await evolutionRequest(`/instance/delete/${instanceName}`, { method: 'DELETE' }, customApiKey).catch(() => {});
+      await sleep(800);
+      await createPairingInstance(instanceName, cleanPhone, customApiKey);
+      await sleep(1500);
+      const retry = await requestConnect(4, 1200);
+      data = retry.data;
+      pin = retry.pin;
+    }
+
+    if (data?.instance?.state === 'open' || data?.state === 'open') {
+      return { success: false, instanceName, isAlreadyConnected: true, error: 'A instância já está conectada no WhatsApp.' };
+    }
+
+    if (!pin) {
+      const hasQr = !!(data?.base64 || data?.qrcode?.base64 || (typeof data?.code === 'string' && data.code.startsWith('2@')));
+      return {
+        success: false,
+        instanceName,
+        isQrCodeOnly: hasQr,
+        base64: data?.base64 || data?.qrcode?.base64 || null,
+        error: hasQr
+          ? 'O servidor só devolveu QR Code. Use a opção "QR Code" para conectar.'
+          : 'Não foi possível gerar o código. Confira o número com DDD (ex: 21999998888) e tente novamente.',
+      };
+    }
+
+    return {
+      success: true,
+      instanceName,
+      phoneNumber: cleanPhone,
+      pairingCode: pin,
+      state: data?.instance?.state || 'connecting',
+    };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Erro de rede ao gerar código de pareamento.';
+    console.error(`[Evolution API] Pairing code error for ${instanceName}:`, msg);
+    return { success: false, instanceName, error: msg };
+  }
+}

@@ -122,17 +122,23 @@ export function TenantProvider({ children }: { children: ReactNode }) {
   }, [firestore, currentTenantId, userRole, userEmail, userTenantsKey]);
 
   const setCurrentTenant = useCallback((tenant: Tenant | null) => {
+    const sameTenant = !!tenant && tenant.id === currentTenantId;
     setCurrentTenantState(tenant);
-    setCurrentEventState(null);
+    if (!sameTenant) {
+      // Reselecting the same organization must not wipe the selected event
+      setCurrentEventState(null);
+    }
     if (typeof window !== 'undefined') {
       if (tenant) {
         localStorage.setItem('festapay_tenant_id', tenant.id);
       } else {
         localStorage.removeItem('festapay_tenant_id');
       }
-      localStorage.removeItem('festapay_event_id');
+      if (!sameTenant) {
+        localStorage.removeItem('festapay_event_id');
+      }
     }
-  }, []);
+  }, [currentTenantId]);
 
   const setCurrentEvent = useCallback((event: TenantEvent | null) => {
     setCurrentEventState(event);

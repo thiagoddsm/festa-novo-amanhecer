@@ -9,6 +9,7 @@ import { notifyOrderReady } from './flows/notify-order-flow';
 import {
   getPdvInstanceName,
   getEvolutionQrCode,
+  getEvolutionPairingCode,
   getEvolutionConnectionState,
   logoutEvolutionInstance,
   formatWhatsAppNumber,
@@ -575,6 +576,75 @@ export async function reverseTransaction(transactionId: string, responsibleUser:
         console.error(error);
         const errorMessage = error instanceof Error ? error.message : 'Ocorreu um erro desconhecido.';
         return { status: 'error', message: `Erro ao estornar: ${errorMessage}` };
+    }
+}
+
+/**
+ * Cancels an order from the PDV: refunds the card balance, restores product/ingredient stock,
+ * notifies the customer (all done by reverseTransaction) and records who cancelled it.
+ * Permission rule:
+ *  - PENDENTE / EM_PREPARO  -> any PDV/Caixa/Admin operator
+ *  - PRONTO / ENTREGUE      -> only CAIXA, ADMIN_EVENTO, ADMIN_ORGANIZACAO, SUPERADMIN
+ */
+export async function cancelOrder(orderId: string, responsibleUser: string, userRole: string): Promise<ActionState> {
+    const db = getWebDb();
+    try {
+        if (!orderId) return { status: 'error', message: 'Pedido inválido.' };
+
+        const orderRef = clientDoc(db, 'orders', orderId);
+        const orderSnap = await clientGetDoc(orderRef);
+        if (!orderSnap.exists()) {
+            return { status: 'error', message: 'Pedido não encontrado.' };
+        }
+        const order = orderSnap.data() as Order;
+
+        if (order.status === 'CANCELADO') {
+            return { status: 'error', message: 'Este pedido já foi cancelado.' };
+        }
+        if (order.status === 'ARQUIVADO') {
+            return { status: 'error', message: 'Pedidos arquivados não podem ser cancelados.' };
+        }
+
+        const isActive = order.status === 'PENDENTE' || order.status === 'EM_PREPARO';
+        const canCancelAnyStatus = ['CAIXA', 'ADMIN_EVENTO', 'ADMIN_ORGANIZACAO', 'SUPERADMIN'].includes(userRole);
+        if (!isActive && !canCancelAnyStatus) {
+            return {
+                status: 'error',
+                message: 'Pedidos Prontos ou Entregues só podem ser cancelados pelo Caixa ou Administrador.',
+            };
+        }
+
+        if (!order.transaction_id) {
+            return { status: 'error', message: 'Pedido sem transação vinculada; não é possível estornar.' };
+        }
+
+        const result = await reverseTransaction(order.transaction_id, responsibleUser || 'Operador');
+        if (result.status !== 'success') {
+            return result;
+        }
+
+        const now = ClientTimestamp.now();
+        await clientUpdateDoc(orderRef, {
+            status: 'CANCELADO',
+            cancelled_by: responsibleUser || 'Operador',
+            cancelled_at: now,
+            updated_at: now,
+            status_history: clientArrayUnion({
+                status: 'CANCELADO',
+                timestamp: now,
+                by: responsibleUser || 'Operador',
+            }),
+        });
+
+        return {
+            status: 'success',
+            message: 'Pedido cancelado. Saldo e estoque foram devolvidos e o cliente foi avisado.',
+            data: result.data,
+        };
+    } catch (error) {
+        console.error('[cancelOrder] Error:', error);
+        const msg = error instanceof Error ? error.message : 'Erro desconhecido.';
+        return { status: 'error', message: `Erro ao cancelar pedido: ${msg}` };
     }
 }
 
@@ -1169,7 +1239,9 @@ export async function connectPdvWhatsapp(
   pdvId: string,
   eventId?: string | null,
   customInstanceName?: string,
-  customToken?: string
+  customToken?: string,
+  phoneNumber?: string,
+  mode: 'QR' | 'PAIRING' = 'QR'
 ): Promise<{
   success: boolean;
   instanceName?: string;
@@ -1190,7 +1262,6 @@ export async function connectPdvWhatsapp(
     }
 
     const pdvData = pdvSnap.data() as Pdv;
-    // Preferred instance name order: customInstanceName -> saved instanceName -> pdv.nome -> generated name
     const instanceName =
       customInstanceName?.trim() ||
       pdvData.whatsapp?.instanceName ||
@@ -1199,8 +1270,29 @@ export async function connectPdvWhatsapp(
 
     const token = customToken?.trim() || pdvData.whatsapp?.token;
 
-    // Get or generate QR code from Evolution API
-    const qrResult = await getEvolutionQrCode(instanceName, token);
+    let qrResult: {
+      success: boolean;
+      instanceName: string;
+      base64?: string | null;
+      code?: string;
+      pairingCode?: string;
+      state?: string;
+      error?: string;
+    };
+
+    if (mode === 'PAIRING' && phoneNumber) {
+      const pairRes = await getEvolutionPairingCode(instanceName, phoneNumber, token);
+      qrResult = {
+        success: pairRes.success,
+        instanceName: pairRes.instanceName,
+        base64: pairRes.base64,
+        pairingCode: pairRes.pairingCode,
+        state: pairRes.state,
+        error: pairRes.error,
+      };
+    } else {
+      qrResult = await getEvolutionQrCode(instanceName, token);
+    }
 
     if (!qrResult.success) {
       await clientUpdateDoc(pdvRef, {
@@ -1219,6 +1311,7 @@ export async function connectPdvWhatsapp(
       'whatsapp.enabled': true,
       'whatsapp.instanceName': instanceName,
       ...(token ? { 'whatsapp.token': token } : {}),
+      ...(phoneNumber ? { 'whatsapp.phoneNumber': formatWhatsAppNumber(phoneNumber) } : {}),
       'whatsapp.status': qrResult.state === 'open' ? 'CONNECTED' : 'CONNECTING',
       'whatsapp.updatedAt': ClientTimestamp.now(),
     });
@@ -1226,7 +1319,7 @@ export async function connectPdvWhatsapp(
     return {
       success: true,
       instanceName,
-      base64: qrResult.base64,
+      base64: qrResult.base64 || undefined,
       code: qrResult.code,
       pairingCode: qrResult.pairingCode,
       state: qrResult.state,
@@ -1310,7 +1403,9 @@ export async function connectEventWhatsapp(
   tenantId: string,
   eventId: string,
   customInstanceName?: string,
-  customToken?: string
+  customToken?: string,
+  phoneNumber?: string,
+  mode: 'QR' | 'PAIRING' = 'QR'
 ): Promise<{
   success: boolean;
   instanceName?: string;
@@ -1341,7 +1436,29 @@ export async function connectEventWhatsapp(
 
     const token = customToken?.trim() || eventData.whatsapp?.token;
 
-    const qrResult = await getEvolutionQrCode(instanceName, token);
+    let qrResult: {
+      success: boolean;
+      instanceName: string;
+      base64?: string | null;
+      code?: string;
+      pairingCode?: string;
+      state?: string;
+      error?: string;
+    };
+
+    if (mode === 'PAIRING' && phoneNumber) {
+      const pairRes = await getEvolutionPairingCode(instanceName, phoneNumber, token);
+      qrResult = {
+        success: pairRes.success,
+        instanceName: pairRes.instanceName,
+        base64: pairRes.base64,
+        pairingCode: pairRes.pairingCode,
+        state: pairRes.state,
+        error: pairRes.error,
+      };
+    } else {
+      qrResult = await getEvolutionQrCode(instanceName, token);
+    }
 
     if (!qrResult.success) {
       await clientUpdateDoc(eventRef, {
@@ -1359,6 +1476,7 @@ export async function connectEventWhatsapp(
       'whatsapp.enabled': true,
       'whatsapp.instanceName': instanceName,
       ...(token ? { 'whatsapp.token': token } : {}),
+      ...(phoneNumber ? { 'whatsapp.phoneNumber': formatWhatsAppNumber(phoneNumber) } : {}),
       'whatsapp.status': qrResult.state === 'open' ? 'CONNECTED' : 'CONNECTING',
       'whatsapp.updatedAt': ClientTimestamp.now(),
     });
@@ -1366,7 +1484,7 @@ export async function connectEventWhatsapp(
     return {
       success: true,
       instanceName,
-      base64: qrResult.base64,
+      base64: qrResult.base64 || undefined,
       code: qrResult.code,
       pairingCode: qrResult.pairingCode,
       state: qrResult.state,
@@ -1797,7 +1915,13 @@ export async function createUser(prevState: ActionState | undefined, formData: F
             userProfile.tenants = tenantsMap;
         }
 
-        await clientSetDoc(clientDoc(db, 'users', userRecord.uid), userProfile);
+        try {
+            await clientSetDoc(clientDoc(db, 'users', userRecord.uid), userProfile);
+        } catch (profileError) {
+            // Roll back the Auth account so we never leave an orphan user without a profile
+            await auth.deleteUser(userRecord.uid).catch(() => {});
+            throw profileError;
+        }
 
         return { status: 'success', message: 'Usuário criado com sucesso!' };
 

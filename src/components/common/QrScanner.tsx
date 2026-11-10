@@ -9,6 +9,44 @@ interface QrScannerProps {
   onScanFailure?: (error: string) => void;
 }
 
+type CameraInfo = { id: string; label: string };
+
+const CAMERA_STORAGE_KEY = 'festapay_camera_id';
+
+// Lenses we never want as default (ultra-wide 0.5x, macro, depth, telephoto...)
+const BAD_LENS_REGEX = /ultra|wide|0\.5|grande|macro|depth|profundidade|tele|zoom|infra|ir\b|mono/i;
+const BACK_REGEX = /back|rear|traseir|environment|principal|main/i;
+const FRONT_REGEX = /front|user|selfie|frontal/i;
+
+function isFrontCamera(cam: CameraInfo) {
+  return FRONT_REGEX.test(cam.label) && !BACK_REGEX.test(cam.label);
+}
+
+/**
+ * Orders cameras so that index 0 is the best default for scanning QR codes:
+ * main back lens (1x) > other back lenses > front camera > ultra-wide / macro.
+ */
+function sortCameras(cameras: CameraInfo[]): CameraInfo[] {
+  const score = (cam: CameraInfo) => {
+    const label = cam.label || '';
+    let s = 0;
+    if (BAD_LENS_REGEX.test(label)) s -= 100;
+    if (isFrontCamera(cam)) s -= 30;
+    else if (BACK_REGEX.test(label)) s += 50;
+    // Labels like "camera2 0, facing back" (Android): prefer lowest index = main lens
+    const idx = label.match(/camera2?\s*(\d+)/i);
+    if (idx) s -= Number(idx[1]);
+    return s;
+  };
+  return [...cameras].sort((a, b) => score(b) - score(a));
+}
+
+function cameraDisplayName(cam: CameraInfo) {
+  if (isFrontCamera(cam)) return 'Câmera frontal';
+  if (BAD_LENS_REGEX.test(cam.label)) return 'Câmera grande angular (0.5x)';
+  return 'Câmera traseira';
+}
+
 // Sound feedback on successful scan
 function playBeep() {
   try {
@@ -41,17 +79,35 @@ function triggerVibration() {
   }
 }
 
+function readSavedCameraId(): string | null {
+  try {
+    return localStorage.getItem(CAMERA_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function saveCameraId(id: string) {
+  try {
+    localStorage.setItem(CAMERA_STORAGE_KEY, id);
+  } catch {
+    // ignore
+  }
+}
+
 export function QrScanner({ onScanSuccess, onScanFailure }: QrScannerProps) {
   const [status, setStatus] = useState<'INITIALIZING' | 'SCANNING' | 'SUCCESS' | 'ERROR'>('INITIALIZING');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [cameras, setCameras] = useState<{ id: string; label: string }[]>([]);
-  const [currentCameraIndex, setCurrentCameraIndex] = useState<number>(0);
+  const [cameras, setCameras] = useState<CameraInfo[]>([]);
+  const [activeCameraId, setActiveCameraId] = useState<string | null>(null);
 
   const containerIdRef = useRef(`qr-reader-${Math.random().toString(36).substring(2, 9)}`);
   const scannerInstanceRef = useRef<any>(null);
   const transitionPromiseRef = useRef<Promise<any> | null>(null);
   const isMountedRef = useRef<boolean>(true);
   const scannedRef = useRef<boolean>(false);
+  const camerasRef = useRef<CameraInfo[]>([]);
+  const activeCameraIdRef = useRef<string | null>(null);
 
   const stopCurrentScanner = async () => {
     // 1. Wait for any ongoing start/stop transition to complete
@@ -87,7 +143,41 @@ export function QrScanner({ onScanSuccess, onScanFailure }: QrScannerProps) {
     }
   };
 
-  const startScanning = async (cameraIdOrConfig: any) => {
+  /**
+   * Enumerates cameras (once) and decides which one to open:
+   * 1) explicit request, 2) last camera chosen by the user (saved), 3) best back camera,
+   * 4) fallback to facingMode: environment.
+   */
+  const resolveCamera = async (Html5Qrcode: any, requestedId?: string): Promise<string | { facingMode: string }> => {
+    let list = camerasRef.current;
+    if (list.length === 0) {
+      try {
+        const found: CameraInfo[] = await Html5Qrcode.getCameras();
+        if (found && found.length > 0) {
+          list = sortCameras(found);
+          camerasRef.current = list;
+          if (isMountedRef.current) setCameras(list);
+        }
+      } catch (e) {
+        // Ignore camera enumeration failure
+      }
+    }
+
+    if (requestedId && list.some((c) => c.id === requestedId)) return requestedId;
+
+    const saved = readSavedCameraId();
+    if (saved && list.some((c) => c.id === saved)) return saved;
+
+    if (list.length > 0) {
+      // Labels are empty before permission is granted; sortCameras still keeps a stable order
+      const best = list.find((c) => !BAD_LENS_REGEX.test(c.label) && !isFrontCamera(c)) || list[0];
+      return best.id;
+    }
+
+    return { facingMode: 'environment' };
+  };
+
+  const startScanning = async (requestedId?: string) => {
     try {
       setStatus('INITIALIZING');
       setErrorMessage(null);
@@ -102,16 +192,7 @@ export function QrScanner({ onScanSuccess, onScanFailure }: QrScannerProps) {
       const { Html5Qrcode } = await import('html5-qrcode');
       if (!isMountedRef.current) return;
 
-      // Discover cameras if not yet done
-      try {
-        const availableCameras = await Html5Qrcode.getCameras();
-        if (isMountedRef.current && availableCameras && availableCameras.length > 0) {
-          setCameras(availableCameras);
-        }
-      } catch (e) {
-        // Ignore camera enumeration failure
-      }
-
+      const cameraIdOrConfig = await resolveCamera(Html5Qrcode, requestedId);
       if (!isMountedRef.current) return;
 
       const scanner = new Html5Qrcode(containerIdRef.current);
@@ -158,7 +239,22 @@ export function QrScanner({ onScanSuccess, onScanFailure }: QrScannerProps) {
       await startPromise;
 
       if (isMountedRef.current) {
+        const usedId = typeof cameraIdOrConfig === 'string' ? cameraIdOrConfig : null;
+        activeCameraIdRef.current = usedId;
+        setActiveCameraId(usedId);
         setStatus('SCANNING');
+
+        // Camera labels only become available after permission is granted: re-sort now
+        try {
+          const refreshed: CameraInfo[] = await Html5Qrcode.getCameras();
+          if (refreshed && refreshed.length > 0 && isMountedRef.current) {
+            const sorted = sortCameras(refreshed);
+            camerasRef.current = sorted;
+            setCameras(sorted);
+          }
+        } catch (e) {
+          // ignore
+        }
       }
     } catch (err: any) {
       if (isMountedRef.current) {
@@ -166,6 +262,15 @@ export function QrScanner({ onScanSuccess, onScanFailure }: QrScannerProps) {
         if (msg.includes('already under transition')) {
           // Benign race condition, ignore
           return;
+        }
+
+        // If a saved/selected camera no longer works, forget it and retry once with the default
+        if (requestedId === undefined && readSavedCameraId()) {
+          try {
+            localStorage.removeItem(CAMERA_STORAGE_KEY);
+          } catch {
+            // ignore
+          }
         }
 
         setStatus('ERROR');
@@ -188,7 +293,7 @@ export function QrScanner({ onScanSuccess, onScanFailure }: QrScannerProps) {
 
     // Small timeout ensures the Dialog DOM is fully mounted
     const timer = setTimeout(() => {
-      startScanning({ facingMode: 'environment' });
+      startScanning();
     }, 120);
 
     return () => {
@@ -196,19 +301,25 @@ export function QrScanner({ onScanSuccess, onScanFailure }: QrScannerProps) {
       clearTimeout(timer);
       stopCurrentScanner();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleSwitchCamera = async () => {
-    if (cameras.length < 2) return;
-    const nextIndex = (currentCameraIndex + 1) % cameras.length;
-    setCurrentCameraIndex(nextIndex);
-    await startScanning(cameras[nextIndex].id);
+    const list = camerasRef.current;
+    if (list.length < 2) return;
+    // Next camera is computed from the id actually in use (not from a stale index)
+    const currentIndex = Math.max(0, list.findIndex((c) => c.id === activeCameraIdRef.current));
+    const next = list[(currentIndex + 1) % list.length];
+    saveCameraId(next.id);
+    await startScanning(next.id);
   };
 
   const handleRetry = async () => {
     scannedRef.current = false;
-    await startScanning({ facingMode: 'environment' });
+    await startScanning();
   };
+
+  const activeCamera = cameras.find((c) => c.id === activeCameraId);
 
   return (
     <div className="flex flex-col items-center w-full">
@@ -302,7 +413,7 @@ export function QrScanner({ onScanSuccess, onScanFailure }: QrScannerProps) {
           className="mt-2 text-xs text-muted-foreground hover:text-foreground gap-1.5 h-8"
         >
           <RefreshCw className="w-3.5 h-3.5" />
-          Alternar Câmera
+          {activeCamera ? `Alternar câmera (${cameraDisplayName(activeCamera)})` : 'Alternar câmera'}
         </Button>
       )}
 

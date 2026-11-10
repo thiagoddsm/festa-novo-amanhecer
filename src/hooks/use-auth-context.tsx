@@ -9,7 +9,7 @@ import {
 } from 'react';
 import { onIdTokenChanged, type User, signOut as firebaseSignOut, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { useAuth as useFirebaseAuth, useFirestore } from '@/firebase';
-import { doc, getDoc, setDoc, collection, getDocs, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, getDocs, onSnapshot, query, limit } from 'firebase/firestore';
 import type { AuthenticatedUser } from '@/lib/auth-defs';
 import { mapFirebaseAuthToAuthenticatedUser } from '@/lib/auth-defs';
 import { useToast } from './use-toast';
@@ -23,9 +23,17 @@ type AuthContextType = {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+/**
+ * Flag raised by the self-signup form while it creates the Auth account and writes
+ * the pending profile. While true, the AuthProvider must NOT auto-create a profile
+ * (avoids a race that overwrote/lost the requested organization/event/role).
+ */
+export const signupInProgress = { current: false };
+
 // This function checks if a user profile exists and creates one on first login.
 const checkAndCreateUserProfile = async (firestore: any, user: User): Promise<void> => {
     if (!user) return;
+    if (signupInProgress.current) return;
     const userDocRef = doc(firestore, 'users', user.uid);
     try {
         const docSnap = await getDoc(userDocRef);
@@ -35,7 +43,7 @@ const checkAndCreateUserProfile = async (firestore: any, user: User): Promise<vo
         if (!docSnap.exists()) {
             console.log(`Profile for ${user.uid} not found, creating...`);
             const usersCollectionRef = collection(firestore, 'users');
-            const allUsersSnap = await getDocs(usersCollectionRef);
+            const allUsersSnap = await getDocs(query(usersCollectionRef, limit(1)));
             const isFirstUser = allUsersSnap.empty;
 
             const newUserProfile = {
@@ -73,6 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     let isInitialAuthCheck = true;
+    let profileRecreateTried = false;
     let unsubscribeUserDoc: (() => void) | null = null;
 
     const unsubscribe = onIdTokenChanged(auth, async (firebaseUser: User | null) => {
@@ -83,6 +92,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (unsubscribeUserDoc) {
         unsubscribeUserDoc();
         unsubscribeUserDoc = null;
+      }
+
+      if (firebaseUser && signupInProgress.current) {
+        // Self-signup in progress: the signup form owns profile creation and will sign out.
+        setUser(null);
+        isInitialAuthCheck = false;
+        setLoading(false);
+        return;
       }
 
       if (firebaseUser) {
@@ -111,6 +128,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               return authenticatedUser;
             });
           } else {
+            if (!profileRecreateTried && !signupInProgress.current) {
+              // Missing profile: try to recreate it once (as VISITANTE) instead of silently signing out
+              profileRecreateTried = true;
+              checkAndCreateUserProfile(firestore, firebaseUser);
+              return;
+            }
             console.error("User profile not found in Firestore. Signing out.");
             firebaseSignOut(auth);
             setUser(null);

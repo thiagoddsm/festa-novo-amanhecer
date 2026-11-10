@@ -6,6 +6,7 @@ import { type Order, type OrderItem } from '@/lib/definitions';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { updateOrderStatus } from '@/lib/actions';
+import CancelOrderButton from './CancelOrderButton';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '../ui/skeleton';
 import { ScrollArea } from '../ui/scroll-area';
@@ -306,6 +307,8 @@ const OrderCard = ({ order }: { order: Order }) => {
                     </div>
                 )}
             </div>
+
+            <CancelOrderButton order={order} />
 
             {/* WhatsApp Notification Status */}
             {order.notification_status && (
