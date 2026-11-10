@@ -103,7 +103,8 @@ function useAdminUsersData() {
             name: data.name || data.nome || data.displayName || 'Sem nome',
             email: data.email || '',
             role,
-            pdvId: data.pdvId,
+            pdvId: data.pdvId || (Array.isArray(data.pdvIds) ? data.pdvIds[0] : undefined),
+            pdvIds: Array.isArray(data.pdvIds) ? data.pdvIds : (data.pdvId ? [data.pdvId] : []),
             tenants: data.tenants || {},
             requestedTenantId: data.requestedTenantId,
             requestedEventId: data.requestedEventId,
@@ -213,10 +214,17 @@ export default function UsersPage() {
           const primaryTenantId = userTenantIds[0] || user.requestedTenantId;
           const tenant = stableTenants.find((t) => t.id === primaryTenantId);
 
-          // Find assigned PDV
-          const assignedPdv = user.pdvId
-            ? stablePdvs.find((p) => p.id === user.pdvId)
-            : null;
+          // Find assigned PDVs
+          const userPdvIds =
+            user.pdvIds && user.pdvIds.length > 0
+              ? user.pdvIds
+              : user.pdvId
+              ? [user.pdvId]
+              : [];
+          const assignedPdvs = userPdvIds
+            .map((id) => stablePdvs.find((p) => p.id === id))
+            .filter((p): p is Pdv => !!p);
+          const assignedPdv = assignedPdvs[0] || null;
 
           // Find event
           const tenantEvents = primaryTenantId ? eventsByTenant[primaryTenantId] || [] : [];
@@ -251,14 +259,27 @@ export default function UsersPage() {
               )}
 
               {user.role === 'PDV' && (
-                <div className="flex items-center gap-1.5 pt-0.5">
-                  <Badge
-                    variant="outline"
-                    className="text-xs font-bold text-orange-900 bg-orange-50 border-orange-300 gap-1"
-                  >
-                    <Store className="h-3.5 w-3.5 text-orange-600" />
-                    {assignedPdv ? assignedPdv.nome : 'Barraca não definida'}
-                  </Badge>
+                <div className="flex items-center flex-wrap gap-1.5 pt-0.5">
+                  {assignedPdvs.length > 0 ? (
+                    assignedPdvs.map((p) => (
+                      <Badge
+                        key={p.id}
+                        variant="outline"
+                        className="text-xs font-bold text-orange-900 bg-orange-50 border-orange-300 gap-1"
+                      >
+                        <Store className="h-3.5 w-3.5 text-orange-600" />
+                        {p.nome}
+                      </Badge>
+                    ))
+                  ) : (
+                    <Badge
+                      variant="outline"
+                      className="text-xs font-bold text-orange-900 bg-orange-50 border-orange-300 gap-1"
+                    >
+                      <Store className="h-3.5 w-3.5 text-orange-600" />
+                      Barraca não definida
+                    </Badge>
+                  )}
                 </div>
               )}
             </div>

@@ -9,6 +9,7 @@ export type AuthenticatedUser = {
   name: string | null;
   role: UserRole;
   pdvId?: string;
+  pdvIds?: string[];
   /** Mapa de tenantId → acesso dentro daquele tenant. */
   tenants?: { [tenantId: string]: TenantAccess };
   requestedTenantId?: string;
@@ -35,7 +36,8 @@ export const mapFirebaseAuthToAuthenticatedUser = (
     email: firebaseUser.email,
     name: userProfile?.name || userProfile?.nome || firebaseUser.displayName || 'Usuário',
     role,
-    pdvId: userProfile?.pdvId,
+    pdvId: userProfile?.pdvId || (Array.isArray(userProfile?.pdvIds) ? userProfile.pdvIds[0] : undefined),
+    pdvIds: Array.isArray(userProfile?.pdvIds) ? userProfile.pdvIds.filter(Boolean) : (userProfile?.pdvId ? [userProfile.pdvId] : []),
     tenants: userProfile?.tenants,
     requestedTenantId: userProfile?.requestedTenantId,
     requestedEventId: userProfile?.requestedEventId,

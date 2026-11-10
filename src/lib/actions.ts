@@ -112,6 +112,7 @@ const SaleItemSchema = z.object({
     quantity: z.number(),
     observation: z.string().optional(),
     ingredientes: z.array(z.string()).optional(),
+    requer_preparo: z.boolean().optional(),
 });
 
 const SaleSchema = z.object({
@@ -297,7 +298,21 @@ export async function processSale(
                 t.update(ref, { quantidade_atual: newQty, updated_at: now });
             }
 
-            // 4. Create transaction record
+            // 4. Enrich items with requer_preparo flag from menu item definition
+            const enrichedItems = validatedFields.data.items.map(it => {
+                const mData = menuItemDocs.get(it.id)?.data;
+                const requerPreparo = mData?.requer_preparo !== undefined
+                    ? mData.requer_preparo
+                    : (it.requer_preparo !== undefined ? it.requer_preparo : true);
+                return {
+                    ...it,
+                    requer_preparo: requerPreparo,
+                };
+            });
+            const requiresKitchenPrep = enrichedItems.some(it => it.requer_preparo !== false);
+            const initialOrderStatus = requiresKitchenPrep ? 'EM_PREPARO' : 'ENTREGUE';
+
+            // 5. Create transaction record
             const transactionRef = clientDoc(clientCollection(db, 'transactions'));
             t.set(transactionRef, {
                 cartao_id: cardDoc.id,
@@ -305,13 +320,13 @@ export async function processSale(
                 tipo: 'VENDA',
                 valor_centavos: valor_venda_centavos,
                 created_at: now,
-                items: validatedFields.data.items,
+                items: enrichedItems,
                 usuario_responsavel: usuario_responsavel,
                 tenant_id: effectiveTenantId,
                 event_id: effectiveEventId,
             });
 
-            // 5. Create order record
+            // 6. Create order record
             const orderRef = clientDoc(clientCollection(db, 'orders'));
             const orderId = orderRef.id;
             const orderNumber = `#${orderId.substring(0, 4).toUpperCase()}`;
@@ -320,10 +335,17 @@ export async function processSale(
                 pdv_nome: pdv_nome,
                 transaction_id: transactionRef.id,
                 cliente_nome: card.nome_cliente || 'Cliente',
-                status: 'EM_PREPARO',
+                status: initialOrderStatus,
                 created_at: now,
                 updated_at: now,
-                items: validatedFields.data.items,
+                ...(requiresKitchenPrep ? {} : {
+                    delivered_at: now,
+                    prep_time_seconds: 0,
+                    prep_time_formatted: 'Entrega Imediata',
+                    total_time_seconds: 0,
+                    total_time_formatted: 'Entrega Imediata',
+                }),
+                items: enrichedItems,
                 order_number: orderNumber,
                 tenant_id: effectiveTenantId,
                 event_id: effectiveEventId,
@@ -362,6 +384,7 @@ export async function processSale(
                 novo_saldo_centavos,
                 cardId: cardDoc.id,
                 order_number: orderNumber,
+                immediate_delivery: !requiresKitchenPrep,
             };
         });
 
@@ -374,6 +397,7 @@ export async function processSale(
             data: { 
                 novo_saldo_centavos: saleResult.novo_saldo_centavos,
                 order_number: saleResult.order_number,
+                immediate_delivery: saleResult.immediate_delivery,
             }
         };
 
@@ -911,6 +935,7 @@ const MenuItemSchema = z.object({
   estoque_atual: z.coerce.number().min(0, 'Estoque não pode ser negativo.').optional().nullable(),
   estoque_minimo: z.coerce.number().min(0).optional().nullable(),
   receita: z.string().optional(),
+  requer_preparo: z.string().optional(),
 });
 
 export async function addMenuItem( prevState: ActionState | undefined, formData: FormData): Promise<ActionState> {
@@ -924,6 +949,7 @@ export async function addMenuItem( prevState: ActionState | undefined, formData:
     estoque_atual: formData.get('estoque_atual') || null,
     estoque_minimo: formData.get('estoque_minimo') || null,
     receita: formData.get('receita') || undefined,
+    requer_preparo: formData.get('requer_preparo') ?? 'true',
   });
 
   if (!validatedFields.success) {
@@ -931,9 +957,10 @@ export async function addMenuItem( prevState: ActionState | undefined, formData:
   }
 
   try {
-    const { nome, preco_reais, ingredientes, pdvId, stock_control_type, estoque_atual, estoque_minimo, receita } = validatedFields.data;
+    const { nome, preco_reais, ingredientes, pdvId, stock_control_type, estoque_atual, estoque_minimo, receita, requer_preparo } = validatedFields.data;
     const preco_centavos = Math.round(preco_reais * 100);
     const ingredientesList = ingredientes ? ingredientes.split(',').map(i => i.trim()).filter(Boolean) : [];
+    const requerPreparoBool = requer_preparo !== 'false';
     
     let parsedReceita: RecipeItem[] | undefined = undefined;
     if (receita) {
@@ -949,6 +976,7 @@ export async function addMenuItem( prevState: ActionState | undefined, formData:
       preco_centavos,
       ingredientes: ingredientesList,
       stock_control_type: (stock_control_type as StockControlType) || 'NONE',
+      requer_preparo: requerPreparoBool,
     };
 
     if (stock_control_type === 'PRODUCT') {
@@ -985,6 +1013,7 @@ export async function updateMenuItem(prevState: ActionState | undefined, formDat
     estoque_atual: formData.get('estoque_atual') || null,
     estoque_minimo: formData.get('estoque_minimo') || null,
     receita: formData.get('receita') || undefined,
+    requer_preparo: formData.get('requer_preparo') ?? 'true',
   });
 
   if (!validatedFields.success || !validatedFields.data.itemId) {
@@ -992,9 +1021,10 @@ export async function updateMenuItem(prevState: ActionState | undefined, formDat
   }
   
   try {
-    const { nome, preco_reais, ingredientes, pdvId, itemId, stock_control_type, estoque_atual, estoque_minimo, receita } = validatedFields.data;
+    const { nome, preco_reais, ingredientes, pdvId, itemId, stock_control_type, estoque_atual, estoque_minimo, receita, requer_preparo } = validatedFields.data;
     const preco_centavos = Math.round(preco_reais * 100);
     const ingredientesList = ingredientes ? ingredientes.split(',').map(i => i.trim()).filter(Boolean) : [];
+    const requerPreparoBool = requer_preparo !== 'false';
 
     let parsedReceita: RecipeItem[] | undefined = undefined;
     if (receita) {
@@ -1010,6 +1040,7 @@ export async function updateMenuItem(prevState: ActionState | undefined, formDat
       preco_centavos,
       ingredientes: ingredientesList,
       stock_control_type: (stock_control_type as StockControlType) || 'NONE',
+      requer_preparo: requerPreparoBool,
     };
 
     if (stock_control_type === 'PRODUCT') {
@@ -1040,6 +1071,26 @@ export async function updateMenuItem(prevState: ActionState | undefined, formDat
     return { status: 'success', message: 'Item atualizado com sucesso!' };
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Erro ao atualizar item.';
+    return { status: 'error', message: msg };
+  }
+}
+
+export async function toggleMenuItemPrep(pdvId: string, itemId: string, requerPreparo: boolean): Promise<ActionState> {
+  const db = getWebDb();
+  if (!pdvId || !itemId) {
+    return { status: 'error', message: 'IDs inválidos.' };
+  }
+  try {
+    const itemRef = clientDoc(db, 'pdvs', pdvId, 'menuItems', itemId);
+    await clientUpdateDoc(itemRef, { requer_preparo: requerPreparo });
+    return {
+      status: 'success',
+      message: requerPreparo
+        ? 'Item configurado para entrar na fila de preparo e enviar aviso quando pronto.'
+        : 'Item configurado como Entrega Imediata (não vai para a fila de preparo).',
+    };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Erro ao alterar modo de preparo.';
     return { status: 'error', message: msg };
   }
 }
@@ -1870,10 +1921,11 @@ export async function createUser(prevState: ActionState | undefined, formData: F
             { required_error: 'A função é obrigatória.' },
         ),
         pdvId: z.string().optional(),
+        pdvIds: z.string().optional(),
         tenantId: z.string().optional(),
         eventId: z.string().optional(),
-    }).refine(data => data.role !== 'PDV' || !!data.pdvId, {
-        message: "PDV é obrigatório para a função PDV",
+    }).refine(data => data.role !== 'PDV' || !!data.pdvId || !!data.pdvIds, {
+        message: "Pelo menos 1 PDV é obrigatório para a função PDV",
         path: ["pdvId"],
     });
 
@@ -1883,13 +1935,26 @@ export async function createUser(prevState: ActionState | undefined, formData: F
         return { status: 'error', message: 'Dados inválidos.', data: validatedFields.error.flatten().fieldErrors };
     }
 
-    const { email, password, name, role, pdvId, tenantId, eventId } = validatedFields.data;
+    const { email, password, name, role, pdvId, pdvIds: pdvIdsRaw, tenantId, eventId } = validatedFields.data;
+
+    let parsedPdvIds: string[] = [];
+    if (pdvIdsRaw) {
+        try {
+            const parsed = JSON.parse(pdvIdsRaw);
+            if (Array.isArray(parsed)) parsedPdvIds = parsed.filter(Boolean);
+        } catch {
+            parsedPdvIds = pdvIdsRaw.split(',').map(s => s.trim()).filter(Boolean);
+        }
+    }
+    if (parsedPdvIds.length === 0 && pdvId) {
+        parsedPdvIds = [pdvId];
+    }
 
     // Build tenant access map when tenantId is provided
     const tenantsMap = tenantId
         ? {
             [tenantId]: {
-                role: eventId ? 'CAIXA' : 'ADMIN',
+                role: role === 'PDV' ? 'PDV' : (eventId ? 'CAIXA' : 'ADMIN'),
                 ...(eventId ? { allowedEventIds: [eventId] } : {}),
             },
           }
@@ -1908,7 +1973,8 @@ export async function createUser(prevState: ActionState | undefined, formData: F
             name,
             email,
             role,
-            pdvId: role === 'PDV' ? (pdvId ?? null) : null,
+            pdvId: role === 'PDV' ? (parsedPdvIds[0] ?? pdvId ?? null) : null,
+            pdvIds: role === 'PDV' ? parsedPdvIds : [],
         };
 
         if (tenantsMap) {

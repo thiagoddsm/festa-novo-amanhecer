@@ -593,9 +593,16 @@ export default function KitchenDisplay({
                                 {item.quantity}x
                               </span>
                               <div className="min-w-0 flex-1">
-                                <span className="font-bold text-sm sm:text-base text-white leading-snug">
-                                  {item.name}
-                                </span>
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className={`font-bold text-sm sm:text-base leading-snug ${item.requer_preparo === false ? 'text-slate-400 line-through' : 'text-white'}`}>
+                                    {item.name}
+                                  </span>
+                                  {item.requer_preparo === false && (
+                                    <Badge className="bg-slate-800 text-amber-400 border border-amber-500/30 text-[10px] px-1.5 py-0 shrink-0">
+                                      ⚡ Balcão
+                                    </Badge>
+                                  )}
+                                </div>
 
                                 {/* Prominent Observation Box for Cooks */}
                                 {hasCustomObs && (

@@ -232,6 +232,11 @@ const OrderCard = ({ order }: { order: Order }) => {
                         <div className="flex items-start justify-between gap-1">
                             <span>
                                 <strong className="text-primary font-bold">{item.quantity}x</strong> {item.name}
+                                {item.requer_preparo === false && (
+                                    <Badge variant="outline" className="ml-1.5 text-[10px] px-1.5 py-0 h-4 bg-amber-50 text-amber-800 border-amber-200">
+                                        ⚡ Balcão
+                                    </Badge>
+                                )}
                             </span>
                         </div>
                         {item.observation && (

@@ -64,7 +64,7 @@ export default function EditUserAccessDialog({
   const [selectedTenantId, setSelectedTenantId] = useState<string>('');
   const [selectedRole, setSelectedRole] = useState<UserRole>('VISITANTE');
   const [selectedEventId, setSelectedEventId] = useState<string>('');
-  const [selectedPdvId, setSelectedPdvId] = useState<string>('');
+  const [selectedPdvIds, setSelectedPdvIds] = useState<string[]>([]);
   const [eventsMode, setEventsMode] = useState<'ALL' | 'SPECIFIC'>('ALL');
   const [specificEventIds, setSpecificEventIds] = useState<string[]>([]);
 
@@ -92,8 +92,15 @@ export default function EditUserAccessDialog({
     setSelectedRole(role);
 
     // 3. Detect PDV & Event
-    const currentPdvId = user.pdvId || user.requestedPdvId || '';
-    const currentPdv = allPdvs.find((p) => p.id === currentPdvId);
+    const initialPdvIds =
+      user.pdvIds && user.pdvIds.length > 0
+        ? user.pdvIds
+        : user.pdvId
+        ? [user.pdvId]
+        : user.requestedPdvId
+        ? [user.requestedPdvId]
+        : [];
+    const currentPdv = allPdvs.find((p) => p.id === initialPdvIds[0]);
 
     const tenantEvents = eventsByTenant[primaryTenantId] || [];
     const eventFromPdv = currentPdv?.event_id;
@@ -108,7 +115,7 @@ export default function EditUserAccessDialog({
       '';
 
     setSelectedEventId(detectedEventId);
-    setSelectedPdvId(currentPdvId);
+    setSelectedPdvIds(initialPdvIds);
 
     // 4. Allowed Events Mode for Admins / Cashiers
     const allowed = user.tenants?.[primaryTenantId]?.allowedEventIds;
@@ -158,18 +165,20 @@ export default function EditUserAccessDialog({
 
       // Handle PDV assignment
       if (selectedRole === 'PDV') {
-        if (!selectedPdvId) {
+        if (selectedPdvIds.length === 0) {
           toast({
             variant: 'destructive',
             title: 'Atenção',
-            description: 'Selecione a barraca que este operador irá atender.',
+            description: 'Selecione pelo menos 1 barraca (PDV) que este operador irá atender.',
           });
           setIsSaving(false);
           return;
         }
-        updatePayload.pdvId = selectedPdvId;
+        updatePayload.pdvId = selectedPdvIds[0];
+        updatePayload.pdvIds = selectedPdvIds;
       } else {
         updatePayload.pdvId = deleteField();
+        updatePayload.pdvIds = deleteField();
       }
 
       // Handle Tenant linking & event permissions
@@ -275,7 +284,7 @@ export default function EditUserAccessDialog({
               value={selectedTenantId}
               onValueChange={(val) => {
                 setSelectedTenantId(val);
-                setSelectedPdvId('');
+                setSelectedPdvIds([]);
               }}
             >
               <SelectTrigger className="h-9 text-xs font-semibold bg-background">
@@ -326,7 +335,7 @@ export default function EditUserAccessDialog({
                 type="button"
                 onClick={() => {
                   setSelectedRole('CAIXA');
-                  setSelectedPdvId('');
+                  setSelectedPdvIds([]);
                 }}
                 className={`flex flex-col text-left p-3 rounded-lg border transition-all ${
                   selectedRole === 'CAIXA'
@@ -353,7 +362,7 @@ export default function EditUserAccessDialog({
                 type="button"
                 onClick={() => {
                   setSelectedRole('ADMIN_ORGANIZACAO');
-                  setSelectedPdvId('');
+                  setSelectedPdvIds([]);
                 }}
                 className={`flex flex-col text-left p-3 rounded-lg border transition-all ${
                   selectedRole === 'ADMIN_ORGANIZACAO' || selectedRole === 'ADMIN_EVENTO'
@@ -380,7 +389,7 @@ export default function EditUserAccessDialog({
                 type="button"
                 onClick={() => {
                   setSelectedRole('VISITANTE');
-                  setSelectedPdvId('');
+                  setSelectedPdvIds([]);
                 }}
                 className={`flex flex-col text-left p-3 rounded-lg border transition-all ${
                   selectedRole === 'VISITANTE'
@@ -422,7 +431,7 @@ export default function EditUserAccessDialog({
                   value={selectedEventId}
                   onValueChange={(val) => {
                     setSelectedEventId(val);
-                    setSelectedPdvId('');
+                    setSelectedPdvIds([]);
                   }}
                 >
                   <SelectTrigger className="h-8 text-xs bg-background border-orange-200">
@@ -444,38 +453,58 @@ export default function EditUserAccessDialog({
                 </Select>
               </div>
 
-              {/* Escolha da Barraca */}
-              <div className="space-y-1">
-                <Label className="text-xs font-medium text-orange-900 dark:text-orange-300 flex items-center gap-1">
-                  <Store className="h-3.5 w-3.5" />
-                  Qual Barraca / PDV ela vai operar?
-                </Label>
-                <Select
-                  value={selectedPdvId}
-                  onValueChange={setSelectedPdvId}
-                  disabled={availablePdvs.length === 0}
-                >
-                  <SelectTrigger className="h-8 text-xs bg-background border-orange-300 font-bold text-foreground">
-                    <SelectValue
-                      placeholder={
-                        availablePdvs.length === 0
-                          ? 'Nenhuma barraca neste evento'
-                          : 'Selecione a barraca (ex: Hamburguer, Pastel...)'
-                      }
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availablePdvs.map((pdv) => (
-                      <SelectItem key={pdv.id} value={pdv.id} className="text-xs font-semibold">
-                        {pdv.nome}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {availablePdvs.length === 0 && (
-                  <p className="text-[11px] text-orange-700">
+              {/* Escolha das Barracas (permite 1 ou mais PDVs) */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-medium text-orange-900 dark:text-orange-300 flex items-center gap-1">
+                    <Store className="h-3.5 w-3.5" />
+                    Qual(is) Barraca(s) / PDV(s) ela vai operar?
+                  </Label>
+                  {selectedPdvIds.length > 0 && (
+                    <span className="text-[11px] font-bold text-orange-800 bg-orange-100 px-2 py-0.5 rounded-full">
+                      {selectedPdvIds.length} {selectedPdvIds.length === 1 ? 'selecionada' : 'selecionadas'}
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-orange-800/80 dark:text-orange-300/80">
+                  Você pode marcar 1 ou mais barracas (ex: Bebidas + Drinks). O operador poderá alternar entre elas no PDV.
+                </p>
+
+                {availablePdvs.length === 0 ? (
+                  <p className="text-[11px] text-orange-700 bg-background/80 p-2.5 rounded border border-orange-200">
                     Crie barracas primeiro na tela de PDVs para vincular voluntários.
                   </p>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 max-h-48 overflow-y-auto pr-1">
+                    {availablePdvs.map((pdv) => {
+                      const isChecked = selectedPdvIds.includes(pdv.id);
+                      return (
+                        <label
+                          key={pdv.id}
+                          className={`flex items-center gap-2.5 p-2.5 rounded-lg border cursor-pointer text-xs transition-all ${
+                            isChecked
+                              ? 'bg-orange-100/90 dark:bg-orange-950/50 border-orange-500 font-bold text-orange-950 dark:text-orange-200 shadow-2xs'
+                              : 'bg-background border-orange-200/80 text-foreground hover:bg-orange-50/50'
+                          }`}
+                        >
+                          <Checkbox
+                            checked={isChecked}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setSelectedPdvIds((prev) =>
+                                  prev.includes(pdv.id) ? prev : [...prev, pdv.id]
+                                );
+                              } else {
+                                setSelectedPdvIds((prev) => prev.filter((id) => id !== pdv.id));
+                              }
+                            }}
+                          />
+                          <Store className="h-3.5 w-3.5 text-orange-600 shrink-0" />
+                          <span className="truncate">{pdv.nome}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
                 )}
               </div>
             </div>

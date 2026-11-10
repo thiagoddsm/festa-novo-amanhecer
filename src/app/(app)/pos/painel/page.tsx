@@ -19,18 +19,25 @@ function PosPainelContent() {
   const pdvParam = searchParams.get('pdv');
 
   const firestore = useFirestore();
+  const userPdvIds =
+    user?.pdvIds && user.pdvIds.length > 0
+      ? user.pdvIds
+      : user?.pdvId
+      ? [user.pdvId]
+      : [];
+
   const [allPdvs, setAllPdvs] = useState<Pdv[] | null>(null);
   const [selectedPdvId, setSelectedPdvId] = useState<string | null>(
-    pdvParam || (user?.role === 'PDV' ? user.pdvId || null : null)
+    pdvParam || (user?.role === 'PDV' && userPdvIds.length === 1 ? userPdvIds[0] : null)
   );
 
   useEffect(() => {
     if (pdvParam) {
       setSelectedPdvId(pdvParam);
-    } else if (user?.role === 'PDV' && user.pdvId) {
-      setSelectedPdvId(user.pdvId);
+    } else if (user?.role === 'PDV' && userPdvIds.length === 1) {
+      setSelectedPdvId(userPdvIds[0]);
     }
-  }, [pdvParam, user?.role, user?.pdvId]);
+  }, [pdvParam, user?.role, userPdvIds.length, user?.pdvId]);
 
   useEffect(() => {
     if (!firestore) return;
@@ -53,6 +60,9 @@ function PosPainelContent() {
   }, [firestore]);
 
   const filteredPdvs = (allPdvs || []).filter((p) => {
+    if (user?.role === 'PDV' && userPdvIds.length > 0) {
+      return userPdvIds.includes(p.id);
+    }
     if (currentTenant && p.tenant_id && p.tenant_id !== currentTenant.id) return false;
     if (currentEvent && p.event_id && p.event_id !== currentEvent.id) return false;
     return true;
@@ -67,7 +77,7 @@ function PosPainelContent() {
         pdvNome={activePdv.nome}
         eventName={currentEvent?.name || 'Festa Novo Amanhecer 2026'}
         onBack={() => {
-          if (user?.role === 'PDV') {
+          if (user?.role === 'PDV' && userPdvIds.length <= 1) {
             router.push('/pos');
           } else {
             setSelectedPdvId(null);

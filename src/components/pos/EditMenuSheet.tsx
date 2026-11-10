@@ -35,6 +35,8 @@ import {
   PackagePlus,
   UtensilsCrossed,
   Info,
+  ChefHat,
+  Zap,
 } from 'lucide-react';
 import {
   Pdv,
@@ -44,7 +46,7 @@ import {
   RecipeItem,
 } from '@/lib/definitions';
 import { formatCurrency } from '@/lib/utils';
-import { addMenuItem, updateMenuItem, deleteMenuItem } from '@/lib/actions';
+import { addMenuItem, updateMenuItem, deleteMenuItem, toggleMenuItemPrep } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 import { useFirestore } from '@/firebase';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
@@ -78,6 +80,7 @@ interface EditingItemState {
   estoque_atual: string;
   estoque_minimo: string;
   receita: RecipeItem[];
+  requer_preparo: boolean;
 }
 
 export default function EditMenuSheet({
@@ -136,6 +139,7 @@ export default function EditMenuSheet({
   const [newStockAtual, setNewStockAtual] = useState('');
   const [newStockMinimo, setNewStockMinimo] = useState('');
   const [newRecipe, setNewRecipe] = useState<RecipeItem[]>([]);
+  const [newRequerPreparo, setNewRequerPreparo] = useState<boolean>(true);
 
   // Temporary selected ingredient to add to recipe
   const [selectedIngId, setSelectedIngId] = useState<string>('');
@@ -151,6 +155,19 @@ export default function EditMenuSheet({
       estoque_atual: typeof item.estoque_atual === 'number' ? String(item.estoque_atual) : '',
       estoque_minimo: typeof item.estoque_minimo === 'number' ? String(item.estoque_minimo) : '',
       receita: item.receita || [],
+      requer_preparo: item.requer_preparo !== false,
+    });
+  };
+
+  const handleTogglePrep = (item: MenuItem) => {
+    const nextVal = item.requer_preparo === false;
+    startTransition(async () => {
+      const res = await toggleMenuItemPrep(pdv.id, item.id, nextVal);
+      toast({
+        title: res?.status === 'success' ? (nextVal ? 'Fila de Preparo Ativada' : 'Entrega Imediata Ativada') : 'Erro!',
+        description: res.message,
+        variant: res?.status === 'success' ? 'default' : 'destructive',
+      });
     });
   };
 
@@ -180,6 +197,7 @@ export default function EditMenuSheet({
     fd.append('preco_reais', editingItem.preco_reais);
     fd.append('ingredientes', editingItem.ingredientes);
     fd.append('stock_control_type', editingItem.stock_control_type);
+    fd.append('requer_preparo', editingItem.requer_preparo ? 'true' : 'false');
 
     if (editingItem.stock_control_type === 'PRODUCT') {
       fd.append('estoque_atual', editingItem.estoque_atual || '0');
@@ -211,6 +229,7 @@ export default function EditMenuSheet({
     fd.append('preco_reais', newPrice);
     fd.append('ingredientes', newIngredientes.trim());
     fd.append('stock_control_type', newStockType);
+    fd.append('requer_preparo', newRequerPreparo ? 'true' : 'false');
 
     if (newStockType === 'PRODUCT') {
       fd.append('estoque_atual', newStockAtual || '0');
@@ -232,6 +251,7 @@ export default function EditMenuSheet({
         setNewStockAtual('');
         setNewStockMinimo('');
         setNewRecipe([]);
+        setNewRequerPreparo(true);
       } else {
         toast({ variant: 'destructive', title: 'Erro!', description: res.message });
       }
@@ -525,6 +545,49 @@ export default function EditMenuSheet({
                         )}
                       </div>
 
+                      {/* Preparation / Queue Mode Selector */}
+                      <div className="space-y-2 rounded-md border p-3 bg-muted/20">
+                        <Label className="text-xs font-bold text-foreground">
+                          Modo de Atendimento / Fila de Preparo:
+                        </Label>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => setEditingItem({ ...editingItem, requer_preparo: true })}
+                            className={`flex items-start gap-2 p-2.5 rounded-lg border text-left transition-all ${
+                              editingItem.requer_preparo
+                                ? 'border-emerald-500 bg-emerald-50/80 dark:bg-emerald-950/30 ring-1 ring-emerald-500/30'
+                                : 'border-border bg-background hover:bg-muted/40'
+                            }`}
+                          >
+                            <ChefHat className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+                            <div>
+                              <p className="text-xs font-bold text-foreground">Com Preparo (Fila / KDS)</p>
+                              <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">
+                                Entra na fila e avisa no WhatsApp quando pronto (Ex: Drinks, Lanches).
+                              </p>
+                            </div>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingItem({ ...editingItem, requer_preparo: false })}
+                            className={`flex items-start gap-2 p-2.5 rounded-lg border text-left transition-all ${
+                              !editingItem.requer_preparo
+                                ? 'border-amber-500 bg-amber-50/80 dark:bg-amber-950/30 ring-1 ring-amber-500/30'
+                                : 'border-border bg-background hover:bg-muted/40'
+                            }`}
+                          >
+                            <Zap className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                            <div>
+                              <p className="text-xs font-bold text-foreground">Entrega Imediata (Sem Fila)</p>
+                              <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">
+                                Entregue na hora no balcão, sem fila e sem aviso (Ex: Refri, Água).
+                              </p>
+                            </div>
+                          </button>
+                        </div>
+                      </div>
+
                       <div className="flex justify-end gap-2 pt-2">
                         <Button
                           size="sm"
@@ -572,6 +635,33 @@ export default function EditMenuSheet({
                               Sem estoque
                             </Badge>
                           )}
+
+                          {/* Preparation vs Immediate Delivery Badge (1-click toggle) */}
+                          <button
+                            type="button"
+                            onClick={() => handleTogglePrep(item)}
+                            disabled={isPending}
+                            title="Clique para alternar entre Fila de Preparo e Entrega Imediata"
+                            className="inline-flex cursor-pointer"
+                          >
+                            {item.requer_preparo === false ? (
+                              <Badge
+                                variant="outline"
+                                className="text-xs bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300 gap-1 transition-colors"
+                              >
+                                <Zap className="h-3 w-3 text-amber-600" />
+                                Entrega Imediata (Sem fila)
+                              </Badge>
+                            ) : (
+                              <Badge
+                                variant="outline"
+                                className="text-xs bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200 gap-1 transition-colors"
+                              >
+                                <ChefHat className="h-3 w-3 text-emerald-600" />
+                                Fila de Preparo
+                              </Badge>
+                            )}
+                          </button>
                         </div>
 
                         {item.ingredientes && item.ingredientes.length > 0 && (
@@ -844,6 +934,49 @@ export default function EditMenuSheet({
                     </div>
                   </div>
                 )}
+              </div>
+
+              {/* Preparation / Queue Mode Selector for New Item */}
+              <div className="space-y-2 rounded-md border p-3 bg-muted/20">
+                <Label className="text-xs font-bold text-foreground">
+                  Modo de Atendimento / Fila de Preparo:
+                </Label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setNewRequerPreparo(true)}
+                    className={`flex items-start gap-2 p-2.5 rounded-lg border text-left transition-all ${
+                      newRequerPreparo
+                        ? 'border-emerald-500 bg-emerald-50/80 dark:bg-emerald-950/30 ring-1 ring-emerald-500/30'
+                        : 'border-border bg-background hover:bg-muted/40'
+                    }`}
+                  >
+                    <ChefHat className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-xs font-bold text-foreground">Com Preparo (Fila / KDS)</p>
+                      <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">
+                        Vai para a fila e avisa no WhatsApp quando pronto (Ex: Drinks, Lanches).
+                      </p>
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNewRequerPreparo(false)}
+                    className={`flex items-start gap-2 p-2.5 rounded-lg border text-left transition-all ${
+                      !newRequerPreparo
+                        ? 'border-amber-500 bg-amber-50/80 dark:bg-amber-950/30 ring-1 ring-amber-500/30'
+                        : 'border-border bg-background hover:bg-muted/40'
+                    }`}
+                  >
+                    <Zap className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-xs font-bold text-foreground">Entrega Imediata (Sem Fila)</p>
+                      <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">
+                        Entregue na hora no balcão, sem fila e sem aviso (Ex: Refri, Água).
+                      </p>
+                    </div>
+                  </button>
+                </div>
               </div>
 
               <Button type="submit" className="w-full h-9 font-semibold text-xs" disabled={isPending}>

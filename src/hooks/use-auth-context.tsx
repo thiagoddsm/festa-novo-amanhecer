@@ -117,6 +117,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 prev.email === authenticatedUser.email &&
                 prev.role === authenticatedUser.role &&
                 prev.pdvId === authenticatedUser.pdvId &&
+                JSON.stringify(prev.pdvIds) === JSON.stringify(authenticatedUser.pdvIds) &&
                 JSON.stringify(prev.tenants) === JSON.stringify(authenticatedUser.tenants) &&
                 prev.requestedTenantId === authenticatedUser.requestedTenantId &&
                 prev.requestedEventId === authenticatedUser.requestedEventId &&

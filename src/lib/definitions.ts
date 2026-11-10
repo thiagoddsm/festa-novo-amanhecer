@@ -33,6 +33,8 @@ export type UserProfile = {
   name: string;
   role: UserRole;
   pdvId?: string;
+  /** Lista de PDVs permitidos para operadores que atendem mais de uma barraca. */
+  pdvIds?: string[];
 
   /** Mapa de tenantId → acesso dentro daquele tenant. */
   tenants?: { [tenantId: string]: TenantAccess };
@@ -97,6 +99,8 @@ export type OrderItem = {
   quantity: number;
   observation?: string;
   ingredientes?: string[];
+  /** Se false, o item é de entrega imediata (não precisa de preparo na cozinha). Default: true */
+  requer_preparo?: boolean;
 };
 
 // ---------------------------------------------------------------------------
@@ -230,6 +234,8 @@ export type MenuItem = {
   estoque_atual?: number;
   estoque_minimo?: number;
   receita?: RecipeItem[];
+  /** Se false, o item é entregue direto no balcão (sem fila de preparo e sem aviso de pronto). Default: true */
+  requer_preparo?: boolean;
 };
 
 // ---------------------------------------------------------------------------

@@ -48,6 +48,7 @@ type CartItem = {
     quantity: number;
     ingredientes?: string[];
     observation?: string;
+    requer_preparo?: boolean;
 }
 
 function SubmitButton({ 
@@ -180,7 +181,17 @@ function ObservationDialog({ item, onSave }: { item: CartItem; onSave: (observat
     )
 }
 
-export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv; onGoBack?: () => void }) {
+export default function SaleTerminal({
+  pdv,
+  onGoBack,
+  allowedPdvs,
+  onSwitchPdv,
+}: {
+  pdv: Pdv;
+  onGoBack?: () => void;
+  allowedPdvs?: Pdv[];
+  onSwitchPdv?: (pdv: Pdv) => void;
+}) {
   const { user } = useAuth();
   const { currentTenant, currentEvent } = useTenant();
   const { toast } = useToast();
@@ -217,6 +228,12 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv; onGoBack?: (
 
   const total = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
 
+  // Clear cart when switching PDV so items from one stall don't mix into another
+  useEffect(() => {
+    setLivePdv(pdv);
+    setCart([]);
+  }, [pdv.id]);
+
   // Escuta pedidos em preparo na cozinha deste PDV em tempo real
   useEffect(() => {
     if (!firestore || !pdv.id) return;
@@ -243,6 +260,7 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv; onGoBack?: (
           orderCount++;
           if (Array.isArray(data.items)) {
             data.items.forEach((item: any) => {
+              if (item.requer_preparo === false) return;
               const res = getItemSlots(item, category);
               unitCount += res.units;
               slotCount += res.slots;
@@ -332,12 +350,15 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv; onGoBack?: (
     if (state.status === 'error') {
       setConfirmation({ status: 'error', message: 'Venda Recusada', details: state.message });
     } else if (state.status === 'success') {
+      const isImmediate = !!state.data?.immediate_delivery;
       setConfirmation({
         status: 'success',
         message: 'Venda Aprovada!',
         orderNumber: state.data?.order_number,
         details: `Novo saldo: ${formatCurrency(state.data.novo_saldo_centavos)}`,
-        queueEstimate: `${ordersInQueue} ${ordersInQueue === 1 ? 'pedido' : 'pedidos'} na frente (${queueEstimate.timeText})`,
+        queueEstimate: isImmediate
+          ? '⚡ Entrega Imediata no Balcão (sem fila de preparo)'
+          : `${ordersInQueue} ${ordersInQueue === 1 ? 'pedido' : 'pedidos'} na frente (${queueEstimate.timeText})`,
       });
       // Reset form state
       formRef.current?.reset();
@@ -386,6 +407,7 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv; onGoBack?: (
           price: item.preco_centavos,
           quantity: 1,
           ingredientes: item.ingredientes,
+          requer_preparo: item.requer_preparo !== false,
         },
       ];
     });
@@ -597,12 +619,38 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv; onGoBack?: (
               )}
             </div>
 
-            {onGoBack && (
-              <Button variant="ghost" size="sm" onClick={onGoBack} className="h-9 px-2 sm:px-3 text-xs shrink-0 text-muted-foreground hover:text-foreground">
-                <ArrowLeft className="mr-1 h-3.5 w-3.5" />
-                <span className="hidden xs:inline">Trocar PDV</span>
-              </Button>
-            )}
+            <div className="flex items-center gap-1.5 shrink-0">
+              {/* Quick Switcher when user has multiple assigned PDVs */}
+              {allowedPdvs && allowedPdvs.length > 1 && onSwitchPdv && (
+                <div className="hidden md:flex items-center gap-1 bg-muted/80 p-1 rounded-xl border border-border/60">
+                  {allowedPdvs.map((p) => {
+                    const active = p.id === pdv.id;
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => onSwitchPdv(p)}
+                        className={cn(
+                          'px-2.5 py-1 text-xs font-semibold rounded-lg transition-all cursor-pointer truncate max-w-[140px]',
+                          active
+                            ? 'bg-primary text-primary-foreground shadow-2xs font-bold'
+                            : 'text-muted-foreground hover:text-foreground hover:bg-background/60'
+                        )}
+                      >
+                        {p.nome}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {onGoBack && (
+                <Button variant="outline" size="sm" onClick={onGoBack} className="h-9 px-2.5 sm:px-3 text-xs shrink-0 font-semibold gap-1">
+                  <ArrowLeft className="h-3.5 w-3.5" />
+                  <span>Trocar PDV</span>
+                </Button>
+              )}
+            </div>
         </div>
         <TabsContent value="venda" className="pb-24 lg:pb-0">
             <div className="flex flex-col lg:flex-row gap-2 md:gap-4 items-start">
@@ -703,14 +751,25 @@ export default function SaleTerminal({ pdv, onGoBack }: { pdv: Pdv; onGoBack?: (
                             )}>
                               {formatCurrency(item.preco_centavos)}
                             </span>
-                            <span className={cn(
-                              "text-[10px] font-bold px-1.5 py-0.5 rounded transition-colors shrink-0",
-                              isOutOfStock 
-                                ? "bg-muted text-muted-foreground/30" 
-                                : "bg-muted text-muted-foreground group-hover:bg-primary group-hover:text-primary-foreground"
-                            )}>
-                              {isOutOfStock ? "✕" : "+"}
-                            </span>
+                            <div className="flex items-center gap-1 shrink-0">
+                              {item.requer_preparo === false && (
+                                <span
+                                  title="Entrega Imediata (sem fila de preparo)"
+                                  className="inline-flex items-center gap-0.5 text-[9px] font-semibold px-1 py-0.5 rounded bg-amber-100/80 text-amber-800 border border-amber-200"
+                                >
+                                  <Zap className="h-2.5 w-2.5 text-amber-600" />
+                                  Balcão
+                                </span>
+                              )}
+                              <span className={cn(
+                                "text-[10px] font-bold px-1.5 py-0.5 rounded transition-colors shrink-0",
+                                isOutOfStock 
+                                  ? "bg-muted text-muted-foreground/30" 
+                                  : "bg-muted text-muted-foreground group-hover:bg-primary group-hover:text-primary-foreground"
+                              )}>
+                                {isOutOfStock ? "✕" : "+"}
+                              </span>
+                            </div>
                           </div>
                         </Button>
                       );
