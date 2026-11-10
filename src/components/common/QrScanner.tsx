@@ -1,7 +1,18 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { CameraOff, RefreshCw, Loader2, CheckCircle2 } from 'lucide-react';
+import { 
+  CameraOff, 
+  RefreshCw, 
+  Loader2, 
+  CheckCircle2, 
+  Camera, 
+  Settings2, 
+  Check, 
+  ChevronDown, 
+  ChevronUp, 
+  Star 
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface QrScannerProps {
@@ -46,6 +57,42 @@ function cameraDisplayName(cam: CameraInfo) {
   if (BAD_LENS_REGEX.test(cam.label)) return 'Câmera grande angular (0.5x)';
   return 'Câmera traseira';
 }
+
+function getCameraLabelDetails(cam: CameraInfo, index: number, allCameras: CameraInfo[]) {
+  const raw = (cam.label || '').trim();
+  const lower = raw.toLowerCase();
+  
+  const isFront = isFrontCamera(cam);
+  const isWide = BAD_LENS_REGEX.test(lower);
+  
+  let friendlyName = '';
+  let badge = '';
+  let isBest = false;
+
+  if (isFront) {
+    friendlyName = `Câmera Frontal (Selfie)`;
+  } else if (isWide) {
+    friendlyName = `Câmera Grande Angular (0.5x)`;
+    badge = 'Lente aberta / sem foco próximo';
+  } else {
+    // Check if it's the primary back lens
+    if (index === 0 || lower.includes('camera2 0') || lower.includes('back 0') || lower.includes('main') || lower.includes('principal')) {
+      friendlyName = `Lente Traseira Principal (1x)`;
+      badge = '⭐ Recomendada';
+      isBest = true;
+    } else {
+      friendlyName = `Lente Traseira #${index + 1}`;
+    }
+  }
+
+  return {
+    friendlyName,
+    rawLabel: raw || `Câmera ${index + 1}`,
+    badge,
+    isBest
+  };
+}
+
 
 // Sound feedback on successful scan
 function playBeep() {
@@ -100,6 +147,9 @@ export function QrScanner({ onScanSuccess, onScanFailure }: QrScannerProps) {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [cameras, setCameras] = useState<CameraInfo[]>([]);
   const [activeCameraId, setActiveCameraId] = useState<string | null>(null);
+  const [savedCameraId, setSavedCameraId] = useState<string | null>(null);
+  const [showCameraList, setShowCameraList] = useState<boolean>(false);
+  const [saveFeedback, setSaveFeedback] = useState<string | null>(null);
 
   const containerIdRef = useRef(`qr-reader-${Math.random().toString(36).substring(2, 9)}`);
   const scannerInstanceRef = useRef<any>(null);
@@ -290,6 +340,7 @@ export function QrScanner({ onScanSuccess, onScanFailure }: QrScannerProps) {
   useEffect(() => {
     isMountedRef.current = true;
     scannedRef.current = false;
+    setSavedCameraId(readSavedCameraId());
 
     // Small timeout ensures the Dialog DOM is fully mounted
     const timer = setTimeout(() => {
@@ -304,15 +355,31 @@ export function QrScanner({ onScanSuccess, onScanFailure }: QrScannerProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  
+  const handleSelectCamera = async (id: string) => {
+    saveCameraId(id);
+    setSavedCameraId(id);
+    setSaveFeedback('Câmera salva como principal para este aparelho!');
+    setTimeout(() => {
+      if (isMountedRef.current) setSaveFeedback(null);
+    }, 3000);
+    await startScanning(id);
+  };
+
   const handleSwitchCamera = async () => {
     const list = camerasRef.current;
     if (list.length < 2) return;
-    // Next camera is computed from the id actually in use (not from a stale index)
     const currentIndex = Math.max(0, list.findIndex((c) => c.id === activeCameraIdRef.current));
     const next = list[(currentIndex + 1) % list.length];
     saveCameraId(next.id);
+    setSavedCameraId(next.id);
+    setSaveFeedback(`Alternada para ${cameraDisplayName(next)} e salva!`);
+    setTimeout(() => {
+      if (isMountedRef.current) setSaveFeedback(null);
+    }, 2500);
     await startScanning(next.id);
   };
+
 
   const handleRetry = async () => {
     scannedRef.current = false;
@@ -403,18 +470,131 @@ export function QrScanner({ onScanSuccess, onScanFailure }: QrScannerProps) {
         )}
       </div>
 
-      {/* Switch Camera Button (Visible if 2+ cameras found) */}
-      {cameras.length > 1 && status === 'SCANNING' && (
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={handleSwitchCamera}
-          className="mt-2 text-xs text-muted-foreground hover:text-foreground gap-1.5 h-8"
-        >
-          <RefreshCw className="w-3.5 h-3.5" />
-          {activeCamera ? `Alternar câmera (${cameraDisplayName(activeCamera)})` : 'Alternar câmera'}
-        </Button>
+      {/* Camera Selection & Main Camera Setting */}
+      {cameras.length > 0 && status === 'SCANNING' && (
+        <div className="w-full max-w-[280px] sm:max-w-[320px] mt-3 space-y-2">
+          {/* Active Camera Pill & Action Trigger */}
+          <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-muted/60 border border-border/80 text-xs">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="p-1.5 rounded-lg bg-primary/10 text-primary shrink-0">
+                <Camera className="w-4 h-4" />
+              </div>
+              <div className="flex flex-col min-w-0 text-left">
+                <span className="font-bold text-foreground text-xs truncate">
+                  {activeCamera ? getCameraLabelDetails(activeCamera, cameras.findIndex(c => c.id === activeCamera.id), cameras).friendlyName : 'Câmera Ativa'}
+                </span>
+                <span className="text-[10px] text-muted-foreground truncate flex items-center gap-1">
+                  {savedCameraId && savedCameraId === activeCameraId ? (
+                    <span className="text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-0.5">
+                      <Star className="w-2.5 h-2.5 fill-current" /> Principal salva neste celular
+                    </span>
+                  ) : (
+                    <span>Câmera temporária (não salva)</span>
+                  )}
+                </span>
+              </div>
+            </div>
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setShowCameraList(!showCameraList)}
+              className="h-7 px-2.5 text-xs font-semibold shrink-0 gap-1 bg-background hover:bg-muted"
+            >
+              <Settings2 className="w-3.5 h-3.5 text-primary" />
+              <span>{showCameraList ? 'Fechar' : 'Trocar'}</span>
+              {showCameraList ? <ChevronUp className="w-3 h-3 opacity-60" /> : <ChevronDown className="w-3 h-3 opacity-60" />}
+            </Button>
+          </div>
+
+          {/* Feedback banner when saved */}
+          {saveFeedback && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-medium animate-in fade-in slide-in-from-top-1">
+              <Check className="w-3.5 h-3.5 shrink-0" />
+              <span>{saveFeedback}</span>
+            </div>
+          )}
+
+          {/* Collapsible List of all available cameras on device */}
+          {showCameraList && (
+            <div className="p-2.5 rounded-xl border border-primary/20 bg-background/95 shadow-md space-y-2 animate-in fade-in zoom-in-95 text-left">
+              <div className="flex items-center justify-between px-1">
+                <span className="text-xs font-bold text-foreground">
+                  Câmeras do Aparelho:
+                </span>
+                <span className="text-[10px] font-semibold text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+                  {cameras.length} {cameras.length === 1 ? 'encontrada' : 'encontradas'}
+                </span>
+              </div>
+
+              <div className="space-y-1.5 max-h-52 overflow-y-auto pr-0.5">
+                {cameras.map((cam, idx) => {
+                  const details = getCameraLabelDetails(cam, idx, cameras);
+                  const isActive = cam.id === activeCameraId;
+                  const isSaved = cam.id === savedCameraId;
+
+                  return (
+                    <button
+                      key={cam.id}
+                      type="button"
+                      onClick={() => handleSelectCamera(cam.id)}
+                      className={`w-full text-left p-2.5 rounded-lg border transition-all flex items-center justify-between gap-2.5 ${
+                        isActive
+                          ? 'border-primary bg-primary/10 text-primary ring-1 ring-primary/30'
+                          : 'border-border/60 hover:bg-muted/50 text-foreground'
+                      }`}
+                    >
+                      <div className="flex flex-col min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-xs font-bold truncate">
+                            {details.friendlyName}
+                          </span>
+                          {details.isBest && (
+                            <span className="px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-amber-500/20 text-amber-700 dark:text-amber-300">
+                              Ideal QR
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[10px] text-muted-foreground truncate">
+                          {details.rawLabel}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {isSaved ? (
+                          <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded flex items-center gap-1">
+                            <Star className="w-2.5 h-2.5 fill-current" /> Principal
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-muted-foreground hover:text-foreground">
+                            {isActive ? 'Definir principal' : 'Usar'}
+                          </span>
+                        )}
+                        {isActive && (
+                          <Check className="w-4 h-4 text-primary" />
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {cameras.length > 1 && (
+                <div className="pt-1 flex items-center justify-between border-t border-border/50 text-[10px] text-muted-foreground px-1">
+                  <span>Toque para usar e salvar como principal.</span>
+                  <button
+                    type="button"
+                    onClick={handleSwitchCamera}
+                    className="text-primary hover:underline font-semibold flex items-center gap-1"
+                  >
+                    <RefreshCw className="w-2.5 h-2.5" /> Próxima
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       )}
 
       {/* Keyframe animation for scanning laser */}
