@@ -1,7 +1,7 @@
 'use client';
 import { useActionState, useEffect, useRef, useState } from 'react';
 import { useFormStatus } from 'react-dom';
-import { processSale } from '@/lib/actions';
+import { processSale, updatePdvPrepTeam } from '@/lib/actions';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/utils';
 import type { Pdv, MenuItem, Card as CardType, PdvIngredient } from '@/lib/definitions';
-import { CheckCircle2, XCircle, Loader2, ShoppingCart, X, ArrowLeft, Trash2, Pencil, QrCode, MessageSquarePlus, MessageSquare, Camera, PackagePlus, AlertTriangle, ExternalLink, ChefHat, Tv, Clock, Flame, Zap, Smartphone } from 'lucide-react';
+import { CheckCircle2, XCircle, Loader2, ShoppingCart, X, ArrowLeft, Trash2, Pencil, QrCode, MessageSquarePlus, MessageSquare, Camera, PackagePlus, AlertTriangle, ExternalLink, ChefHat, Tv, Clock, Flame, Zap, Smartphone, UserCheck, Plus, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useFirestore } from '@/firebase';
 import { collection, onSnapshot, query, orderBy, doc, getDocs, where, limit, getDoc } from 'firebase/firestore';
@@ -223,6 +223,10 @@ export default function SaleTerminal({
   const [isWhatsappDialogOpen, setIsWhatsappDialogOpen] = useState(false);
   const [isIngredientsOpen, setIsIngredientsOpen] = useState(false);
   const [ingredients, setIngredients] = useState<PdvIngredient[]>([]);
+  const [showPrepSelector, setShowPrepSelector] = useState<boolean>(!!pdv.solicitar_responsavel_preparo);
+  const [responsavelPreparo, setResponsavelPreparo] = useState<string>('');
+  const [newPrepName, setNewPrepName] = useState<string>('');
+  const [isSavingPrepTeam, setIsSavingPrepTeam] = useState<boolean>(false);
 
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -232,6 +236,8 @@ export default function SaleTerminal({
   useEffect(() => {
     setLivePdv(pdv);
     setCart([]);
+    setResponsavelPreparo('');
+    setShowPrepSelector(!!pdv.solicitar_responsavel_preparo);
   }, [pdv.id]);
 
   // Escuta pedidos em preparo na cozinha deste PDV em tempo real
@@ -284,16 +290,52 @@ export default function SaleTerminal({
   const queueEstimate = getQueueEstimate(boothCategory, ordersInQueue, itemsInQueue, slotsInQueue);
 
 
-  // Sync PDV data in real-time (especially WhatsApp status)
+  // Sync PDV data in real-time (especially WhatsApp status and equipe_preparo)
   useEffect(() => {
     if (!firestore) return;
     const unsubscribe = onSnapshot(doc(firestore, 'pdvs', pdv.id), snap => {
       if (snap.exists()) {
-        setLivePdv({ id: snap.id, ...snap.data() } as Pdv);
+        const updatedPdv = { id: snap.id, ...snap.data() } as Pdv;
+        setLivePdv(updatedPdv);
+        if (typeof updatedPdv.solicitar_responsavel_preparo === 'boolean') {
+          setShowPrepSelector(updatedPdv.solicitar_responsavel_preparo);
+        }
       }
     });
     return () => unsubscribe();
   }, [firestore, pdv.id]);
+
+  const handleTogglePrepSelector = async () => {
+    const nextValue = !showPrepSelector;
+    setShowPrepSelector(nextValue);
+    if (!nextValue) {
+      setResponsavelPreparo('');
+    }
+    await updatePdvPrepTeam(pdv.id, livePdv.equipe_preparo || [], nextValue);
+  };
+
+  const handleAddPrepMember = async (nameToAdd?: string) => {
+    const clean = (nameToAdd ?? newPrepName).trim();
+    if (!clean) return;
+    const currentTeam = livePdv.equipe_preparo || [];
+    if (!currentTeam.some(n => n.toLowerCase() === clean.toLowerCase())) {
+      setIsSavingPrepTeam(true);
+      const updated = [...currentTeam, clean];
+      await updatePdvPrepTeam(pdv.id, updated, true);
+      setIsSavingPrepTeam(false);
+    }
+    setResponsavelPreparo(clean);
+    setNewPrepName('');
+  };
+
+  const handleRemovePrepMember = async (nameToRemove: string) => {
+    const currentTeam = livePdv.equipe_preparo || [];
+    const updated = currentTeam.filter(n => n !== nameToRemove);
+    if (responsavelPreparo === nameToRemove) {
+      setResponsavelPreparo('');
+    }
+    await updatePdvPrepTeam(pdv.id, updated, showPrepSelector);
+  };
 
   useEffect(() => {
     if (!firestore) return;
@@ -367,6 +409,7 @@ export default function SaleTerminal({
       setCardData(null);
       setManualInput('');
       setCardError(null);
+      setResponsavelPreparo('');
     }
 
     const timer = setTimeout(() => setConfirmation(null), 4000);
@@ -910,6 +953,134 @@ export default function SaleTerminal({
                                 <input type="hidden" name="usuario_responsavel" value={user?.name || 'Sistema'} />
                                 <input type="hidden" name="tenant_id" value={currentTenant?.id || ''} />
                                 <input type="hidden" name="event_id" value={currentEvent?.id || ''} />
+                                <input type="hidden" name="responsavel_preparo" value={showPrepSelector ? responsavelPreparo.trim() : ''} />
+
+                                {/* Seletor Opcional de Responsável pelo Preparo */}
+                                <div className="rounded-xl border border-border/80 bg-muted/20 p-2.5 space-y-2 transition-all">
+                                    <div className="flex items-center justify-between gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={handleTogglePrepSelector}
+                                            className="flex items-center gap-2 text-left text-xs font-semibold text-foreground hover:text-primary transition-colors flex-1"
+                                        >
+                                            <div className={cn(
+                                                "p-1.5 rounded-lg border transition-colors",
+                                                showPrepSelector
+                                                    ? "bg-violet-500/15 text-violet-700 dark:text-violet-300 border-violet-500/30"
+                                                    : "bg-muted text-muted-foreground border-border"
+                                            )}>
+                                                <UserCheck className="h-3.5 w-3.5" />
+                                            </div>
+                                            <div className="min-w-0 flex-1">
+                                                <span className="block truncate">Responsável pelo preparo (opcional)</span>
+                                                <span className="block text-[10px] font-normal text-muted-foreground truncate">
+                                                    {showPrepSelector
+                                                        ? (responsavelPreparo.trim() ? `Selecionado: ${responsavelPreparo.trim()}` : 'Toque em um nome ou deixe em branco')
+                                                        : 'Desativado — toque se quiser direcionar pedidos'}
+                                                </span>
+                                            </div>
+                                        </button>
+                                        <Button
+                                            type="button"
+                                            variant={showPrepSelector ? "secondary" : "outline"}
+                                            size="sm"
+                                            onClick={handleTogglePrepSelector}
+                                            className={cn(
+                                                "h-7 px-2.5 text-[11px] font-semibold rounded-lg shrink-0",
+                                                showPrepSelector && "bg-violet-500/15 text-violet-700 dark:text-violet-300 hover:bg-violet-500/25 border border-violet-500/30"
+                                            )}
+                                        >
+                                            {showPrepSelector ? 'Ativo' : 'Informar'}
+                                        </Button>
+                                    </div>
+
+                                    {showPrepSelector && (
+                                        <div className="pt-1.5 border-t border-border/60 space-y-2 animate-in fade-in slide-in-from-top-1 duration-150">
+                                            {(livePdv.equipe_preparo && livePdv.equipe_preparo.length > 0) && (
+                                                <div className="flex flex-wrap gap-1.5">
+                                                    {livePdv.equipe_preparo.map((nome) => {
+                                                        const isSelected = responsavelPreparo.trim().toLowerCase() === nome.toLowerCase();
+                                                        return (
+                                                            <div
+                                                                key={nome}
+                                                                className={cn(
+                                                                    "inline-flex items-center rounded-lg border text-xs font-semibold transition-all overflow-hidden",
+                                                                    isSelected
+                                                                        ? "bg-violet-600 text-white border-violet-600 shadow-xs"
+                                                                        : "bg-background hover:bg-violet-500/10 text-foreground border-border"
+                                                                )}
+                                                            >
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => setResponsavelPreparo(isSelected ? '' : nome)}
+                                                                    className="px-2.5 py-1 flex items-center gap-1"
+                                                                >
+                                                                    <span>👨‍🍳 {nome}</span>
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleRemovePrepMember(nome)}
+                                                                    title={`Remover ${nome} da equipe`}
+                                                                    className={cn(
+                                                                        "px-1.5 py-1 border-l text-[10px] hover:bg-black/10 transition-colors",
+                                                                        isSelected ? "border-violet-400 text-violet-100" : "border-border text-muted-foreground hover:text-destructive"
+                                                                    )}
+                                                                >
+                                                                    <X className="h-3 w-3" />
+                                                                </button>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+
+                                            <div className="flex items-center gap-1.5">
+                                                <Input
+                                                    type="text"
+                                                    value={responsavelPreparo}
+                                                    onChange={(e) => setResponsavelPreparo(e.target.value)}
+                                                    placeholder="Digite o nome (ou deixe em branco)..."
+                                                    className="h-8 text-xs bg-background"
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter') {
+                                                            e.preventDefault();
+                                                            if (responsavelPreparo.trim()) {
+                                                                handleAddPrepMember(responsavelPreparo);
+                                                            }
+                                                        }
+                                                    }}
+                                                />
+                                                {responsavelPreparo.trim() && !(livePdv.equipe_preparo || []).some(n => n.toLowerCase() === responsavelPreparo.trim().toLowerCase()) && (
+                                                    <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        size="sm"
+                                                        disabled={isSavingPrepTeam}
+                                                        onClick={() => handleAddPrepMember(responsavelPreparo)}
+                                                        className="h-8 px-2.5 text-[11px] font-semibold shrink-0 border-violet-500/40 text-violet-700 dark:text-violet-300 hover:bg-violet-500/10"
+                                                        title="Salvar nome para seleção rápida nos próximos pedidos"
+                                                    >
+                                                        <Plus className="h-3.5 w-3.5 mr-1" />
+                                                        Fixar nome
+                                                    </Button>
+                                                )}
+                                                {responsavelPreparo && (
+                                                    <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        onClick={() => setResponsavelPreparo('')}
+                                                        className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground shrink-0"
+                                                        title="Limpar responsável"
+                                                    >
+                                                        Limpar
+                                                    </Button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
                                 {/* Estimativa de Fila e Tempo de Espera para passar ao cliente */}
                                 <div className={cn(
                                     "p-2.5 rounded-xl border flex items-center justify-between gap-2 shadow-2xs transition-all",

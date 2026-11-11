@@ -11,12 +11,13 @@ import {
   doc,
   writeBatch,
 } from 'firebase/firestore';
-import { type Order, type OrderItem } from '@/lib/definitions';
-import { updateOrderStatus } from '@/lib/actions';
+import { type Order, type OrderItem, type Pdv } from '@/lib/definitions';
+import { updateOrderStatus, updateOrderPreparer } from '@/lib/actions';
 import CancelOrderButton from './CancelOrderButton';
 import { useToast } from '@/hooks/use-toast';
 import { soundPlayer } from '@/lib/audio';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import {
   ChefHat,
@@ -35,6 +36,8 @@ import {
   Utensils,
   Layers,
   ArrowLeft,
+  UserCheck,
+  X,
 } from 'lucide-react';
 import Link from 'next/link';
 import {
@@ -113,11 +116,27 @@ export default function KitchenDisplay({
   const { toast } = useToast();
 
   const [orders, setOrders] = useState<Order[] | null>(null);
+  const [equipePreparo, setEquipePreparo] = useState<string[]>([]);
+  const [selectedPreparerFilter, setSelectedPreparerFilter] = useState<string>('ALL');
+  const [editingPreparerOrderId, setEditingPreparerOrderId] = useState<string | null>(null);
+  const [customPreparerInput, setCustomPreparerInput] = useState<string>('');
   const [filterMode, setFilterMode] = useState<FilterMode>('ATIVOS');
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [currentTime, setCurrentTime] = useState<string>('');
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
+
+  // Listen to PDV equipe_preparo
+  useEffect(() => {
+    if (!firestore || !pdvId) return;
+    const unsubscribe = onSnapshot(doc(firestore, 'pdvs', pdvId), (snap) => {
+      if (snap.exists()) {
+        const pdvData = snap.data() as Pdv;
+        setEquipePreparo(pdvData.equipe_preparo || []);
+      }
+    });
+    return () => unsubscribe();
+  }, [firestore, pdvId]);
 
   // Track known order IDs to play alert chime on genuinely new orders
   const knownOrderIdsRef = useRef<Set<string>>(new Set());
@@ -242,6 +261,34 @@ export default function KitchenDisplay({
     }
   };
 
+  const handleAssignPreparer = async (orderId: string, name: string | null) => {
+    setUpdatingOrderId(orderId);
+    try {
+      const res = await updateOrderPreparer(orderId, name);
+      if (res?.status === 'error') {
+        toast({
+          variant: 'destructive',
+          title: 'Erro ao direcionar preparo',
+          description: res.message,
+        });
+      } else {
+        setEditingPreparerOrderId(null);
+      }
+    } finally {
+      setUpdatingOrderId(null);
+    }
+  };
+
+  const availablePreparers = useMemo(() => {
+    const set = new Set<string>(equipePreparo);
+    (orders || []).forEach((o) => {
+      if (o.responsavel_preparo?.trim()) {
+        set.add(o.responsavel_preparo.trim());
+      }
+    });
+    return Array.from(set);
+  }, [equipePreparo, orders]);
+
   // Categorize
   const counts = useMemo(() => {
     if (!orders) return { emPreparo: 0, pronto: 0, entregue: 0, totalAtivos: 0 };
@@ -316,8 +363,15 @@ export default function KitchenDisplay({
       list = orders;
     }
 
+    if (selectedPreparerFilter !== 'ALL') {
+      list = list.filter((o) => {
+        if (selectedPreparerFilter === 'UNASSIGNED') return !o.responsavel_preparo?.trim();
+        return o.responsavel_preparo?.trim().toLowerCase() === selectedPreparerFilter.toLowerCase();
+      });
+    }
+
     return { visibleOrders: list, inPrepList: inPrep };
-  }, [orders, filterMode]);
+  }, [orders, filterMode, selectedPreparerFilter]);
 
   return (
     <div
@@ -480,6 +534,61 @@ export default function KitchenDisplay({
         </div>
       </div>
 
+      {/* Preparer Filter Bar (when stall uses preparer assignment) */}
+      {availablePreparers.length > 0 && (
+        <div className="flex items-center gap-1.5 overflow-x-auto py-2.5 border-b border-slate-800/80">
+          <span className="text-xs font-bold text-slate-400 shrink-0 flex items-center gap-1 mr-1">
+            <UserCheck className="h-3.5 w-3.5 text-violet-400" /> Filtrar responsável:
+          </span>
+          <button
+            type="button"
+            onClick={() => setSelectedPreparerFilter('ALL')}
+            className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-all shrink-0 ${
+              selectedPreparerFilter === 'ALL'
+                ? 'bg-violet-600 text-white border-violet-500 shadow-xs'
+                : 'bg-slate-900 text-slate-400 hover:text-white border-slate-800'
+            }`}
+          >
+            Todos
+          </button>
+          {availablePreparers.map((nome) => {
+            const isSelected = selectedPreparerFilter.toLowerCase() === nome.toLowerCase();
+            const activeCount = (orders || []).filter(
+              (o) =>
+                (o.status === 'PENDENTE' || o.status === 'EM_PREPARO') &&
+                o.responsavel_preparo?.trim().toLowerCase() === nome.toLowerCase()
+            ).length;
+            return (
+              <button
+                key={nome}
+                type="button"
+                onClick={() => setSelectedPreparerFilter(isSelected ? 'ALL' : nome)}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-all shrink-0 ${
+                  isSelected
+                    ? 'bg-violet-600 text-white border-violet-500 shadow-xs'
+                    : 'bg-slate-900 text-slate-200 hover:bg-violet-500/20 border-slate-800'
+                }`}
+              >
+                👨‍🍳 {nome} ({activeCount})
+              </button>
+            );
+          })}
+          <button
+            type="button"
+            onClick={() =>
+              setSelectedPreparerFilter(selectedPreparerFilter === 'UNASSIGNED' ? 'ALL' : 'UNASSIGNED')
+            }
+            className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-all shrink-0 ${
+              selectedPreparerFilter === 'UNASSIGNED'
+                ? 'bg-violet-600 text-white border-violet-500 shadow-xs'
+                : 'bg-slate-900 text-slate-400 hover:text-white border-slate-800'
+            }`}
+          >
+            Sem responsável
+          </button>
+        </div>
+      )}
+
       {/* Main Grid of Orders */}
       <main className="flex-1 py-4 overflow-y-auto">
         {orders === null ? (
@@ -551,6 +660,41 @@ export default function KitchenDisplay({
                           <p className="text-sm font-bold text-slate-300 truncate max-w-[170px] sm:max-w-[200px] mt-0.5">
                             {order.cliente_nome || 'Cliente'}
                           </p>
+                          <div className="mt-1.5">
+                            {order.responsavel_preparo ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (editingPreparerOrderId === order.id) {
+                                    setEditingPreparerOrderId(null);
+                                  } else {
+                                    setCustomPreparerInput(order.responsavel_preparo || '');
+                                    setEditingPreparerOrderId(order.id);
+                                  }
+                                }}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-black bg-violet-600 text-white border border-violet-400/50 shadow-xs hover:bg-violet-500 transition-colors"
+                                title="Clique para alterar ou remover responsável pelo preparo"
+                              >
+                                <span>👨‍🍳 PREPARO: {order.responsavel_preparo.toUpperCase()}</span>
+                              </button>
+                            ) : isEmPreparo ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (editingPreparerOrderId === order.id) {
+                                    setEditingPreparerOrderId(null);
+                                  } else {
+                                    setCustomPreparerInput('');
+                                    setEditingPreparerOrderId(order.id);
+                                  }
+                                }}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-slate-800/80 text-slate-400 hover:text-violet-300 border border-dashed border-slate-700 hover:border-violet-500/40 transition-colors"
+                              >
+                                <UserCheck className="h-3 w-3" />
+                                <span>Direcionar preparo</span>
+                              </button>
+                            ) : null}
+                          </div>
                         </div>
 
                         <div className="flex flex-col items-end gap-1 shrink-0">
@@ -578,6 +722,71 @@ export default function KitchenDisplay({
 
                   {/* Card Items List */}
                   <div className="p-3.5 flex-1 space-y-2.5">
+                    {editingPreparerOrderId === order.id && (
+                      <div className="p-2.5 rounded-xl border border-violet-500/40 bg-violet-950/30 space-y-2 mb-2">
+                        {equipePreparo.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5">
+                            {equipePreparo.map((nome) => {
+                              const active =
+                                order.responsavel_preparo?.toLowerCase() === nome.toLowerCase();
+                              return (
+                                <button
+                                  key={nome}
+                                  type="button"
+                                  disabled={isUpdating}
+                                  onClick={() => handleAssignPreparer(order.id, active ? null : nome)}
+                                  className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-colors ${
+                                    active
+                                      ? 'bg-violet-600 text-white border-violet-400'
+                                      : 'bg-slate-900 hover:bg-violet-500/20 text-slate-200 border-slate-700'
+                                  }`}
+                                >
+                                  👨‍🍳 {nome}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                        <div className="flex items-center gap-1.5">
+                          <Input
+                            value={customPreparerInput}
+                            onChange={(e) => setCustomPreparerInput(e.target.value)}
+                            placeholder="Nome do responsável..."
+                            className="h-8 text-xs bg-slate-900 border-slate-700 text-white"
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleAssignPreparer(order.id, customPreparerInput.trim() || null);
+                              }
+                            }}
+                          />
+                          <Button
+                            type="button"
+                            size="sm"
+                            disabled={isUpdating}
+                            onClick={() =>
+                              handleAssignPreparer(order.id, customPreparerInput.trim() || null)
+                            }
+                            className="h-8 px-2.5 text-xs bg-violet-600 hover:bg-violet-500 text-white font-bold"
+                          >
+                            Salvar
+                          </Button>
+                          {order.responsavel_preparo && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              disabled={isUpdating}
+                              onClick={() => handleAssignPreparer(order.id, null)}
+                              className="h-8 px-2 text-xs text-rose-400 hover:text-rose-300"
+                              title="Remover responsável"
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    )}
                     <ul className="space-y-2 divide-y divide-slate-800/60">
                       {order.items.map((item: OrderItem, idx: number) => {
                         const hasCustomObs = !!item.observation;

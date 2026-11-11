@@ -154,6 +154,10 @@ export type Pdv = {
   tenant_id?: string;
   event_id?: string;
   whatsapp?: PdvWhatsappConfig;
+  /** Lista de nomes dos ajudantes/preparadores da barraca para seleção rápida com 1 toque. */
+  equipe_preparo?: string[];
+  /** Se true, exibe o seletor de responsável pelo preparo aberto por padrão no caixa deste PDV. */
+  solicitar_responsavel_preparo?: boolean;
 };
 
 // ---------------------------------------------------------------------------
@@ -255,6 +259,8 @@ export type Order = {
   pdv_nome: string;
   tenant_id?: string;
   event_id?: string;
+  /** Nome do colaborador responsável pelo preparo deste pedido (uso interno da barraca/KDS). */
+  responsavel_preparo?: string;
 
   /** Idempotência e Auditoria de Notificação WhatsApp */
   notification_status?: 'PENDING' | 'SENDING' | 'SENT' | 'FAILED';

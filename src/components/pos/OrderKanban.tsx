@@ -2,21 +2,22 @@
 import { useState, useEffect, useMemo, useTransition } from 'react';
 import { useFirestore } from '@/firebase';
 import { collection, query, where, onSnapshot, writeBatch, Timestamp, doc } from 'firebase/firestore';
-import { type Order, type OrderItem } from '@/lib/definitions';
+import { type Order, type OrderItem, type Pdv } from '@/lib/definitions';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { updateOrderStatus } from '@/lib/actions';
+import { updateOrderStatus, updateOrderPreparer } from '@/lib/actions';
 import CancelOrderButton from './CancelOrderButton';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '../ui/skeleton';
 import { ScrollArea } from '../ui/scroll-area';
-import { Loader2, ArrowRightCircle, MessageSquare, Check, AlertCircle, Clock } from 'lucide-react';
+import { Loader2, ArrowRightCircle, MessageSquare, Check, AlertCircle, Clock, UserCheck, X } from 'lucide-react';
 import { DndProvider, useDrag, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { TouchBackend } from 'react-dnd-touch-backend';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import { Button } from '../ui/button';
+import { Input } from '../ui/input';
 import { formatDateTime } from '@/lib/utils';
 import { useTenant } from '@/hooks/use-tenant-context';
 
@@ -33,12 +34,13 @@ const statusConfig: Record<OrderStatus, { title: string; variant: 'default' | 's
     'ENTREGUE': { title: 'Entregue', variant: 'outline' }
 };
 
-const KanbanColumn = ({ title, variant, orders, status, isPending }: {
+const KanbanColumn = ({ title, variant, orders, status, isPending, equipePreparo }: {
     title: string;
     variant: 'default' | 'secondary' | 'destructive' | 'outline';
     orders: Order[];
     status: OrderStatus;
     isPending: boolean;
+    equipePreparo: string[];
 }) => {
     const [{ isOver }, drop] = useDrop(() => ({
         accept: ItemTypes.ORDER,
@@ -70,7 +72,7 @@ const KanbanColumn = ({ title, variant, orders, status, isPending }: {
                         </div>
                     )}
                     {orders.map(order => (
-                        <OrderCard key={order.id} order={order} />
+                        <OrderCard key={order.id} order={order} equipePreparo={equipePreparo} />
                     ))}
                     {orders.length === 0 && (
                         <div className="text-center py-10 px-4">
@@ -161,8 +163,10 @@ function KanbanPrepBadge({ order }: { order: Order }) {
   return null;
 }
 
-const OrderCard = ({ order }: { order: Order }) => {
+const OrderCard = ({ order, equipePreparo }: { order: Order; equipePreparo: string[] }) => {
     const [isPending, startTransition] = useTransition();
+    const [isEditingPreparer, setIsEditingPreparer] = useState(false);
+    const [customPreparer, setCustomPreparer] = useState(order.responsavel_preparo || '');
     const { toast } = useToast();
     
     const handleStatusUpdate = (newStatus: OrderStatus) => {
@@ -181,6 +185,21 @@ const OrderCard = ({ order }: { order: Order }) => {
                     title: newStatus === 'PRONTO' ? 'Pedido Pronto!' : newStatus === 'ENTREGUE' ? 'Pedido Entregue!' : 'Status Atualizado',
                     description: `Senha #${order.order_number} de ${order.cliente_nome || 'Cliente'}.`,
                 });
+            }
+        });
+    };
+
+    const handleAssignPreparer = (name: string | null) => {
+        startTransition(async () => {
+            const result = await updateOrderPreparer(order.id, name);
+            if (result?.status === 'error') {
+                toast({
+                    variant: 'destructive',
+                    title: 'Erro ao direcionar preparo',
+                    description: result.message,
+                });
+            } else {
+                setIsEditingPreparer(false);
             }
         });
     };
@@ -212,17 +231,110 @@ const OrderCard = ({ order }: { order: Order }) => {
             isPending ? 'opacity-60 pointer-events-none' : ''
         )}
     >
-        <CardHeader className="p-3 pb-2">
+        <CardHeader className="p-3 pb-2 space-y-1.5">
             <div className="flex justify-between items-start gap-2">
                 <div className="min-w-0">
                     <span className="font-bold text-base sm:text-lg block truncate">{order.cliente_nome || 'Cliente'}</span>
-                    <span className="text-[11px] text-muted-foreground">{formatDateTime(formatTimestamp(order.created_at))}</span>
+                    <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                        <span className="text-[11px] text-muted-foreground">{formatDateTime(formatTimestamp(order.created_at))}</span>
+                        <KanbanPrepBadge order={order} />
+                    </div>
                 </div>
                 <div className="text-right shrink-0">
                     <span className="inline-block bg-primary/10 text-primary font-black text-lg sm:text-xl px-2.5 py-0.5 rounded-lg border border-primary/20">
                         #{order.order_number}
                     </span>
                 </div>
+            </div>
+
+            {/* Badge / Botão do Responsável pelo Preparo */}
+            <div className="pt-0.5">
+                {order.responsavel_preparo ? (
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setCustomPreparer(order.responsavel_preparo || '');
+                            setIsEditingPreparer(!isEditingPreparer);
+                        }}
+                        className="inline-flex items-center gap-1.5 text-xs font-bold bg-violet-500/15 text-violet-700 dark:text-violet-300 border border-violet-500/30 px-2.5 py-1 rounded-lg hover:bg-violet-500/25 transition-colors"
+                        title="Clique para trocar ou remover o responsável pelo preparo"
+                    >
+                        <span>👨‍🍳 Preparo: {order.responsavel_preparo}</span>
+                    </button>
+                ) : isEmPreparo ? (
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setCustomPreparer('');
+                            setIsEditingPreparer(!isEditingPreparer);
+                        }}
+                        className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-violet-600 dark:hover:text-violet-400 bg-muted/50 hover:bg-violet-500/10 border border-dashed border-border px-2 py-0.5 rounded-md transition-colors"
+                    >
+                        <UserCheck className="h-3 w-3" />
+                        <span>Direcionar preparo</span>
+                    </button>
+                ) : null}
+
+                {isEditingPreparer && (
+                    <div className="mt-1.5 p-2 rounded-lg border border-violet-500/30 bg-violet-500/5 space-y-1.5">
+                        {equipePreparo.length > 0 && (
+                            <div className="flex flex-wrap gap-1">
+                                {equipePreparo.map((nome) => {
+                                    const active = order.responsavel_preparo?.toLowerCase() === nome.toLowerCase();
+                                    return (
+                                        <button
+                                            key={nome}
+                                            type="button"
+                                            onClick={() => handleAssignPreparer(active ? null : nome)}
+                                            className={cn(
+                                                "px-2 py-0.5 rounded-md text-[11px] font-semibold border transition-colors",
+                                                active
+                                                    ? "bg-violet-600 text-white border-violet-600"
+                                                    : "bg-background hover:bg-violet-500/15 text-foreground border-border"
+                                            )}
+                                        >
+                                            👨‍🍳 {nome}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        )}
+                        <div className="flex items-center gap-1">
+                            <Input
+                                value={customPreparer}
+                                onChange={(e) => setCustomPreparer(e.target.value)}
+                                placeholder="Nome do responsável..."
+                                className="h-7 text-xs bg-background"
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        handleAssignPreparer(customPreparer.trim() || null);
+                                    }
+                                }}
+                            />
+                            <Button
+                                type="button"
+                                size="sm"
+                                onClick={() => handleAssignPreparer(customPreparer.trim() || null)}
+                                className="h-7 px-2 text-[11px] bg-violet-600 hover:bg-violet-700 text-white"
+                            >
+                                Salvar
+                            </Button>
+                            {order.responsavel_preparo && (
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => handleAssignPreparer(null)}
+                                    className="h-7 px-1.5 text-[11px] text-destructive"
+                                    title="Remover responsável"
+                                >
+                                    <X className="h-3.5 w-3.5" />
+                                </Button>
+                            )}
+                        </div>
+                    </div>
+                )}
             </div>
         </CardHeader>
         <CardContent className="p-3 pt-0 pb-2 space-y-2">
@@ -347,7 +459,20 @@ function KanbanBoard({ pdvId }: { pdvId: string }) {
     const { currentTenant, currentEvent } = useTenant();
     const { toast } = useToast();
     const [orders, setOrders] = useState<Order[] | null>(null);
+    const [equipePreparo, setEquipePreparo] = useState<string[]>([]);
+    const [selectedPreparerFilter, setSelectedPreparerFilter] = useState<string>('ALL');
     const [mobileTab, setMobileTab] = useState<OrderStatus>('EM_PREPARO');
+
+    useEffect(() => {
+        if (!firestore || !pdvId) return;
+        const unsubscribe = onSnapshot(doc(firestore, 'pdvs', pdvId), (snap) => {
+            if (snap.exists()) {
+                const pdvData = snap.data() as Pdv;
+                setEquipePreparo(pdvData.equipe_preparo || []);
+            }
+        });
+        return () => unsubscribe();
+    }, [firestore, pdvId]);
 
     useEffect(() => {
         if (!firestore || !pdvId) return;
@@ -412,6 +537,16 @@ function KanbanBoard({ pdvId }: { pdvId: string }) {
 
     }, [firestore, orders]);
 
+    const availablePreparers = useMemo(() => {
+        const set = new Set<string>(equipePreparo);
+        (orders || []).forEach(o => {
+            if (o.responsavel_preparo?.trim()) {
+                set.add(o.responsavel_preparo.trim());
+            }
+        });
+        return Array.from(set);
+    }, [equipePreparo, orders]);
+
     const categorizedOrders = useMemo(() => {
         const initial: Record<OrderStatus, Order[]> = {
             'EM_PREPARO': [], 'PRONTO': [], 'ENTREGUE': []
@@ -419,7 +554,13 @@ function KanbanBoard({ pdvId }: { pdvId: string }) {
 
         if (!orders) return initial;
 
-        return orders.reduce((acc, order) => {
+        const filteredByPreparer = orders.filter(order => {
+            if (selectedPreparerFilter === 'ALL') return true;
+            if (selectedPreparerFilter === 'UNASSIGNED') return !order.responsavel_preparo?.trim();
+            return order.responsavel_preparo?.trim().toLowerCase() === selectedPreparerFilter.toLowerCase();
+        });
+
+        return filteredByPreparer.reduce((acc, order) => {
             // Treat PENDENTE as EM_PREPARO for display purposes
             if (order.status === 'PENDENTE' || order.status === 'EM_PREPARO') {
                  acc['EM_PREPARO'].push(order);
@@ -429,7 +570,7 @@ function KanbanBoard({ pdvId }: { pdvId: string }) {
             return acc;
         }, initial);
 
-    }, [orders]);
+    }, [orders, selectedPreparerFilter]);
 
     if (orders === null) {
         return (
@@ -451,6 +592,58 @@ function KanbanBoard({ pdvId }: { pdvId: string }) {
 
     return (
         <div className="space-y-3">
+            {/* Filtro por Responsável pelo Preparo (exibido quando há nomes na equipe ou pedidos direcionados) */}
+            {availablePreparers.length > 0 && (
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+                    <span className="text-xs font-semibold text-muted-foreground shrink-0 flex items-center gap-1 mr-1">
+                        <UserCheck className="h-3.5 w-3.5" /> Filtrar preparo:
+                    </span>
+                    <button
+                        type="button"
+                        onClick={() => setSelectedPreparerFilter('ALL')}
+                        className={cn(
+                            "px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all shrink-0",
+                            selectedPreparerFilter === 'ALL'
+                                ? "bg-violet-600 text-white border-violet-600 shadow-xs"
+                                : "bg-background text-muted-foreground hover:text-foreground border-border"
+                        )}
+                    >
+                        Todos ({orders.length})
+                    </button>
+                    {availablePreparers.map(nome => {
+                        const isSelected = selectedPreparerFilter.toLowerCase() === nome.toLowerCase();
+                        const count = orders.filter(o => o.responsavel_preparo?.trim().toLowerCase() === nome.toLowerCase()).length;
+                        return (
+                            <button
+                                key={nome}
+                                type="button"
+                                onClick={() => setSelectedPreparerFilter(isSelected ? 'ALL' : nome)}
+                                className={cn(
+                                    "px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all shrink-0",
+                                    isSelected
+                                        ? "bg-violet-600 text-white border-violet-600 shadow-xs"
+                                        : "bg-background text-foreground hover:bg-violet-500/10 border-border"
+                                )}
+                            >
+                                👨‍🍳 {nome} ({count})
+                            </button>
+                        );
+                    })}
+                    <button
+                        type="button"
+                        onClick={() => setSelectedPreparerFilter(selectedPreparerFilter === 'UNASSIGNED' ? 'ALL' : 'UNASSIGNED')}
+                        className={cn(
+                            "px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all shrink-0",
+                            selectedPreparerFilter === 'UNASSIGNED'
+                                ? "bg-violet-600 text-white border-violet-600 shadow-xs"
+                                : "bg-background text-muted-foreground hover:text-foreground border-border"
+                        )}
+                    >
+                        Sem responsável ({orders.filter(o => !o.responsavel_preparo?.trim()).length})
+                    </button>
+                </div>
+            )}
+
             {/* Mobile View Toggle: 3 quick tabs so users on phone don't need to scroll sideways */}
             <div className="sm:hidden flex items-center p-1 bg-muted rounded-xl gap-1">
                 {(Object.keys(statusConfig) as OrderStatus[]).map((status) => {
@@ -492,6 +685,7 @@ function KanbanBoard({ pdvId }: { pdvId: string }) {
                     orders={categorizedOrders[mobileTab]}
                     status={mobileTab}
                     isPending={false}
+                    equipePreparo={equipePreparo}
                 />
             </div>
 
@@ -506,6 +700,7 @@ function KanbanBoard({ pdvId }: { pdvId: string }) {
                             orders={categorizedOrders[status]}
                             status={status}
                             isPending={false}
+                            equipePreparo={equipePreparo}
                         />
                     )
                 })}

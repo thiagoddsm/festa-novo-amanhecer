@@ -124,6 +124,7 @@ const SaleSchema = z.object({
     usuario_responsavel: z.string().min(1, 'Usuário responsável é obrigatório.'),
     tenant_id: z.string().optional(),
     event_id: z.string().optional(),
+    responsavel_preparo: z.string().optional(),
 });
 
 export async function processSale(
@@ -144,6 +145,7 @@ export async function processSale(
             usuario_responsavel: formData.get('usuario_responsavel'),
             tenant_id: formData.get('tenant_id') || undefined,
             event_id: formData.get('event_id') || undefined,
+            responsavel_preparo: (formData.get('responsavel_preparo') as string)?.trim() || undefined,
         });
 
         if (!validatedFields.success) {
@@ -155,7 +157,7 @@ export async function processSale(
             };
         }
 
-        const { qr_code_id, pdv_id, pdv_nome, total_venda: valor_venda_centavos, usuario_responsavel, tenant_id, event_id } = validatedFields.data;
+        const { qr_code_id, pdv_id, pdv_nome, total_venda: valor_venda_centavos, usuario_responsavel, tenant_id, event_id, responsavel_preparo } = validatedFields.data;
 
         // Query card first to get document ID
         const cardsRef = clientCollection(db, 'cards');
@@ -349,6 +351,7 @@ export async function processSale(
                 order_number: orderNumber,
                 tenant_id: effectiveTenantId,
                 event_id: effectiveEventId,
+                ...(responsavel_preparo ? { responsavel_preparo } : {}),
             });
 
             // 6. Audit log for ingredient deductions
@@ -1698,6 +1701,57 @@ export async function updateOrderStatus(orderId: string, newStatus: Order['statu
         console.error("Error updating order status:", error);
         return { status: 'error', message: 'Não foi possível atualizar o status do pedido.' };
     }
+}
+
+export async function updateOrderPreparer(
+  orderId: string,
+  responsavelPreparo: string | null
+): Promise<ActionState> {
+  const db = getWebDb();
+  if (!orderId) return { status: 'error', message: 'ID do pedido inválido.' };
+  try {
+    const orderRef = clientDoc(db, 'orders', orderId);
+    const trimmed = responsavelPreparo?.trim() || '';
+    await clientUpdateDoc(orderRef, {
+      responsavel_preparo: trimmed ? trimmed : clientDeleteField(),
+      updated_at: ClientTimestamp.now(),
+    });
+    return {
+      status: 'success',
+      message: trimmed
+        ? `Pedido direcionado para ${trimmed}.`
+        : 'Responsável pelo preparo removido.',
+    };
+  } catch (error) {
+    console.error('Error updating order preparer:', error);
+    return { status: 'error', message: 'Não foi possível atualizar o responsável.' };
+  }
+}
+
+export async function updatePdvPrepTeam(
+  pdvId: string,
+  equipePreparo: string[],
+  solicitarResponsavel?: boolean
+): Promise<ActionState> {
+  const db = getWebDb();
+  if (!pdvId) return { status: 'error', message: 'ID do PDV inválido.' };
+  try {
+    const cleaned = Array.from(
+      new Set(equipePreparo.map((n) => n.trim()).filter(Boolean))
+    );
+    const payload: Record<string, any> = {
+      equipe_preparo: cleaned,
+      updated_at: ClientTimestamp.now(),
+    };
+    if (typeof solicitarResponsavel === 'boolean') {
+      payload.solicitar_responsavel_preparo = solicitarResponsavel;
+    }
+    await clientUpdateDoc(clientDoc(db, 'pdvs', pdvId), payload);
+    return { status: 'success', message: 'Equipe de preparo atualizada!' };
+  } catch (error) {
+    console.error('Error updating PDV prep team:', error);
+    return { status: 'error', message: 'Não foi possível salvar a equipe de preparo.' };
+  }
 }
 
 
