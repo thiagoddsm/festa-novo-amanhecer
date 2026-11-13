@@ -33,6 +33,14 @@ function isFrontCamera(cam: CameraInfo) {
   return FRONT_REGEX.test(cam.label) && !BACK_REGEX.test(cam.label);
 }
 
+function isIosOrSafari(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent || '';
+  const isIOS = /iPhone|iPad|iPod/i.test(ua);
+  const isWebKit = /WebKit/i.test(ua) && !/Chrome|CriOS|Edg/i.test(ua);
+  return isIOS || isWebKit;
+}
+
 /**
  * Orders cameras so that index 0 is the best default for scanning QR codes:
  * main back lens (1x) > other back lenses > front camera > ultra-wide / macro.
@@ -194,11 +202,58 @@ export function QrScanner({ onScanSuccess, onScanFailure }: QrScannerProps) {
   };
 
   /**
-   * Enumerates cameras (once) and decides which one to open:
-   * 1) explicit request, 2) last camera chosen by the user (saved), 3) best back camera,
-   * 4) fallback to facingMode: environment.
+   * Helper that forces video elements created inside the container to have
+   * playsinline / webkit-playsinline and muted so iOS Safari won't pause or black-screen it.
+   */
+  const ensureVideoPlaysInline = () => {
+    try {
+      const container = document.getElementById(containerIdRef.current);
+      if (!container) return;
+      const videos = container.querySelectorAll('video');
+      videos.forEach((v) => {
+        v.setAttribute('playsinline', 'true');
+        v.setAttribute('webkit-playsinline', 'true');
+        v.setAttribute('muted', 'true');
+        v.muted = true;
+        v.autoplay = true;
+        if (v.paused) {
+          v.play().catch(() => {});
+        }
+      });
+    } catch {
+      // ignore
+    }
+  };
+
+  /**
+   * Enumerates cameras and decides which one to open:
+   * - On iOS / iPhone: Safari handles { facingMode: 'environment' } flawlessly across all lenses,
+   *   whereas exact deviceId selection causes black screen in WebKit.
+   * - If user explicitly selected a camera, or on Android: uses deviceId.
    */
   const resolveCamera = async (Html5Qrcode: any, requestedId?: string): Promise<string | { facingMode: string }> => {
+    const isIos = isIosOrSafari();
+
+    // If an explicit camera was requested by user clicking in the list
+    if (requestedId) {
+      if (requestedId === 'environment' || requestedId === 'user') {
+        return { facingMode: requestedId };
+      }
+      return requestedId;
+    }
+
+    // For iOS by default: always use native environment facingMode (prevents black screen on rear camera)
+    if (isIos) {
+      const saved = readSavedCameraId();
+      if (saved && saved !== 'environment' && saved !== 'user') {
+        // If a deviceId was previously saved on iOS, test if it was set explicitly
+        // Otherwise prefer environment facingMode
+        return { facingMode: 'environment' };
+      }
+      return { facingMode: 'environment' };
+    }
+
+    // Android / Desktop logic:
     let list = camerasRef.current;
     if (list.length === 0) {
       try {
@@ -213,13 +268,10 @@ export function QrScanner({ onScanSuccess, onScanFailure }: QrScannerProps) {
       }
     }
 
-    if (requestedId && list.some((c) => c.id === requestedId)) return requestedId;
-
     const saved = readSavedCameraId();
     if (saved && list.some((c) => c.id === saved)) return saved;
 
     if (list.length > 0) {
-      // Labels are empty before permission is granted; sortCameras still keeps a stable order
       const best = list.find((c) => !BAD_LENS_REGEX.test(c.label) && !isFrontCamera(c)) || list[0];
       return best.id;
     }
@@ -248,14 +300,20 @@ export function QrScanner({ onScanSuccess, onScanFailure }: QrScannerProps) {
       const scanner = new Html5Qrcode(containerIdRef.current);
       scannerInstanceRef.current = scanner;
 
-      const qrConfig = {
+      // On iOS Safari, forcing aspectRatio constraint with exact deviceId causes OverconstrainedError
+      // and black video surfaces. We use responsive qrbox without hardcoded aspect constraints.
+      const isIos = isIosOrSafari();
+      const qrConfig: any = {
         fps: 12,
         qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
           const edge = Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * 0.72);
           return { width: Math.max(edge, 160), height: Math.max(edge, 160) };
         },
-        aspectRatio: 1.0,
       };
+
+      if (!isIos) {
+        qrConfig.aspectRatio = 1.0;
+      }
 
       const handleSuccess = (decodedText: string) => {
         if (scannedRef.current) return;
@@ -289,12 +347,18 @@ export function QrScanner({ onScanSuccess, onScanFailure }: QrScannerProps) {
       await startPromise;
 
       if (isMountedRef.current) {
-        const usedId = typeof cameraIdOrConfig === 'string' ? cameraIdOrConfig : null;
+        const usedId = typeof cameraIdOrConfig === 'string' 
+          ? cameraIdOrConfig 
+          : (cameraIdOrConfig as any)?.facingMode || 'environment';
+
         activeCameraIdRef.current = usedId;
         setActiveCameraId(usedId);
         setStatus('SCANNING');
 
-        // Camera labels only become available after permission is granted: re-sort now
+        // Ensure iOS WebKit playsinline immediately
+        ensureVideoPlaysInline();
+
+        // Query available camera devices once permission is active
         try {
           const refreshed: CameraInfo[] = await Html5Qrcode.getCameras();
           if (refreshed && refreshed.length > 0 && isMountedRef.current) {
@@ -310,11 +374,20 @@ export function QrScanner({ onScanSuccess, onScanFailure }: QrScannerProps) {
       if (isMountedRef.current) {
         const msg = String(err?.message || err || '');
         if (msg.includes('already under transition')) {
-          // Benign race condition, ignore
           return;
         }
 
-        // If a saved/selected camera no longer works, forget it and retry once with the default
+        // Fallback for iOS / Safari if a specific deviceId failed: retry once with facingMode environment
+        if (requestedId && requestedId !== 'environment') {
+          try {
+            localStorage.removeItem(CAMERA_STORAGE_KEY);
+            await startScanning('environment');
+            return;
+          } catch {
+            // continue to error screen
+          }
+        }
+
         if (requestedId === undefined && readSavedCameraId()) {
           try {
             localStorage.removeItem(CAMERA_STORAGE_KEY);
@@ -325,11 +398,11 @@ export function QrScanner({ onScanSuccess, onScanFailure }: QrScannerProps) {
 
         setStatus('ERROR');
         if (msg.includes('NotAllowedError') || msg.includes('Permission')) {
-          setErrorMessage('Permissão da câmera foi negada. Permita o acesso à câmera no seu navegador.');
+          setErrorMessage('Permissão da câmera foi negada. Permita o acesso à câmera no seu navegador (Ajustes > Safari > Câmera).');
         } else if (msg.includes('NotFoundError') || msg.includes('DevicesNotFoundError')) {
           setErrorMessage('Nenhuma câmera foi encontrada no seu dispositivo.');
         } else {
-          setErrorMessage('Não foi possível iniciar a câmera. Verifique as permissões ou digite o código do cartão.');
+          setErrorMessage('Não foi possível iniciar a câmera traseira. Toque em "Tentar Novamente" ou digite o código do cartão.');
         }
       }
     } finally {
@@ -367,6 +440,21 @@ export function QrScanner({ onScanSuccess, onScanFailure }: QrScannerProps) {
   };
 
   const handleSwitchCamera = async () => {
+    const isIos = isIosOrSafari();
+    if (isIos) {
+      // On iOS: toggle between environment (back) and user (front)
+      const isCurrentlyBack = activeCameraIdRef.current === 'environment' || !activeCameraIdRef.current?.includes('front');
+      const targetFacing = isCurrentlyBack ? 'user' : 'environment';
+      saveCameraId(targetFacing);
+      setSavedCameraId(targetFacing);
+      setSaveFeedback(`Alternando para câmera ${targetFacing === 'user' ? 'frontal' : 'traseira'}...`);
+      setTimeout(() => {
+        if (isMountedRef.current) setSaveFeedback(null);
+      }, 2500);
+      await startScanning(targetFacing);
+      return;
+    }
+
     const list = camerasRef.current;
     if (list.length < 2) return;
     const currentIndex = Math.max(0, list.findIndex((c) => c.id === activeCameraIdRef.current));
@@ -380,13 +468,13 @@ export function QrScanner({ onScanSuccess, onScanFailure }: QrScannerProps) {
     await startScanning(next.id);
   };
 
-
   const handleRetry = async () => {
     scannedRef.current = false;
     await startScanning();
   };
 
   const activeCamera = cameras.find((c) => c.id === activeCameraId);
+  const isIos = isIosOrSafari();
 
   return (
     <div className="flex flex-col items-center w-full">
@@ -448,76 +536,78 @@ export function QrScanner({ onScanSuccess, onScanFailure }: QrScannerProps) {
         {/* Initializing State */}
         {status === 'INITIALIZING' && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-zinc-900 text-zinc-300 p-6 text-center">
-            <Loader2 className="w-9 h-9 animate-spin text-primary" />
-            <p className="text-sm font-medium">Iniciando a câmera...</p>
-            <p className="text-xs text-zinc-500">Se solicitado, autorize o acesso à câmera.</p>
+            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            <span className="text-xs font-medium">Iniciando câmera traseira...</span>
           </div>
         )}
 
         {/* Error State */}
         {status === 'ERROR' && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-zinc-900 text-zinc-200 p-6 text-center">
-            <div className="w-12 h-12 rounded-full bg-destructive/15 text-destructive flex items-center justify-center">
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-zinc-900 text-zinc-300 p-6 text-center">
+            <div className="p-3 bg-destructive/10 rounded-full text-destructive border border-destructive/20">
               <CameraOff className="w-6 h-6" />
             </div>
-            <p className="text-xs sm:text-sm text-zinc-300 leading-snug">
-              {errorMessage || 'Não foi possível acessar a câmera.'}
+            <p className="text-xs text-muted-foreground max-w-[220px]">
+              {errorMessage || 'Erro ao carregar a câmera.'}
             </p>
-            <Button size="sm" variant="outline" onClick={handleRetry} className="gap-1.5 mt-1 border-zinc-700 bg-zinc-800 text-white hover:bg-zinc-700">
-              <RefreshCw className="w-3.5 h-3.5" /> Tentar Novamente
+            <Button size="sm" variant="outline" onClick={handleRetry} className="text-xs mt-1">
+              Tentar Novamente
             </Button>
           </div>
         )}
       </div>
 
       {/* Camera Selection & Main Camera Setting */}
-      {cameras.length > 0 && status === 'SCANNING' && (
-        <div className="w-full max-w-[280px] sm:max-w-[320px] mt-3 space-y-2">
+      {status === 'SCANNING' && (
+        <div className="w-full max-w-[280px] sm:max-w-[320px] mt-2.5 space-y-1.5 text-center">
           {/* Active Camera Pill & Action Trigger */}
-          <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-muted/60 border border-border/80 text-xs">
-            <div className="flex items-center gap-2 min-w-0">
-              <div className="p-1.5 rounded-lg bg-primary/10 text-primary shrink-0">
+          <div className="flex items-center justify-between gap-1.5 bg-muted/60 border border-border/80 px-2.5 py-1.5 rounded-xl text-xs">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <div className="p-1 rounded-md bg-primary/10 text-primary shrink-0">
                 <Camera className="w-4 h-4" />
               </div>
-              <div className="flex flex-col min-w-0 text-left">
-                <span className="font-bold text-foreground text-xs truncate">
-                  {activeCamera ? getCameraLabelDetails(activeCamera, cameras.findIndex(c => c.id === activeCamera.id), cameras).friendlyName : 'Câmera Ativa'}
+              <div className="flex flex-col text-left min-w-0">
+                <span className="font-semibold text-foreground truncate">
+                  {isIos
+                    ? activeCameraId === 'user' ? 'Câmera Frontal' : 'Câmera Traseira (iPhone)'
+                    : activeCamera ? getCameraLabelDetails(activeCamera, cameras.findIndex(c => c.id === activeCamera.id), cameras).friendlyName : 'Câmera Traseira'}
                 </span>
-                <span className="text-[10px] text-muted-foreground truncate flex items-center gap-1">
+                <span className="text-[10px] text-muted-foreground">
                   {savedCameraId && savedCameraId === activeCameraId ? (
-                    <span className="text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-0.5">
-                      <Star className="w-2.5 h-2.5 fill-current" /> Principal salva neste celular
+                    <span className="text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-0.5">
+                      <Star className="w-2.5 h-2.5 fill-current" /> Principal salva
                     </span>
                   ) : (
-                    <span>Câmera temporária (não salva)</span>
+                    'Câmera em uso'
                   )}
                 </span>
               </div>
             </div>
 
+            {/* Quick Switch Button */}
             <Button
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => setShowCameraList(!showCameraList)}
-              className="h-7 px-2.5 text-xs font-semibold shrink-0 gap-1 bg-background hover:bg-muted"
+              onClick={handleSwitchCamera}
+              className="h-7 px-2.5 text-xs text-muted-foreground hover:text-foreground shrink-0 border-border/80 gap-1"
+              title="Trocar câmera"
             >
-              <Settings2 className="w-3.5 h-3.5 text-primary" />
-              <span>{showCameraList ? 'Fechar' : 'Trocar'}</span>
-              {showCameraList ? <ChevronUp className="w-3 h-3 opacity-60" /> : <ChevronDown className="w-3 h-3 opacity-60" />}
+              <RefreshCw className="w-3 h-3" />
+              <span>Alternar</span>
             </Button>
           </div>
 
-          {/* Feedback banner when saved */}
+          {/* Feedback badge when saving camera */}
           {saveFeedback && (
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-medium animate-in fade-in slide-in-from-top-1">
-              <Check className="w-3.5 h-3.5 shrink-0" />
+            <div className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 py-1 px-2.5 rounded-lg animate-in fade-in slide-in-from-top-1 duration-150 flex items-center justify-center gap-1">
+              <Check className="w-3.5 h-3.5 stroke-[2.5]" />
               <span>{saveFeedback}</span>
             </div>
           )}
 
-          {/* Collapsible List of all available cameras on device */}
-          {showCameraList && (
+          {/* Collapsible List of all available cameras on device (Android/Desktop) */}
+          {!isIos && showCameraList && (
             <div className="p-2.5 rounded-xl border border-primary/20 bg-background/95 shadow-md space-y-2 animate-in fade-in zoom-in-95 text-left">
               <div className="flex items-center justify-between px-1">
                 <span className="text-xs font-bold text-foreground">
@@ -579,32 +669,10 @@ export function QrScanner({ onScanSuccess, onScanFailure }: QrScannerProps) {
                   );
                 })}
               </div>
-
-              {cameras.length > 1 && (
-                <div className="pt-1 flex items-center justify-between border-t border-border/50 text-[10px] text-muted-foreground px-1">
-                  <span>Toque para usar e salvar como principal.</span>
-                  <button
-                    type="button"
-                    onClick={handleSwitchCamera}
-                    className="text-primary hover:underline font-semibold flex items-center gap-1"
-                  >
-                    <RefreshCw className="w-2.5 h-2.5" /> Próxima
-                  </button>
-                </div>
-              )}
             </div>
           )}
         </div>
       )}
-
-      {/* Keyframe animation for scanning laser */}
-      <style jsx>{`
-        @keyframes scanLaser {
-          0% { top: 10%; opacity: 0.3; }
-          50% { opacity: 1; }
-          100% { top: 88%; opacity: 0.3; }
-        }
-      `}</style>
     </div>
   );
 }
