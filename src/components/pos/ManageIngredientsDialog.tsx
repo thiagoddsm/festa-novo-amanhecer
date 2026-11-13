@@ -13,7 +13,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { useFirestore } from '@/firebase';
@@ -125,6 +124,7 @@ export default function ManageIngredientsDialog({
   const [unidade, setUnidade] = useState('un');
   const [estoqueMinimo, setEstoqueMinimo] = useState<number | ''>(10);
   const [isAdding, setIsAdding] = useState(false);
+  const [showAddForm, setShowAddForm] = useState(false);
 
   // Full edit state for an ingredient
   const [editingIngId, setEditingIngId] = useState<string | null>(null);
@@ -159,6 +159,13 @@ export default function ManageIngredientsDialog({
 
     return () => unsubscribe();
   }, [firestore, open, pdv.id]);
+
+  // Open add form automatically if no ingredients exist
+  useEffect(() => {
+    if (ingredients.length === 0 && !loading) {
+      setShowAddForm(true);
+    }
+  }, [ingredients.length, loading]);
 
   // Real-time subscription to Audit Logs
   useEffect(() => {
@@ -279,6 +286,7 @@ export default function ManageIngredientsDialog({
         setNome('');
         setQuantidade(100);
         setEstoqueMinimo(10);
+        setShowAddForm(false);
       } else {
         toast({ variant: 'destructive', title: 'Erro!', description: res?.message || 'Falha ao cadastrar insumo.' });
       }
@@ -403,18 +411,50 @@ export default function ManageIngredientsDialog({
           </div>
 
           {/* TAB 1: INSUMOS & ESTOQUE */}
-          <TabsContent value="insumos" className="flex-1 flex flex-col min-h-0 overflow-hidden gap-3 m-0 data-[state=inactive]:hidden">
-            <div className="flex items-center justify-between pt-1 shrink-0">
-              <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                Insumos Cadastrados ({ingredients.length})
-              </span>
-              <span className="text-xs text-muted-foreground hidden sm:inline">
-                Reposição rápida: clique em <span className="font-bold text-emerald-700 bg-emerald-50 px-1 py-0.5 rounded border border-emerald-200">+10</span> ou <span className="font-bold text-emerald-700 bg-emerald-50 px-1 py-0.5 rounded border border-emerald-200">+50</span>
-              </span>
+          <TabsContent
+            value="insumos"
+            className="flex-1 flex flex-col min-h-0 overflow-y-auto gap-3 m-0 data-[state=inactive]:hidden pr-1"
+          >
+            <div className="flex items-center justify-between pt-1 shrink-0 flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                  Insumos Cadastrados ({ingredients.length})
+                </span>
+                {ingredients.length > 3 && (
+                  <Badge variant="outline" className="text-[10px] text-muted-foreground font-normal">
+                    Role para ver todos ({ingredients.length})
+                  </Badge>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground hidden lg:inline">
+                  Reposição rápida: <span className="font-bold text-emerald-700 bg-emerald-50 px-1 py-0.5 rounded border border-emerald-200">+10</span> / <span className="font-bold text-emerald-700 bg-emerald-50 px-1 py-0.5 rounded border border-emerald-200">+50</span>
+                </span>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => setShowAddForm((prev) => !prev)}
+                  variant={showAddForm ? 'secondary' : 'default'}
+                  className="h-7 text-xs font-semibold gap-1.5 shadow-xs"
+                >
+                  <Plus className={`h-3.5 w-3.5 transition-transform ${showAddForm ? 'rotate-45' : ''}`} />
+                  {showAddForm ? 'Recolher Cadastro' : 'Novo Insumo'}
+                </Button>
+              </div>
             </div>
 
-            {/* Scrollable Ingredients List */}
-            <ScrollArea className="flex-1 min-h-[220px] max-h-[42vh] rounded-lg border p-3 bg-muted/10">
+            {/* Scrollable Ingredients List with native high-visibility scrollbar */}
+            <div
+              tabIndex={0}
+              role="region"
+              aria-label="Lista de insumos cadastrados"
+              className="flex-1 min-h-[200px] max-h-[50vh] sm:max-h-[56vh] overflow-y-auto overscroll-contain rounded-lg border p-3 bg-muted/10 space-y-2.5 touch-pan-y focus:outline-none focus:ring-1 focus:ring-primary/30 [&::-webkit-scrollbar]:w-2.5 [&::-webkit-scrollbar-track]:bg-muted/40 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-purple-300 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-purple-500 transition-colors"
+              style={{
+                scrollbarWidth: 'thin',
+                scrollbarColor: 'hsl(262 37% 55%) hsl(263 45% 94%)',
+              }}
+            >
               {loading ? (
                 <div className="flex justify-center items-center py-16">
                   <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" />
@@ -679,112 +719,155 @@ export default function ManageIngredientsDialog({
                       </div>
                     );
                   })}
+                  {ingredients.length > 3 && (
+                    <div className="text-center py-2 text-[11px] text-muted-foreground border-t border-dashed mt-2">
+                      Fim da lista de insumos ({ingredients.length} itens cadastrados)
+                    </div>
+                  )}
                 </div>
               )}
-            </ScrollArea>
+            </div>
 
-            {/* Quick Add Form Section */}
-            <form onSubmit={handleAddSubmit} className="rounded-lg border p-3 bg-muted/20 space-y-2.5 shrink-0">
-              <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                <Plus className="h-3.5 w-3.5 text-primary" />
-                Cadastrar Novo Insumo
-              </span>
-
-              <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
-                <div className="sm:col-span-5 space-y-1">
-                  <Label htmlFor="new-ing-name" className="text-xs font-medium">
-                    Nome do Insumo *
-                  </Label>
-                  <Input
-                    id="new-ing-name"
-                    placeholder="Ex: Pão de Hamburguer, Carne Smash..."
-                    value={nome}
-                    onChange={(e) => setNome(e.target.value)}
-                    required
-                    className="h-8 text-xs bg-background"
-                  />
-                </div>
-
-                <div className="sm:col-span-2 space-y-1">
-                  <Label htmlFor="new-ing-unit" className="text-xs font-medium">
-                    Unidade *
-                  </Label>
-                  <Input
-                    id="new-ing-unit"
-                    placeholder="un, fatias, g"
-                    value={unidade}
-                    onChange={(e) => setUnidade(e.target.value)}
-                    required
-                    className="h-8 text-xs bg-background"
-                  />
-                </div>
-
-                <div className="sm:col-span-2 space-y-1">
-                  <Label htmlFor="new-ing-qty" className="text-xs font-medium">
-                    Estoque Inicial *
-                  </Label>
-                  <Input
-                    id="new-ing-qty"
-                    type="number"
-                    min="0"
-                    placeholder="100"
-                    value={quantidade}
-                    onChange={(e) => setQuantidade(e.target.value === '' ? '' : Number(e.target.value))}
-                    required
-                    className="h-8 text-xs font-mono bg-background"
-                  />
-                </div>
-
-                <div className="sm:col-span-3 space-y-1">
-                  <Label htmlFor="new-ing-min" className="text-xs font-medium">
-                    Alerta Baixo (&le;)
-                  </Label>
-                  <Input
-                    id="new-ing-min"
-                    type="number"
-                    min="0"
-                    placeholder="10 (opcional)"
-                    value={estoqueMinimo}
-                    onChange={(e) => setEstoqueMinimo(e.target.value === '' ? '' : Number(e.target.value))}
-                    className="h-8 text-xs font-mono bg-background"
-                  />
-                </div>
-              </div>
-
-              {/* Quick unit pills */}
-              <div className="flex items-center gap-1.5 flex-wrap text-[11px] text-muted-foreground pt-0.5">
-                <span>Unidades comuns:</span>
-                {COMMON_UNITS.map((p) => (
-                  <button
-                    key={p.val}
+            {/* Quick Add Form Section (Collapsible) */}
+            {showAddForm ? (
+              <form onSubmit={handleAddSubmit} className="rounded-lg border border-purple-200 bg-purple-50/40 p-3 space-y-2.5 shrink-0 animate-in fade-in">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                    <Plus className="h-3.5 w-3.5 text-primary" />
+                    Cadastrar Novo Insumo na Barraca
+                  </span>
+                  <Button
                     type="button"
-                    onClick={() => setUnidade(p.val)}
-                    className={`px-2 py-0.5 rounded-full border transition-colors ${
-                      unidade === p.val
-                        ? 'bg-primary text-primary-foreground border-primary font-medium'
-                        : 'bg-background hover:bg-muted text-foreground border-border'
-                    }`}
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowAddForm(false)}
+                    className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+                    title="Fechar formulário"
                   >
-                    {p.label}
-                  </button>
-                ))}
-              </div>
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
 
-              <Button
-                type="submit"
-                disabled={isAdding || isPending || !nome.trim()}
-                className="w-full h-8 text-xs font-bold gap-1.5"
-              >
-                {isAdding || isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <>
-                    <Plus className="h-4 w-4" />
-                    Cadastrar Insumo na Barraca
-                  </>
-                )}
-              </Button>
-            </form>
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
+                  <div className="sm:col-span-5 space-y-1">
+                    <Label htmlFor="new-ing-name" className="text-xs font-medium">
+                      Nome do Insumo *
+                    </Label>
+                    <Input
+                      id="new-ing-name"
+                      placeholder="Ex: Pão de Hamburguer, Carne Smash..."
+                      value={nome}
+                      onChange={(e) => setNome(e.target.value)}
+                      required
+                      autoFocus
+                      className="h-8 text-xs bg-background"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-2 space-y-1">
+                    <Label htmlFor="new-ing-unit" className="text-xs font-medium">
+                      Unidade *
+                    </Label>
+                    <Input
+                      id="new-ing-unit"
+                      placeholder="un, fatias, g"
+                      value={unidade}
+                      onChange={(e) => setUnidade(e.target.value)}
+                      required
+                      className="h-8 text-xs bg-background"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-2 space-y-1">
+                    <Label htmlFor="new-ing-qty" className="text-xs font-medium">
+                      Estoque Inicial *
+                    </Label>
+                    <Input
+                      id="new-ing-qty"
+                      type="number"
+                      min="0"
+                      placeholder="100"
+                      value={quantidade}
+                      onChange={(e) => setQuantidade(e.target.value === '' ? '' : Number(e.target.value))}
+                      required
+                      className="h-8 text-xs font-mono bg-background"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-3 space-y-1">
+                    <Label htmlFor="new-ing-min" className="text-xs font-medium">
+                      Alerta Baixo (&le;)
+                    </Label>
+                    <Input
+                      id="new-ing-min"
+                      type="number"
+                      min="0"
+                      placeholder="10 (opcional)"
+                      value={estoqueMinimo}
+                      onChange={(e) => setEstoqueMinimo(e.target.value === '' ? '' : Number(e.target.value))}
+                      className="h-8 text-xs font-mono bg-background"
+                    />
+                  </div>
+                </div>
+
+                {/* Quick unit pills */}
+                <div className="flex items-center gap-1.5 flex-wrap text-[11px] text-muted-foreground pt-0.5">
+                  <span>Unidades comuns:</span>
+                  {COMMON_UNITS.map((p) => (
+                    <button
+                      key={p.val}
+                      type="button"
+                      onClick={() => setUnidade(p.val)}
+                      className={`px-2 py-0.5 rounded-full border transition-colors ${
+                        unidade === p.val
+                          ? 'bg-primary text-primary-foreground border-primary font-medium'
+                          : 'bg-background hover:bg-muted text-foreground border-border'
+                      }`}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowAddForm(false)}
+                    className="h-8 text-xs"
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    type="submit"
+                    disabled={isAdding || isPending || !nome.trim()}
+                    className="flex-1 h-8 text-xs font-bold gap-1.5"
+                  >
+                    {isAdding || isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <>
+                        <Plus className="h-4 w-4" />
+                        Cadastrar Insumo na Barraca
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </form>
+            ) : (
+              ingredients.length > 0 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowAddForm(true)}
+                  className="w-full h-8 text-xs font-semibold gap-1.5 border-dashed border-primary/40 text-primary hover:bg-primary/5 hover:border-primary shrink-0"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Cadastrar Novo Insumo na Barraca
+                </Button>
+              )
+            )}
           </TabsContent>
 
           {/* TAB 2: LOG DE AUDITORIA */}
@@ -860,8 +943,17 @@ export default function ManageIngredientsDialog({
               </div>
             </div>
 
-            {/* Scrollable Audit Log Entries */}
-            <ScrollArea className="flex-1 min-h-[300px] max-h-[58vh] rounded-lg border p-3 bg-muted/10">
+            {/* Scrollable Audit Log Entries with native high-visibility scrollbar */}
+            <div
+              tabIndex={0}
+              role="region"
+              aria-label="Histórico de auditoria de insumos"
+              className="flex-1 min-h-[260px] max-h-[58vh] overflow-y-auto overscroll-contain rounded-lg border p-3 bg-muted/10 space-y-2.5 touch-pan-y focus:outline-none focus:ring-1 focus:ring-primary/30 [&::-webkit-scrollbar]:w-2.5 [&::-webkit-scrollbar-track]:bg-muted/40 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-purple-300 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-purple-500 transition-colors"
+              style={{
+                scrollbarWidth: 'thin',
+                scrollbarColor: 'hsl(262 37% 55%) hsl(263 45% 94%)',
+              }}
+            >
               {logsLoading ? (
                 <div className="flex justify-center items-center py-16">
                   <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" />
@@ -1049,7 +1141,7 @@ export default function ManageIngredientsDialog({
                   })}
                 </div>
               )}
-            </ScrollArea>
+            </div>
           </TabsContent>
         </Tabs>
 
