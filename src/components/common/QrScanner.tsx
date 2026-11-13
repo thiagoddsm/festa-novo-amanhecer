@@ -38,7 +38,8 @@ function isIosOrSafari(): boolean {
   const ua = navigator.userAgent || '';
   const isIOS = /iPhone|iPad|iPod/i.test(ua);
   const isWebKit = /WebKit/i.test(ua) && !/Chrome|CriOS|Edg/i.test(ua);
-  return isIOS || isWebKit;
+  const isIPadOS = /Macintosh/i.test(ua) && (navigator.maxTouchPoints || 0) > 1;
+  return isIOS || isIPadOS || isWebKit;
 }
 
 /**
@@ -313,6 +314,12 @@ export function QrScanner({ onScanSuccess, onScanFailure }: QrScannerProps) {
 
       if (!isIos) {
         qrConfig.aspectRatio = 1.0;
+      } else {
+        const facing =
+          typeof cameraIdOrConfig === 'object' && (cameraIdOrConfig as any).facingMode === 'user'
+            ? 'user'
+            : 'environment';
+        qrConfig.videoConstraints = { facingMode: { ideal: facing } };
       }
 
       const handleSuccess = (decodedText: string) => {
@@ -358,8 +365,10 @@ export function QrScanner({ onScanSuccess, onScanFailure }: QrScannerProps) {
         // Ensure iOS WebKit playsinline immediately
         ensureVideoPlaysInline();
 
-        // Query available camera devices once permission is active
+        // IMPORTANT (iOS): never call getCameras() after the stream starts. It internally calls
+        // getUserMedia({video:true}) which on iOS grabs the FRONT camera and kills the rear stream.
         try {
+          if (isIosOrSafari()) throw new Error('skip-enumeration-on-ios');
           const refreshed: CameraInfo[] = await Html5Qrcode.getCameras();
           if (refreshed && refreshed.length > 0 && isMountedRef.current) {
             const sorted = sortCameras(refreshed);
