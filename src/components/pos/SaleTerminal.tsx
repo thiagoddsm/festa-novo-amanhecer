@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, extractCardQrCode } from '@/lib/utils';
 import type { Pdv, MenuItem, Card as CardType, PdvIngredient } from '@/lib/definitions';
 import { CheckCircle2, XCircle, Loader2, ShoppingCart, X, ArrowLeft, Trash2, Pencil, QrCode, MessageSquarePlus, MessageSquare, Camera, PackagePlus, AlertTriangle, ExternalLink, ChefHat, Tv, Clock, Flame, Zap, Smartphone, UserCheck, Plus, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -512,7 +512,7 @@ export default function SaleTerminal({
   };
 
   const validateAndSetCard = async (rawCode: string) => {
-    const code = rawCode.trim();
+    const code = extractCardQrCode(rawCode);
     if (!code) return;
     if (!firestore) return;
 

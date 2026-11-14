@@ -161,7 +161,18 @@ export default function HeroSection() {
         </div>
 
         {/* Primary CTAs below video */}
-        <div className="mt-7 sm:mt-8 flex flex-col sm:flex-row items-center justify-center gap-3 max-w-2xl mx-auto flex-wrap">
+        <div className="mt-7 sm:mt-8 flex flex-col sm:flex-row items-center justify-center gap-3 max-w-3xl mx-auto flex-wrap">
+          <Button
+            asChild
+            size="lg"
+            className="w-full sm:w-auto rounded-2xl bg-emerald-700 hover:bg-emerald-800 text-white font-black shadow-md shadow-emerald-700/20 text-sm h-12 px-6"
+          >
+            <Link href="/meu-cartao">
+              <CreditCard className="mr-2 h-4 w-4" />
+              Meu Cartão: Ver Saldo e Pedidos
+            </Link>
+          </Button>
+
           <Button
             asChild
             size="lg"

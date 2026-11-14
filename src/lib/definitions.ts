@@ -252,6 +252,10 @@ export type Order = {
   id: string;
   pdv_id: string;
   transaction_id: string;
+  /** ID do documento do cartão no Firestore (/cards/{cartao_id}) para acompanhamento automático pelo cliente */
+  cartao_id?: string;
+  /** Código QR do cartão para vínculo direto no Web App do Cliente */
+  qr_code_id?: string;
   cliente_nome: string;
   status: 'PENDENTE' | 'EM_PREPARO' | 'PRONTO' | 'ENTREGUE' | 'CANCELADO' | 'ARQUIVADO';
   created_at: Timestamp;

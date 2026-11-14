@@ -81,6 +81,51 @@ class SoundPlayer {
       console.warn('Audio playback not allowed or failed:', err);
     }
   }
+
+  /**
+   * Plays the ready chime, vibrates the device, and announces in clear Portuguese voice
+   * that the customer's order is ready for pickup (ideal for elderly accessibility).
+   */
+  announceOrderReady(pdvName: string, orderNumber?: string, enableVoice: boolean = true) {
+    this.playReadyChime();
+    setTimeout(() => this.playReadyChime(), 900);
+
+    try {
+      if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+        navigator.vibrate([350, 150, 350, 150, 500]);
+      }
+    } catch {
+      // ignore vibration restriction
+    }
+
+    if (!enableVoice) return;
+
+    try {
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        const cleanNum = orderNumber ? orderNumber.replace('#', '') : '';
+        const text = cleanNum
+          ? `Atenção! Seu pedido na barraca ${pdvName} ficou pronto! Senha ${cleanNum}. Pode retirar no balcão!`
+          : `Atenção! Seu pedido na barraca ${pdvName} ficou pronto! Pode retirar no balcão!`;
+
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'pt-BR';
+        utterance.rate = 0.92; // Slightly slower and clearer for elderly users
+        utterance.pitch = 1.0;
+        utterance.volume = 1.0;
+
+        setTimeout(() => {
+          try {
+            window.speechSynthesis.speak(utterance);
+          } catch {
+            // ignore
+          }
+        }, 700);
+      }
+    } catch {
+      // ignore speech synthesis errors
+    }
+  }
 }
 
 export const soundPlayer = new SoundPlayer();

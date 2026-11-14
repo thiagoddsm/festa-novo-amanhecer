@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, extractCardQrCode } from '@/lib/utils';
 import { Loader2, QrCode } from 'lucide-react';
 import QrScannerDialog from '../common/QrScannerDialog';
 import type { Card as CardType } from '@/lib/definitions';
@@ -42,7 +42,7 @@ export default function RechargeForm() {
   const [isPending, setIsPending] = useState(false);
 
   const handleScan = useCallback((data: string) => {
-    setQrCodeId(data);
+    setQrCodeId(extractCardQrCode(data));
     setIsScannerOpen(false);
   }, []);
 
@@ -66,7 +66,8 @@ export default function RechargeForm() {
     }
 
     try {
-      const { qr_code_id, valor_recarga } = validatedFields.data;
+      const { qr_code_id: rawQrCodeId, valor_recarga } = validatedFields.data;
+      const qr_code_id = extractCardQrCode(rawQrCodeId);
       const cardsRef = collection(firestore, 'cards');
       const q = query(cardsRef, where('qr_code_id', '==', qr_code_id));
       const querySnapshot = await getDocs(q);

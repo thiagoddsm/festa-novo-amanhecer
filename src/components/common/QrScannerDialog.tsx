@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Camera, CreditCard, ArrowRight, X } from 'lucide-react';
 import { QrScanner } from './QrScanner';
+import { extractCardQrCode } from '@/lib/utils';
 
 interface QrScannerDialogProps {
   open: boolean;
@@ -23,14 +24,14 @@ export default function QrScannerDialog({ open, onOpenChange, onScan }: QrScanne
   const [manualCode, setManualCode] = useState('');
 
   const handleScanSuccess = (decodedText: string) => {
-    onScan(decodedText.trim());
+    onScan(extractCardQrCode(decodedText));
     onOpenChange(false);
   };
 
   const handleManualSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (manualCode.trim()) {
-      onScan(manualCode.trim());
+      onScan(extractCardQrCode(manualCode));
       setManualCode('');
       onOpenChange(false);
     }

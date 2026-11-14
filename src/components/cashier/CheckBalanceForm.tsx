@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, extractCardQrCode } from '@/lib/utils';
 import type { Card as CardType } from '@/lib/definitions';
 import { Loader2, User, CircleAlert, Wallet, Hash, QrCode, Phone } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -46,7 +46,7 @@ export default function CheckBalanceForm() {
   }
 
   const handleScan = (data: string) => {
-    setQrCodeId(data);
+    setQrCodeId(extractCardQrCode(data));
     setIsScannerOpen(false);
     setTimeout(() => {
       formRef.current?.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
@@ -69,7 +69,8 @@ export default function CheckBalanceForm() {
     }
 
     try {
-      const { qr_code_id } = validatedFields.data;
+      const { qr_code_id: rawQrCodeId } = validatedFields.data;
+      const qr_code_id = extractCardQrCode(rawQrCodeId);
       const cardsRef = collection(firestore, 'cards');
       const q = query(cardsRef, where('qr_code_id', '==', qr_code_id));
       const querySnapshot = await getDocs(q);

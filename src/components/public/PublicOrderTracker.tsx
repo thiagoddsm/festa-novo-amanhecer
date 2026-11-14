@@ -545,6 +545,25 @@ export default function PublicOrderTracker({
 
       {/* Main Container */}
       <main className="flex-1 max-w-3xl w-full mx-auto p-4 sm:p-6 space-y-5">
+        {/* Banner Shortcut to Personal Wallet & Automatic Order Tracker */}
+        <Link
+          href="/meu-cartao"
+          className="block p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-emerald-700 to-teal-700 hover:from-emerald-600 hover:to-teal-600 border border-emerald-400/50 text-white shadow-lg transition-all"
+        >
+          <div className="flex items-center justify-between gap-3">
+            <div className="space-y-0.5">
+              <p className="text-xs sm:text-sm font-black uppercase tracking-wide flex items-center gap-1.5 text-emerald-100">
+                <Sparkles className="h-4 w-4 text-amber-300 shrink-0" />
+                <span>Novo: Meu Cartão Digital da Festa</span>
+              </p>
+              <p className="text-sm sm:text-base font-extrabold text-white leading-snug">
+                Toque aqui para ver seu SALDO, suas COMPRAS e seus PEDIDOS automaticamente!
+              </p>
+            </div>
+            <ChevronRight className="h-6 w-6 text-white shrink-0" />
+          </div>
+        </Link>
+
         {/* If no PDV selected, show Booth Selector */}
         {!selectedPdvId && (
           <div className="space-y-5 animate-in fade-in duration-300">

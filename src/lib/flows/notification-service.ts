@@ -357,7 +357,8 @@ export async function sendRechargeNotification(cardId: string, rechargeAmountCen
     }
 
     const greeting = pickGreeting(card.nome_cliente || 'cliente');
-    const message = `${greeting}!\n\nSua recarga${eventHeader} foi efetuada com sucesso. ✅\n\n*Valor da Recarga:* ${formatCurrency(rechargeAmountCents)}\n*Novo Saldo:* ${formatCurrency(card.saldo_centavos)}\n\n📍 *Acompanhe seus pedidos em tempo real:*\nhttps://festanovoamanhecer.com.br/igreja-batista-da-manha/pedidos${buildAntiSpamFooter()}`;
+    const cardUrl = `https://festanovoamanhecer.com.br/c/${encodeURIComponent(card.qr_code_id)}`;
+    const message = `${greeting}!\n\nSua recarga${eventHeader} foi efetuada com sucesso. ✅\n\n*Valor da Recarga:* ${formatCurrency(rechargeAmountCents)}\n*Novo Saldo:* ${formatCurrency(card.saldo_centavos)}\n\n📱 *Veja seu Saldo, Compras e Pedidos ao vivo:*\n${cardUrl}${buildAntiSpamFooter()}`;
 
     const res = await sendWithEventFailover(candidates, (inst, tok) =>
       sendEvolutionTextMessage(inst, card.telefone_cliente as string, message, tok)
@@ -392,9 +393,10 @@ export async function sendCardCreationNotification(cardId: string): Promise<Noti
     }
 
     const greeting = pickGreeting(card.nome_cliente);
-    const caption = `${greeting}! 🥳\n\n${eventWelcome}\nSeu cartão cashless foi criado com sucesso.\n\n*ID do Cartão:* \`${card.qr_code_id}\`\n*Saldo Inicial:* ${formatCurrency(card.saldo_centavos)}\n\nAcima está o seu QR Code para pagamentos. Guarde-o com segurança!\n\n📍 *Acompanhe seus pedidos em tempo real:*\nhttps://festanovoamanhecer.com.br/igreja-batista-da-manha/pedidos${buildAntiSpamFooter()}`;
+    const cardUrl = `https://festanovoamanhecer.com.br/c/${encodeURIComponent(card.qr_code_id)}`;
+    const caption = `${greeting}! 🥳\n\n${eventWelcome}\nSeu cartão cashless foi criado com sucesso.\n\n*ID do Cartão:* \`${card.qr_code_id}\`\n*Saldo Inicial:* ${formatCurrency(card.saldo_centavos)}\n\nAcima está o seu QR Code para pagamentos. Guarde-o com segurança!\n\n📱 *Toque no link abaixo para ver seu Saldo, Extrato e Pedidos ao vivo:*\n${cardUrl}${buildAntiSpamFooter()}`;
 
-    const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodeURIComponent(card.qr_code_id)}`;
+    const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(cardUrl)}`;
 
     // Send as 1 single media message (QR Code image + full welcome caption)
     const mediaRes = await sendWithEventFailover(candidates, async (inst, tok) => {

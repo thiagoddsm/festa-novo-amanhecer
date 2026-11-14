@@ -14,7 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2, QrCode, ArrowRightLeft } from 'lucide-react';
 import QrScannerDialog from '../common/QrScannerDialog';
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, extractCardQrCode } from '@/lib/utils';
 import type { Card as CardType } from '@/lib/definitions';
 
 
@@ -54,10 +54,11 @@ export default function TransferBalanceForm() {
   };
 
   const handleScan = useCallback((data: string) => {
+    const clean = extractCardQrCode(data);
     if (scannerTargetRef.current === 'origin') {
-      setOriginQr(data);
+      setOriginQr(clean);
     } else if (scannerTargetRef.current === 'destination') {
-      setDestQr(data);
+      setDestQr(clean);
     }
     setIsScannerOpen(false);
   }, []);
@@ -82,7 +83,9 @@ export default function TransferBalanceForm() {
     }
 
     try {
-        const { origin_qr_code_id, destination_qr_code_id, valor_transferencia } = validatedFields.data;
+        const { origin_qr_code_id: rawOrigin, destination_qr_code_id: rawDest, valor_transferencia } = validatedFields.data;
+        const origin_qr_code_id = extractCardQrCode(rawOrigin);
+        const destination_qr_code_id = extractCardQrCode(rawDest);
         const valor_centavos = valor_transferencia * 100;
         
         await runTransaction(firestore, async (transaction) => {

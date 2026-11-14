@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { Logo } from '@/components/layout/Logo';
 import { Button } from '@/components/ui/button';
-import { Shield, Menu, X, UserCheck, BellRing } from 'lucide-react';
+import { Shield, Menu, X, UserCheck, BellRing, Wallet } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth-context';
 
 export default function LandingNavbar() {
@@ -48,7 +48,18 @@ export default function LandingNavbar() {
         </nav>
 
         {/* Right Actions: Clean & Balanced */}
-        <div className="hidden sm:flex items-center gap-3">
+        <div className="hidden sm:flex items-center gap-2.5">
+          <Button
+            asChild
+            size="sm"
+            className="rounded-full bg-purple-700 hover:bg-purple-800 text-white shadow-xs text-xs font-bold gap-1.5 h-8.5 px-3.5"
+          >
+            <Link href="/meu-cartao">
+              <Wallet className="h-3.5 w-3.5 shrink-0" />
+              <span>Meu Cartão (Saldo e Pedidos)</span>
+            </Link>
+          </Button>
+
           <Button
             asChild
             size="sm"
@@ -57,7 +68,7 @@ export default function LandingNavbar() {
             <Link href="/igreja-batista-da-manha/pedidos">
               <span className="h-2 w-2 rounded-full bg-emerald-300 animate-ping shrink-0" />
               <BellRing className="h-3.5 w-3.5 shrink-0" />
-              <span>Acompanhar Pedido</span>
+              <span>Filas das Barracas</span>
             </Link>
           </Button>
 
@@ -100,13 +111,22 @@ export default function LandingNavbar() {
         <div className="md:hidden border-b border-slate-100 bg-white/98 px-4 pt-2 pb-4 shadow-lg backdrop-blur-md">
           <nav className="flex flex-col space-y-2">
             <Link
+              href="/meu-cartao"
+              onClick={() => setMobileMenuOpen(false)}
+              className="flex items-center gap-2 rounded-xl bg-purple-700 p-3 text-sm font-black text-white shadow-xs"
+            >
+              <Wallet className="h-4 w-4 shrink-0" />
+              <span>Meu Cartão: Ver Saldo, Compras e Pedidos</span>
+            </Link>
+
+            <Link
               href="/igreja-batista-da-manha/pedidos"
               onClick={() => setMobileMenuOpen(false)}
               className="flex items-center gap-2 rounded-xl bg-emerald-600 p-2.5 text-xs font-bold text-white shadow-xs"
             >
               <span className="h-2 w-2 rounded-full bg-emerald-300 animate-ping" />
               <BellRing className="h-4 w-4" />
-              <span>Acompanhar Meu Pedido ao Vivo</span>
+              <span>Painel Geral de Filas das Barracas</span>
             </Link>
 
             {navLinks.map((link) => (

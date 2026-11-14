@@ -2,7 +2,7 @@
 
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, buildCardAppUrl } from '@/lib/utils';
 import { Printer } from 'lucide-react';
 import type { Card } from '@/lib/definitions';
 import { toDataURL as generateQrCodeDataUrl } from 'qrcode';
@@ -23,11 +23,12 @@ export default function ReprintQrButton({ card }: { card: Card }) {
     }
 
     try {
+      const qrPayload = buildCardAppUrl(card.qr_code_id, 'https://festanovoamanhecer.com.br');
       // Generate QR code data URL asynchronously
-      const qrCodeDataUrl = await generateQrCodeDataUrl(card.qr_code_id, {
-        errorCorrectionLevel: 'H',
+      const qrCodeDataUrl = await generateQrCodeDataUrl(qrPayload, {
+        errorCorrectionLevel: 'M',
         margin: 2,
-        width: 128,
+        width: 148,
       });
 
       // Now write the content to the opened window
@@ -55,6 +56,7 @@ export default function ReprintQrButton({ card }: { card: Card }) {
               .content {
                 text-align: center;
                 break-inside: avoid;
+                max-width: 220px;
               }
               .qr-id {
                 font-family: monospace;
@@ -75,6 +77,14 @@ export default function ReprintQrButton({ card }: { card: Card }) {
                 font-size: 20px;
                 font-weight: 700;
               }
+              .qr-hint {
+                font-size: 10px;
+                font-weight: 600;
+                margin-top: 8px;
+                padding-top: 6px;
+                border-top: 1px dashed #000;
+                line-height: 1.3;
+              }
             </style>
           </head>
           <body onload="window.print(); window.close();">
@@ -84,6 +94,7 @@ export default function ReprintQrButton({ card }: { card: Card }) {
               <div class="qr-id">${card.qr_code_id}</div>
               <div class="balance-label">Saldo Atual</div>
               <div class="balance-value">${formatCurrency(card.saldo_centavos ?? 0)}</div>
+              <div class="qr-hint">Aponte a câmera do celular para ver seu SALDO e PEDIDOS ao vivo</div>
             </div>
           </body>
         </html>

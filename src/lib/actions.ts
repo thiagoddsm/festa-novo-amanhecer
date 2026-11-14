@@ -36,6 +36,7 @@ import {
   arrayUnion as clientArrayUnion,
 } from 'firebase/firestore';
 import { firebaseConfig } from '@/firebase/config';
+import { extractCardQrCode } from '@/lib/utils';
 
 const PROJECT_ID = process.env.FIREBASE_PROJECT_ID || process.env.GCLOUD_PROJECT || 'fiscalflow-zetbu';
 
@@ -157,7 +158,8 @@ export async function processSale(
             };
         }
 
-        const { qr_code_id, pdv_id, pdv_nome, total_venda: valor_venda_centavos, usuario_responsavel, tenant_id, event_id, responsavel_preparo } = validatedFields.data;
+        const { qr_code_id: raw_qr_code_id, pdv_id, pdv_nome, total_venda: valor_venda_centavos, usuario_responsavel, tenant_id, event_id, responsavel_preparo } = validatedFields.data;
+        const qr_code_id = extractCardQrCode(raw_qr_code_id);
 
         // Query card first to get document ID
         const cardsRef = clientCollection(db, 'cards');
@@ -336,6 +338,8 @@ export async function processSale(
                 pdv_id: pdv_id,
                 pdv_nome: pdv_nome,
                 transaction_id: transactionRef.id,
+                cartao_id: cardDoc.id,
+                qr_code_id: card.qr_code_id,
                 cliente_nome: card.nome_cliente || 'Cliente',
                 status: initialOrderStatus,
                 created_at: now,
