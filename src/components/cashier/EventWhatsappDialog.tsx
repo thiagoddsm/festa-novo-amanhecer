@@ -56,20 +56,25 @@ export default function EventWhatsappDialog({
 }: EventWhatsappDialogProps) {
   const { toast } = useToast();
 
+  // slot 0 = principal; 1..N = backups (usados automaticamente se a principal cair)
+  const [slot, setSlot] = useState<number>(0);
+  const slotConfig = slot === 0 ? event.whatsapp : event.whatsapp_backups?.[String(slot)];
+  const slotLabel = slot === 0 ? 'Principal' : `Backup ${slot}`;
+
   const defaultSuggestedInstance = getPdvInstanceName(
     tenantName,
     event.name,
-    'caixa'
+    slot === 0 ? 'caixa' : `caixa_backup${slot}`
   );
 
   const [status, setStatus] = useState<'DISCONNECTED' | 'CONNECTING' | 'CONNECTED' | 'ERROR'>(
-    event.whatsapp?.status || 'DISCONNECTED'
+    slotConfig?.status || 'DISCONNECTED'
   );
-  const [phoneNumber, setPhoneNumber] = useState<string | undefined>(event.whatsapp?.phoneNumber);
-  const [instanceName, setInstanceName] = useState<string | undefined>(event.whatsapp?.instanceName);
+  const [phoneNumber, setPhoneNumber] = useState<string | undefined>(slotConfig?.phoneNumber);
+  const [instanceName, setInstanceName] = useState<string | undefined>(slotConfig?.instanceName);
 
   const [activeTab, setActiveTab] = useState<'PAIRING' | 'QR'>('PAIRING');
-  const [inputPhone, setInputPhone] = useState<string>(event.whatsapp?.phoneNumber || '');
+  const [inputPhone, setInputPhone] = useState<string>(slotConfig?.phoneNumber || '');
 
   const [qrBase64, setQrBase64] = useState<string | null>(null);
   const [qrCodeString, setQrCodeString] = useState<string | null>(null);
@@ -81,30 +86,43 @@ export default function EventWhatsappDialog({
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const [customInstanceName, setCustomInstanceName] = useState<string>(
-    event.whatsapp?.instanceName || defaultSuggestedInstance
+    slotConfig?.instanceName || defaultSuggestedInstance
   );
   const [customToken, setCustomToken] = useState<string>(
-    event.whatsapp?.token || ''
+    slotConfig?.token || ''
   );
   const [showAdvanced, setShowAdvanced] = useState<boolean>(false);
 
-  // Sync state when event prop updates
+  // Sync state when event prop updates or the selected slot changes
   useEffect(() => {
-    if (event.whatsapp) {
-      setStatus(event?.whatsapp?.status || 'DISCONNECTED');
-      setPhoneNumber(event.whatsapp.phoneNumber);
-      setInstanceName(event.whatsapp.instanceName);
-      if (event.whatsapp.phoneNumber) setInputPhone(event.whatsapp.phoneNumber);
-      if (event.whatsapp.instanceName) {
-        setCustomInstanceName(event.whatsapp.instanceName);
-      } else {
-        setCustomInstanceName(defaultSuggestedInstance);
-      }
-      if (event.whatsapp.token) setCustomToken(event.whatsapp.token);
+    if (slotConfig) {
+      setStatus(slotConfig.status || 'DISCONNECTED');
+      setPhoneNumber(slotConfig.phoneNumber);
+      setInstanceName(slotConfig.instanceName);
+      setInputPhone(slotConfig.phoneNumber || '');
+      setCustomInstanceName(slotConfig.instanceName || defaultSuggestedInstance);
+      setCustomToken(slotConfig.token || '');
     } else {
+      setStatus('DISCONNECTED');
+      setPhoneNumber(undefined);
+      setInstanceName(undefined);
+      setInputPhone('');
       setCustomInstanceName(defaultSuggestedInstance);
+      setCustomToken('');
     }
-  }, [event, defaultSuggestedInstance]);
+  }, [event, slot, defaultSuggestedInstance]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleSelectSlot = (next: number) => {
+    if (next === slot) return;
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+    setQrBase64(null);
+    setQrCodeString(null);
+    setPairingCode(null);
+    setSlot(next);
+  };
 
   // Clean polling on unmount or close
   const stopPolling = useCallback(() => {
@@ -126,7 +144,7 @@ export default function EventWhatsappDialog({
       stopPolling();
       pollIntervalRef.current = setInterval(async () => {
         try {
-          const res = await checkEventWhatsappStatus(tenantId, event.id, targetInstance, targetToken);
+          const res = await checkEventWhatsappStatus(tenantId, event.id, targetInstance, targetToken, slot);
           if (res?.status === 'CONNECTED') {
             setStatus('CONNECTED');
             setPhoneNumber(res.phoneNumber);
@@ -150,7 +168,7 @@ export default function EventWhatsappDialog({
         }
       }, 3000);
     },
-    [tenantId, event.id, event.name, status, stopPolling, toast, onStatusChange]
+    [tenantId, event.id, event.name, slot, status, stopPolling, toast, onStatusChange]
   );
 
   // Trigger Connect
@@ -179,7 +197,8 @@ export default function EventWhatsappDialog({
         targetInst,
         targetTok,
         mode === 'PAIRING' ? inputPhone.trim() : undefined,
-        mode
+        mode,
+        slot
       );
 
       if (res.success) {
@@ -233,7 +252,7 @@ export default function EventWhatsappDialog({
 
     setIsDisconnecting(true);
     try {
-      const res = await disconnectEventWhatsapp(tenantId, event.id, inst, customToken.trim() || undefined);
+      const res = await disconnectEventWhatsapp(tenantId, event.id, inst, customToken.trim() || undefined, slot);
       if (res?.status === 'success') {
         setStatus('DISCONNECTED');
         setPhoneNumber(undefined);
@@ -266,6 +285,27 @@ export default function EventWhatsappDialog({
           </DialogDescription>
         </DialogHeader>
 
+        {/* Instance slot selector: Principal + Backups */}
+        <div className="shrink-0 flex items-center gap-1.5 p-1 bg-muted rounded-xl">
+          {[0, 1, 2].map((n) => {
+            const cfg = n === 0 ? event.whatsapp : event.whatsapp_backups?.[String(n)];
+            const connected = cfg?.status === 'CONNECTED';
+            return (
+              <button
+                key={n}
+                type="button"
+                onClick={() => handleSelectSlot(n)}
+                className={`flex-1 px-2 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                  slot === n ? 'bg-background text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <span className={`h-2 w-2 rounded-full ${connected ? 'bg-green-500' : 'bg-muted-foreground/40'}`} />
+                {n === 0 ? 'Principal' : `Backup ${n}`}
+              </button>
+            );
+          })}
+        </div>
+
         {/* Scrollable Body */}
         <div className="flex-1 overflow-y-auto pr-1 space-y-3 py-1">
           {/* Status Section */}
@@ -273,7 +313,7 @@ export default function EventWhatsappDialog({
             <div className="flex items-center gap-2 min-w-0">
               <Smartphone className="h-4 w-4 text-muted-foreground shrink-0" />
               <div className="min-w-0">
-                <p className="text-xs font-semibold truncate">{event.name} (Caixa Central)</p>
+                <p className="text-xs font-semibold truncate">{event.name} (Caixa Central) — {slotLabel}</p>
                 {phoneNumber ? (
                   <p className="text-[11px] text-muted-foreground font-mono truncate">{phoneNumber}</p>
                 ) : (
@@ -315,9 +355,9 @@ export default function EventWhatsappDialog({
             <div className="p-2.5 rounded-lg border bg-blue-50/70 border-blue-200 text-xs text-blue-900 flex items-start gap-2">
               <ShieldCheck className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
               <div>
-                <p className="font-semibold text-blue-950">Envio Garantido: Fallback IBM Ativo</p>
+                <p className="font-semibold text-blue-950">Envio Garantido: Failover Automático</p>
                 <p className="text-[11px] text-blue-800 leading-tight mt-0.5">
-                  Mesmo enquanto o WhatsApp exclusivo deste evento não estiver pareado, todas as mensagens de novos cartões e comprovantes continuam sendo enviadas automaticamente pelo número central da igreja (IBM).
+                  Se a instância Principal cair ou o número for bloqueado, o sistema passa automaticamente para o Backup 1, depois para o Backup 2. Só em último caso usa o número central da igreja (IBM).
                 </p>
               </div>
             </div>

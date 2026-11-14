@@ -204,9 +204,12 @@ const OrderCard = ({ order, equipePreparo }: { order: Order; equipePreparo: stri
         });
     };
 
+    const isMobileDevice = useIsMobile();
     const [{ isDragging }, drag] = useDrag(() => ({
         type: ItemTypes.ORDER,
         item: { id: order.id, status: order.status },
+        // On phones the cards have explicit buttons; dragging would hijack touch scroll
+        canDrag: () => !isMobileDevice,
         end: (item, monitor) => {
             const dropResult = monitor.getDropResult<{ status: OrderStatus }>();
             if (item && dropResult) {
@@ -226,7 +229,7 @@ const OrderCard = ({ order, equipePreparo }: { order: Order; equipePreparo: stri
     <Card
         ref={(node) => { drag(node); }}
         className={cn(
-            "cursor-grab bg-card active:cursor-grabbing border shadow-xs hover:shadow-md transition-shadow",
+            "cursor-grab bg-card active:cursor-grabbing border shadow-xs hover:shadow-md transition-shadow touch-pan-y",
             isDragging ? 'opacity-50' : 'opacity-100',
             isPending ? 'opacity-60 pointer-events-none' : ''
         )}
@@ -714,7 +717,7 @@ export default function OrderKanban({ pdvId }: { pdvId: string }) {
     const backend = isMobile ? TouchBackend : HTML5Backend;
 
     return (
-        <DndProvider backend={backend} options={{ enableMouseEvents: !isMobile }}>
+        <DndProvider backend={backend} options={isMobile ? { enableMouseEvents: false, enableTouchEvents: false } : { enableMouseEvents: true }}>
             <KanbanBoard pdvId={pdvId} />
         </DndProvider>
     );

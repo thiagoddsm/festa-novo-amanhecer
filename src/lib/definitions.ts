@@ -69,6 +69,8 @@ export type TenantEvent = {
   date?: Timestamp;
   active?: boolean;
   whatsapp?: PdvWhatsappConfig;
+  /** Instâncias de backup do caixa (chave = slot "1", "2"...). Usadas em ordem se a principal cair. */
+  whatsapp_backups?: Record<string, PdvWhatsappConfig>;
 };
 
 // ---------------------------------------------------------------------------
@@ -263,7 +265,7 @@ export type Order = {
   responsavel_preparo?: string;
 
   /** Idempotência e Auditoria de Notificação WhatsApp */
-  notification_status?: 'PENDING' | 'SENDING' | 'SENT' | 'FAILED';
+  notification_status?: 'PENDING' | 'SENDING' | 'SENT' | 'FAILED' | 'SKIPPED';
   notification_route?: 'PDV' | 'EVENT_FALLBACK';
   notification_error?: string;
   notified_at?: Timestamp;

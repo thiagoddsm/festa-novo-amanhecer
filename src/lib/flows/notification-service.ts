@@ -109,9 +109,9 @@ export async function sendOrderReadyNotification(orderId: string): Promise<Notif
     const clientName = card.nome_cliente ? `, ${card.nome_cliente}` : '';
     const message = `Olá${clientName}! 👋\n\nSeu pedido *${order.order_number}* feito em *${order.pdv_nome}* está pronto para retirada! 😋\n\nPor favor, dirija-se ao balcão para retirar.`;
 
-    // 3. Routing: Attempt PDV Instance -> Fallback to Event Instance (IBM)
-    let route: 'PDV' | 'EVENT_FALLBACK' = 'EVENT_FALLBACK';
-    let instanceToUse = DEFAULT_FALLBACK_INSTANCE;
+    // 3. Routing: EXCLUSIVELY the WhatsApp instance connected to the PDV.
+    // If the PDV has no connected instance, no notification is sent (no fallback).
+    const route: 'PDV' | 'EVENT_FALLBACK' = 'PDV';
     let pdvWhatsappInstance: string | null = null;
     let pdvWhatsappToken: string | undefined = undefined;
 
@@ -128,42 +128,33 @@ export async function sendOrderReadyNotification(orderId: string): Promise<Notif
       }
     }
 
-    let sendSuccess = false;
-    let lastError: string | undefined;
-
-    // Check if PDV instance is actually open in Evolution API
-    if (pdvWhatsappInstance) {
-      const connectionCheck = await getEvolutionConnectionState(pdvWhatsappInstance, pdvWhatsappToken);
-      if (connectionCheck.state === 'open') {
-        const pdvResult = await sendEvolutionTextMessage(pdvWhatsappInstance, card.telefone_cliente, message, pdvWhatsappToken);
-        if (pdvResult.success) {
-          sendSuccess = true;
-          route = 'PDV';
-          instanceToUse = pdvWhatsappInstance;
-        } else {
-          lastError = pdvResult.error;
-          console.warn(`[NotificationService] PDV instance send failed. Attempting fallback to ${DEFAULT_FALLBACK_INSTANCE}:`, pdvResult.error);
-        }
-      } else {
-        // PDV was offline in Evolution -> sync local status
-        if (order.pdv_id) {
-          await updateDoc(doc(db, 'pdvs', order.pdv_id), {
-            'whatsapp.status': 'DISCONNECTED',
-            'whatsapp.updatedAt': Timestamp.now(),
-          }).catch(() => {});
-        }
-      }
+    if (!pdvWhatsappInstance) {
+      await updateDoc(orderRef, {
+        notification_status: 'SKIPPED',
+        notification_error: 'PDV sem WhatsApp conectado. Notificação não enviada.',
+      });
+      return { success: false, error: 'PDV sem WhatsApp conectado.' };
     }
 
-    // 4. Fallback execution if PDV was unavailable or failed
-    if (!sendSuccess) {
-      const fallbackResult = await sendEvolutionTextMessage(DEFAULT_FALLBACK_INSTANCE, card.telefone_cliente, message);
-      if (fallbackResult.success) {
+    let sendSuccess = false;
+    let lastError: string | undefined;
+    const instanceToUse = pdvWhatsappInstance;
+
+    const connectionCheck = await getEvolutionConnectionState(pdvWhatsappInstance, pdvWhatsappToken);
+    if (connectionCheck.state === 'open') {
+      const pdvResult = await sendEvolutionTextMessage(pdvWhatsappInstance, card.telefone_cliente, message, pdvWhatsappToken);
+      if (pdvResult.success) {
         sendSuccess = true;
-        route = 'EVENT_FALLBACK';
-        instanceToUse = DEFAULT_FALLBACK_INSTANCE;
       } else {
-        lastError = fallbackResult.error;
+        lastError = pdvResult.error;
+      }
+    } else {
+      lastError = 'WhatsApp do PDV desconectado. Notificação não enviada.';
+      if (order.pdv_id) {
+        await updateDoc(doc(db, 'pdvs', order.pdv_id), {
+          'whatsapp.status': 'DISCONNECTED',
+          'whatsapp.updatedAt': Timestamp.now(),
+        }).catch(() => {});
       }
     }
 
@@ -180,7 +171,7 @@ export async function sendOrderReadyNotification(orderId: string): Promise<Notif
     } else {
       await updateDoc(orderRef, {
         notification_status: 'FAILED',
-        notification_error: lastError || 'Falha no envio em todas as instâncias.',
+        notification_error: lastError || 'Falha no envio pela instância do PDV.',
       });
       return { success: false, error: lastError };
     }
@@ -196,18 +187,20 @@ export async function sendOrderReadyNotification(orderId: string): Promise<Notif
   }
 }
 
+type WppCandidate = { instance: string; token?: string };
+
 /**
- * Helper to resolve the WhatsApp instance and names for an Event / Tenant.
+ * Resolves the event names and the ordered list of Caixa WhatsApp instances:
+ * principal first, then backups (slot 1, 2, ...).
  */
 async function resolveEventWhatsapp(
   db: any,
   tenantId?: string | null,
   eventId?: string | null
-): Promise<{ instance: string; token?: string; orgName: string; eventName: string }> {
+): Promise<{ candidates: WppCandidate[]; orgName: string; eventName: string }> {
   let orgName = '';
   let eventName = '';
-  let instance = DEFAULT_FALLBACK_INSTANCE;
-  let token: string | undefined = undefined;
+  const candidates: WppCandidate[] = [];
 
   if (tenantId) {
     try {
@@ -218,10 +211,16 @@ async function resolveEventWhatsapp(
         if (eSnap.exists()) {
           const eData = eSnap.data() as TenantEvent;
           eventName = eData.name || '';
-          if (eData.whatsapp && eData.whatsapp.status === 'CONNECTED' && eData.whatsapp.instanceName) {
-            instance = eData.whatsapp.instanceName;
-            token = eData.whatsapp.token;
+          if (eData.whatsapp?.instanceName) {
+            candidates.push({ instance: eData.whatsapp.instanceName, token: eData.whatsapp.token });
           }
+          const backups = eData.whatsapp_backups || {};
+          Object.keys(backups)
+            .sort((x, y) => Number(x) - Number(y))
+            .forEach((k) => {
+              const cfg = backups[k];
+              if (cfg?.instanceName) candidates.push({ instance: cfg.instanceName, token: cfg.token });
+            });
         }
       }
     } catch (e) {
@@ -229,7 +228,41 @@ async function resolveEventWhatsapp(
     }
   }
 
-  return { instance, token, orgName, eventName };
+  return { candidates, orgName, eventName };
+}
+
+/**
+ * Tries each Caixa instance in order (principal -> backups). An instance is skipped when
+ * it is not connected ('open') or when sending fails. Last resort: default IBM instance.
+ */
+async function sendWithEventFailover(
+  candidates: WppCandidate[],
+  send: (instance: string, token?: string) => Promise<{ success: boolean; error?: string }>
+): Promise<{ success: boolean; error?: string; instanceUsed?: string }> {
+  let lastError: string | undefined;
+
+  for (const c of candidates) {
+    try {
+      const state = await getEvolutionConnectionState(c.instance, c.token);
+      if (state.state !== 'open') {
+        lastError = `Instância ${c.instance} desconectada.`;
+        continue;
+      }
+      const res = await send(c.instance, c.token);
+      if (res.success) return { success: true, instanceUsed: c.instance };
+      lastError = res.error;
+      console.warn(`[NotificationService] Instance ${c.instance} failed, trying next backup:`, res.error);
+    } catch (e) {
+      lastError = e instanceof Error ? e.message : 'Erro desconhecido.';
+    }
+  }
+
+  const fallback = await send(DEFAULT_FALLBACK_INSTANCE, undefined);
+  return {
+    success: fallback.success,
+    error: fallback.success ? undefined : fallback.error || lastError,
+    instanceUsed: DEFAULT_FALLBACK_INSTANCE,
+  };
 }
 
 /**
@@ -244,7 +277,7 @@ export async function sendRechargeNotification(cardId: string, rechargeAmountCen
     const card = cardSnap.data() as Card;
     if (!card.telefone_cliente) return { success: true };
 
-    const { instance, token, orgName, eventName } = await resolveEventWhatsapp(db, card.tenant_id, card.event_id);
+    const { candidates, orgName, eventName } = await resolveEventWhatsapp(db, card.tenant_id, card.event_id);
 
     let eventHeader = '';
     if (eventName) {
@@ -253,8 +286,10 @@ export async function sendRechargeNotification(cardId: string, rechargeAmountCen
 
     const message = `Olá, ${card.nome_cliente || 'cliente'}!\n\nSua recarga${eventHeader} foi efetuada com sucesso. ✅\n\n*Valor da Recarga:* ${formatCurrency(rechargeAmountCents)}\n*Novo Saldo:* ${formatCurrency(card.saldo_centavos)}`;
 
-    const res = await sendEvolutionTextMessage(instance, card.telefone_cliente, message, token);
-    return { success: res.success, error: res.error, instanceUsed: instance };
+    const res = await sendWithEventFailover(candidates, (inst, tok) =>
+      sendEvolutionTextMessage(inst, card.telefone_cliente as string, message, tok)
+    );
+    return { success: res.success, error: res.error, instanceUsed: res.instanceUsed };
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Erro ao enviar comprovante de recarga.';
     return { success: false, error: msg };
@@ -273,7 +308,7 @@ export async function sendCardCreationNotification(cardId: string): Promise<Noti
     const card = cardSnap.data() as Card;
     if (!card.telefone_cliente) return { success: true };
 
-    const { instance, token, orgName, eventName } = await resolveEventWhatsapp(db, card.tenant_id, card.event_id);
+    const { candidates, orgName, eventName } = await resolveEventWhatsapp(db, card.tenant_id, card.event_id);
 
     let eventWelcome = 'Bem-vindo(a) ao FestaPay!';
     if (eventName) {
@@ -287,10 +322,22 @@ export async function sendCardCreationNotification(cardId: string): Promise<Noti
 
     const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodeURIComponent(card.qr_code_id)}`;
 
-    await sendEvolutionTextMessage(instance, card.telefone_cliente, message, token);
-    await sendEvolutionMediaMessage(instance, card.telefone_cliente, qrImageUrl, 'Seu QR Code de Pagamento', token);
+    const textRes = await sendWithEventFailover(candidates, (inst, tok) =>
+      sendEvolutionTextMessage(inst, card.telefone_cliente as string, message, tok)
+    );
+    if (textRes.success && textRes.instanceUsed) {
+      // Send the QR image through the same instance that delivered the text
+      const used = candidates.find((c) => c.instance === textRes.instanceUsed);
+      await sendEvolutionMediaMessage(
+        textRes.instanceUsed,
+        card.telefone_cliente,
+        qrImageUrl,
+        'Seu QR Code de Pagamento',
+        used?.token
+      );
+    }
 
-    return { success: true, instanceUsed: instance };
+    return { success: textRes.success, error: textRes.error, instanceUsed: textRes.instanceUsed };
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Erro ao enviar boas-vindas.';
     return { success: false, error: msg };
@@ -309,12 +356,14 @@ export async function sendSaleNotification(cardId: string, saleAmountCents: numb
     const card = cardSnap.data() as Card;
     if (!card.telefone_cliente) return { success: true };
 
-    const { instance, token } = await resolveEventWhatsapp(db, card.tenant_id, card.event_id);
+    const { candidates } = await resolveEventWhatsapp(db, card.tenant_id, card.event_id);
 
     const message = `Nova compra realizada no FestaPay! 🛍️\n\n*Local:* ${pdvName}\n*Valor:* -${formatCurrency(saleAmountCents)}\n*Saldo Restante:* ${formatCurrency(card.saldo_centavos)}\n\nObrigado!`;
 
-    const res = await sendEvolutionTextMessage(instance, card.telefone_cliente, message, token);
-    return { success: res.success, error: res.error, instanceUsed: instance };
+    const res = await sendWithEventFailover(candidates, (inst, tok) =>
+      sendEvolutionTextMessage(inst, card.telefone_cliente as string, message, tok)
+    );
+    return { success: res.success, error: res.error, instanceUsed: res.instanceUsed };
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Erro ao enviar comprovante de compra.';
     return { success: false, error: msg };
@@ -333,12 +382,14 @@ export async function sendReversalNotification(cardId: string, reversalAmountCen
     const card = cardSnap.data() as Card;
     if (!card.telefone_cliente) return { success: true };
 
-    const { instance, token } = await resolveEventWhatsapp(db, card.tenant_id, card.event_id);
+    const { candidates } = await resolveEventWhatsapp(db, card.tenant_id, card.event_id);
 
     const message = `Atenção, ${card.nome_cliente || 'cliente'}!\n\nUma transação foi estornada e seu saldo foi ajustado.\n\n*Valor do Estorno:* ${formatCurrency(reversalAmountCents)}\n*Novo Saldo:* ${formatCurrency(card.saldo_centavos)}\n\nEm caso de dúvidas, procure o caixa central.`;
 
-    const res = await sendEvolutionTextMessage(instance, card.telefone_cliente, message, token);
-    return { success: res.success, error: res.error, instanceUsed: instance };
+    const res = await sendWithEventFailover(candidates, (inst, tok) =>
+      sendEvolutionTextMessage(inst, card.telefone_cliente as string, message, tok)
+    );
+    return { success: res.success, error: res.error, instanceUsed: res.instanceUsed };
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Erro ao enviar aviso de estorno.';
     return { success: false, error: msg };

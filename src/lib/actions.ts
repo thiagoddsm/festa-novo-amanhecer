@@ -1453,13 +1453,23 @@ export async function disconnectPdvWhatsapp(
 }
 
 // --- Event / Caixa WhatsApp Management ---
+// slot 0 = instância principal (campo "whatsapp"); slot 1..N = backups (campo "whatsapp_backups.<slot>").
+function eventWppPrefix(slot: number): string {
+  return slot > 0 ? `whatsapp_backups.${slot}` : 'whatsapp';
+}
+
+function eventWppConfig(eventData: TenantEvent, slot: number) {
+  return slot > 0 ? eventData.whatsapp_backups?.[String(slot)] : eventData.whatsapp;
+}
+
 export async function connectEventWhatsapp(
   tenantId: string,
   eventId: string,
   customInstanceName?: string,
   customToken?: string,
   phoneNumber?: string,
-  mode: 'QR' | 'PAIRING' = 'QR'
+  mode: 'QR' | 'PAIRING' = 'QR',
+  slot: number = 0
 ): Promise<{
   success: boolean;
   instanceName?: string;
@@ -1482,13 +1492,15 @@ export async function connectEventWhatsapp(
     const eventData = eventSnap.data() as TenantEvent;
     const tSnap = await clientGetDoc(clientDoc(db, 'tenants', tenantId)).catch(() => null);
     const orgName = tSnap && tSnap.exists() ? tSnap.data().name : tenantId;
+    const prefix = eventWppPrefix(slot);
+    const currentCfg = eventWppConfig(eventData, slot);
 
     const instanceName =
       customInstanceName?.trim() ||
-      eventData.whatsapp?.instanceName ||
-      getPdvInstanceName(orgName, eventData.name, 'caixa');
+      currentCfg?.instanceName ||
+      getPdvInstanceName(orgName, eventData.name, slot > 0 ? `caixa_backup${slot}` : 'caixa');
 
-    const token = customToken?.trim() || eventData.whatsapp?.token;
+    const token = customToken?.trim() || currentCfg?.token;
 
     let qrResult: {
       success: boolean;
@@ -1516,23 +1528,23 @@ export async function connectEventWhatsapp(
 
     if (!qrResult.success) {
       await clientUpdateDoc(eventRef, {
-        'whatsapp.status': 'ERROR',
-        'whatsapp.instanceName': instanceName,
-        ...(token ? { 'whatsapp.token': token } : {}),
-        'whatsapp.lastError': qrResult.error,
-        'whatsapp.updatedAt': ClientTimestamp.now(),
+        [`${prefix}.status`]: 'ERROR',
+        [`${prefix}.instanceName`]: instanceName,
+        ...(token ? { [`${prefix}.token`]: token } : {}),
+        [`${prefix}.lastError`]: qrResult.error,
+        [`${prefix}.updatedAt`]: ClientTimestamp.now(),
       }).catch(() => {});
 
       return { success: false, instanceName, error: qrResult.error };
     }
 
     await clientUpdateDoc(eventRef, {
-      'whatsapp.enabled': true,
-      'whatsapp.instanceName': instanceName,
-      ...(token ? { 'whatsapp.token': token } : {}),
-      ...(phoneNumber ? { 'whatsapp.phoneNumber': formatWhatsAppNumber(phoneNumber) } : {}),
-      'whatsapp.status': qrResult.state === 'open' ? 'CONNECTED' : 'CONNECTING',
-      'whatsapp.updatedAt': ClientTimestamp.now(),
+      [`${prefix}.enabled`]: true,
+      [`${prefix}.instanceName`]: instanceName,
+      ...(token ? { [`${prefix}.token`]: token } : {}),
+      ...(phoneNumber ? { [`${prefix}.phoneNumber`]: formatWhatsAppNumber(phoneNumber) } : {}),
+      [`${prefix}.status`]: qrResult.state === 'open' ? 'CONNECTED' : 'CONNECTING',
+      [`${prefix}.updatedAt`]: ClientTimestamp.now(),
     });
 
     return {
@@ -1553,7 +1565,8 @@ export async function checkEventWhatsappStatus(
   tenantId: string,
   eventId: string,
   instanceName: string,
-  token?: string
+  token?: string,
+  slot: number = 0
 ): Promise<{
   status: 'CONNECTED' | 'CONNECTING' | 'DISCONNECTED' | 'ERROR';
   phoneNumber?: string;
@@ -1565,25 +1578,26 @@ export async function checkEventWhatsappStatus(
   try {
     const stateResult = await getEvolutionConnectionState(instanceName, token);
     const eventRef = clientDoc(db, 'tenants', tenantId, 'events', eventId);
+    const prefix = eventWppPrefix(slot);
 
     if (stateResult.state === 'open') {
       await clientUpdateDoc(eventRef, {
-        'whatsapp.status': 'CONNECTED',
-        'whatsapp.phoneNumber': stateResult.phoneNumber || null,
-        'whatsapp.lastConnectedAt': ClientTimestamp.now(),
-        'whatsapp.updatedAt': ClientTimestamp.now(),
+        [`${prefix}.status`]: 'CONNECTED',
+        [`${prefix}.phoneNumber`]: stateResult.phoneNumber || null,
+        [`${prefix}.lastConnectedAt`]: ClientTimestamp.now(),
+        [`${prefix}.updatedAt`]: ClientTimestamp.now(),
       });
       return { status: 'CONNECTED', phoneNumber: stateResult.phoneNumber };
     } else if (stateResult.state === 'connecting') {
       await clientUpdateDoc(eventRef, {
-        'whatsapp.status': 'CONNECTING',
-        'whatsapp.updatedAt': ClientTimestamp.now(),
+        [`${prefix}.status`]: 'CONNECTING',
+        [`${prefix}.updatedAt`]: ClientTimestamp.now(),
       });
       return { status: 'CONNECTING' };
     } else {
       await clientUpdateDoc(eventRef, {
-        'whatsapp.status': 'DISCONNECTED',
-        'whatsapp.updatedAt': ClientTimestamp.now(),
+        [`${prefix}.status`]: 'DISCONNECTED',
+        [`${prefix}.updatedAt`]: ClientTimestamp.now(),
       });
       return { status: 'DISCONNECTED' };
     }
@@ -1597,7 +1611,8 @@ export async function disconnectEventWhatsapp(
   tenantId: string,
   eventId: string,
   instanceName: string,
-  token?: string
+  token?: string,
+  slot: number = 0
 ): Promise<ActionState> {
   const db = getWebDb();
   if (!tenantId || !eventId || !instanceName) return { status: 'error', message: 'Dados inválidos.' };
@@ -1605,10 +1620,11 @@ export async function disconnectEventWhatsapp(
   try {
     await logoutEvolutionInstance(instanceName, token);
     const eventRef = clientDoc(db, 'tenants', tenantId, 'events', eventId);
+    const prefix = eventWppPrefix(slot);
     await clientUpdateDoc(eventRef, {
-      'whatsapp.status': 'DISCONNECTED',
-      'whatsapp.lastDisconnectedAt': ClientTimestamp.now(),
-      'whatsapp.updatedAt': ClientTimestamp.now(),
+      [`${prefix}.status`]: 'DISCONNECTED',
+      [`${prefix}.lastDisconnectedAt`]: ClientTimestamp.now(),
+      [`${prefix}.updatedAt`]: ClientTimestamp.now(),
     });
 
     return { status: 'success', message: 'WhatsApp do Evento/Caixa desconectado.' };
