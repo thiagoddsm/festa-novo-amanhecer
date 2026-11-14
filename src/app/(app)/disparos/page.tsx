@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useFirestore } from '@/firebase';
-import { collection, onSnapshot } from 'firebase/firestore';
+import { collection, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 import type { Card as CardType } from '@/lib/definitions';
 import { formatCurrency } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -71,7 +71,7 @@ export default function DisparosPage() {
     }
   }, [currentEvent?.id]);
 
-  // Salva marcações de enviados
+  // Salva marcações de enviados (localStorage + Firestore em tempo real)
   const markAsSent = (cardId: string, value = true) => {
     const storageKey = `fp_disparos_enviados_${currentEvent?.id || 'default'}`;
     setSentMap((prev) => {
@@ -83,6 +83,11 @@ export default function DisparosPage() {
       }
       return next;
     });
+    if (firestore) {
+      updateDoc(doc(firestore, 'cards', cardId), {
+        disparo_enviado: value,
+      }).catch(() => {});
+    }
   };
 
   const resetAllSent = () => {
@@ -157,7 +162,7 @@ export default function DisparosPage() {
       }
 
       // Filtro de status de envio
-      const isSent = !!sentMap[c.id];
+      const isSent = !!sentMap[c.id] || !!(c as any).disparo_enviado;
       if (statusFilter === 'pendentes' && isSent) return false;
       if (statusFilter === 'enviados' && !isSent) return false;
 
@@ -184,7 +189,7 @@ export default function DisparosPage() {
   }, [cardsWithDate, dateFilter]);
 
   const totalInCategory = currentCategoryCards.length;
-  const sentCount = currentCategoryCards.filter((c) => !!sentMap[c.id]).length;
+  const sentCount = currentCategoryCards.filter((c) => !!sentMap[c.id] || !!(c as any).disparo_enviado).length;
   const pendingCount = totalInCategory - sentCount;
   const progressPercent = totalInCategory > 0 ? Math.round((sentCount / totalInCategory) * 100) : 0;
 
@@ -445,7 +450,7 @@ export default function DisparosPage() {
           </div>
         ) : (
           filteredList.map((card, idx) => {
-            const isSent = !!sentMap[card.id];
+            const isSent = !!sentMap[card.id] || !!(card as any).disparo_enviado;
             const hasPhone = !!card.telefone_cliente && card.telefone_cliente.replace(/\D/g, '').length >= 10;
             const cardUrl = `https://festanovoamanhecer.com.br/c/${encodeURIComponent(card.qr_code_id)}`;
 
