@@ -8,7 +8,7 @@ import {
   createAsaasRechargePayment,
   getAsaasPixQrCode,
 } from '@/lib/asaas';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, calculateAsaasRechargeFee } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -86,10 +86,13 @@ export async function POST(request: Request) {
       );
     }
 
-    // 2. Cálculo exato da Recarga Líquida + Taxa Online de 5%
-    const valorRecargaCentavos = Math.round(numericReais * 100);
-    const taxaCentavos = Math.round(valorRecargaCentavos * 0.05);
-    const valorTotalCobradoCentavos = valorRecargaCentavos + taxaCentavos;
+    // 2. Cálculo exato da Recarga Líquida + Repasse exato da taxa Asaas (PIX R$ 1,99 fixo | Cartão 1x 2,99% + R$ 0,49)
+    const rawNetCents = Math.round(numericReais * 100);
+    const {
+      netCents: valorRecargaCentavos,
+      feeCents: taxaCentavos,
+      totalChargedCents: valorTotalCobradoCentavos,
+    } = calculateAsaasRechargeFee(rawNetCents, chosenMethod);
     const grossValueReais = Number((valorTotalCobradoCentavos / 100).toFixed(2));
 
     // 3. Buscar ou criar o cliente no Asaas (sem notificações SMS/WhatsApp pagas do Asaas)
@@ -107,7 +110,7 @@ export async function POST(request: Request) {
 
     // 4. Criar a cobrança no Asaas (Apenas PIX ou CREDIT_CARD 1x à vista - sem installmentCount)
     const billingType = chosenMethod === 'PIX' ? 'PIX' : 'CREDIT_CARD';
-    const description = `Recarga FestaPay (${cardData.nome_cliente || cardData.qr_code_id}) - Credito no cartao: ${formatCurrency(valorRecargaCentavos)} (+5% taxa online)`;
+    const description = `Recarga FestaPay (${cardData.nome_cliente || cardData.qr_code_id}) - Credito no cartao: ${formatCurrency(valorRecargaCentavos)} (+ taxa operadora ${formatCurrency(taxaCentavos)})`;
 
     const payment = await createAsaasRechargePayment({
       customerId: asaasCustomer.id,

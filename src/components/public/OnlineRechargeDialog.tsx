@@ -10,7 +10,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import type { Card as CardType } from '@/lib/definitions';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, calculateAsaasRechargeFee } from '@/lib/utils';
 import { soundPlayer } from '@/lib/audio';
 import {
   QrCode,
@@ -106,11 +106,13 @@ export default function OnlineRechargeDialog({
     }
   }, [open]);
 
-  // Parse net amount in Reais & Cents + 5% fee
+  // Parse net amount in Reais & Cents + Exact Asaas Fee Pass-Through
   const parsedReais = Number(customAmountStr.replace(',', '.')) || 0;
-  const netCents = Math.max(0, Math.round(parsedReais * 100));
-  const feeCents = Math.round(netCents * 0.05);
-  const totalChargedCents = netCents + feeCents;
+  const rawNetCents = Math.max(0, Math.round(parsedReais * 100));
+  const { netCents, feeCents, totalChargedCents, feeLabel } = calculateAsaasRechargeFee(
+    rawNetCents,
+    method
+  );
 
   const handleSelectPreset = (amount: number) => {
     setSelectedPreset(amount);
@@ -398,39 +400,7 @@ export default function OnlineRechargeDialog({
               </div>
             </div>
 
-            {/* 2. EXPLICIT +5% FEE BREAKDOWN BOX */}
-            <div className="p-4 rounded-2xl bg-amber-50 border-2 border-amber-400 space-y-2">
-              <div className="flex items-center justify-between text-slate-800 font-bold text-sm sm:text-base">
-                <span>Saldo que entra no seu cartão:</span>
-                <span className="font-black text-emerald-800">
-                  {formatCurrency(netCents)}
-                </span>
-              </div>
-
-              <div className="flex items-center justify-between text-amber-950 font-bold text-xs sm:text-sm">
-                <span>Taxa de conveniência online (+5%):</span>
-                <span className="font-black">+ {formatCurrency(feeCents)}</span>
-              </div>
-
-              <div className="border-t-2 border-amber-300 pt-2 flex items-center justify-between text-slate-950">
-                <span className="font-black text-sm sm:text-base uppercase">
-                  Total a pagar agora:
-                </span>
-                <span
-                  className={`font-black text-purple-900 ${
-                    largeFont ? 'text-2xl' : 'text-xl'
-                  }`}
-                >
-                  {formatCurrency(totalChargedCents)}
-                </span>
-              </div>
-
-              <p className="text-[11px] font-semibold text-amber-900 leading-tight pt-0.5">
-                * A recarga pelo celular possui acréscimo de 5% para cobrir as taxas da operadora de pagamento online. No caixa físico da festa não há taxa.
-              </p>
-            </div>
-
-            {/* 3. Escolha como pagar: PIX ou Cartão 1x */}
+            {/* 2. Escolha como pagar: PIX ou Cartão 1x */}
             <div className="space-y-2">
               <span
                 className={`block font-black text-slate-900 ${
@@ -461,10 +431,10 @@ export default function OnlineRechargeDialog({
                   </div>
                   <div>
                     <p className="font-black text-slate-900 text-base leading-tight">
-                      PIX (Recomendado)
+                      PIX (Na Hora)
                     </p>
                     <p className="text-xs font-bold text-emerald-800">
-                      Libera o saldo na mesma hora!
+                      Taxa fixa: R$ 1,99
                     </p>
                   </div>
                 </button>
@@ -492,11 +462,43 @@ export default function OnlineRechargeDialog({
                       Cartão (1x à vista)
                     </p>
                     <p className="text-xs font-bold text-purple-800">
-                      Crédito 1x ou Débito
+                      Taxa: 2,99% + R$ 0,49
                     </p>
                   </div>
                 </button>
               </div>
+            </div>
+
+            {/* 3. EXPLICIT ASAAS FEE BREAKDOWN BOX */}
+            <div className="p-4 rounded-2xl bg-amber-50 border-2 border-amber-400 space-y-2">
+              <div className="flex items-center justify-between text-slate-800 font-bold text-sm sm:text-base">
+                <span>Saldo que entra no seu cartão:</span>
+                <span className="font-black text-emerald-800">
+                  {formatCurrency(netCents)}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between text-amber-950 font-bold text-xs sm:text-sm">
+                <span>{feeLabel}:</span>
+                <span className="font-black">+ {formatCurrency(feeCents)}</span>
+              </div>
+
+              <div className="border-t-2 border-amber-300 pt-2 flex items-center justify-between text-slate-950">
+                <span className="font-black text-sm sm:text-base uppercase">
+                  Total a pagar agora:
+                </span>
+                <span
+                  className={`font-black text-purple-900 ${
+                    largeFont ? 'text-2xl' : 'text-xl'
+                  }`}
+                >
+                  {formatCurrency(totalChargedCents)}
+                </span>
+              </div>
+
+              <p className="text-[11px] font-semibold text-amber-900 leading-tight pt-0.5">
+                * Repasse exato do custo da operadora de pagamento online (Asaas). No caixa físico da festa não há taxa.
+              </p>
             </div>
 
             {/* 4. CPF do Pagador (exigido pelo Banco Central / Asaas) */}
@@ -564,7 +566,7 @@ export default function OnlineRechargeDialog({
               </div>
               <div className="text-right">
                 <p className="text-xs font-bold text-slate-600 uppercase">
-                  Total com taxa (+5%):
+                  Total com taxa da operadora:
                 </p>
                 <p className="text-lg font-black text-slate-900">
                   {formatCurrency(paymentData.totalChargedCents)}

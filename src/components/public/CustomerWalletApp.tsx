@@ -1063,7 +1063,7 @@ export default function CustomerWalletApp({
                   <span>Recarregue Online o seu Cartão</span>
                 </Button>
                 <p className="text-[11px] font-bold text-emerald-900">
-                  Pague pelo celular via PIX ou Cartão (1x) e o saldo entra na hora (+5% taxa online)
+                  Pague pelo celular via PIX ou Cartão (1x) e o saldo entra na hora (+ taxa da operadora)
                 </p>
               </div>
 
