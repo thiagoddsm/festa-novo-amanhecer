@@ -5,6 +5,7 @@ import {
   sendCardCreationNotification,
   sendSaleNotification,
   sendReversalNotification,
+  AUTOMATIC_WHATSAPP_NOTIFICATIONS_ENABLED,
 } from './notification-service';
 import {
   sendEvolutionTextMessage,
@@ -22,6 +23,9 @@ type NotifyResult = {
  * Generic function to send a custom message to a phone number.
  */
 export async function notifyCustomMessage(phoneNumber: string, message: string, imageUrl?: string): Promise<NotifyResult> {
+  if (!AUTOMATIC_WHATSAPP_NOTIFICATIONS_ENABLED) {
+    return { success: false, message: 'Notificações automáticas desativadas. Utilize a aba Disparos WhatsApp.', error: 'NOTIFICATIONS_DISABLED' };
+  }
   try {
     const textResult = await sendEvolutionTextMessage(DEFAULT_FALLBACK_INSTANCE, phoneNumber, message);
     if (!textResult.success) {

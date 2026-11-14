@@ -24,6 +24,13 @@ function getDb() {
   return getFirestore(app);
 }
 
+/**
+ * MASTER SWITCH: Bloqueio global de todas as notificações automáticas do sistema via WhatsApp.
+ * Quando `false`, nenhuma mensagem automática (criação de cartão, recarga, pedido pronto ou estorno) é enviada.
+ * O envio via WhatsApp fica restrito e ativo EXCLUSIVAMENTE dentro da aba "Disparos WhatsApp" (/disparos).
+ */
+export const AUTOMATIC_WHATSAPP_NOTIFICATIONS_ENABLED = false;
+
 export type NotificationResult = {
   success: boolean;
   route?: 'PDV' | 'EVENT_FALLBACK';
@@ -58,6 +65,16 @@ function buildAntiSpamFooter(): string {
 export async function sendOrderReadyNotification(orderId: string): Promise<NotificationResult> {
   const db = getDb();
   const orderRef = doc(db, 'orders', orderId);
+
+  // Se as notificações automáticas estiverem bloqueadas, marca como SKIPPED e não envia WhatsApp
+  if (!AUTOMATIC_WHATSAPP_NOTIFICATIONS_ENABLED) {
+    await updateDoc(orderRef, {
+      notification_status: 'SKIPPED',
+      notification_error: 'Notificações automáticas desativadas. Habilitado apenas na aba Disparos WhatsApp.',
+      updated_at: Timestamp.now(),
+    }).catch(() => {});
+    return { success: true, route: 'PDV', error: 'Notificações automáticas de WhatsApp desativadas.' };
+  }
 
   // 1. ATOMIC LOCK (PENDING -> SENDING)
   let acquiredLock = false;
@@ -341,6 +358,9 @@ async function sendWithEventFailover(
  * Sends balance recharge receipt via WhatsApp (Event instance with Round-Robin + Failover).
  */
 export async function sendRechargeNotification(cardId: string, rechargeAmountCents: number): Promise<NotificationResult> {
+  if (!AUTOMATIC_WHATSAPP_NOTIFICATIONS_ENABLED) {
+    return { success: true };
+  }
   const db = getDb();
   try {
     const cardSnap = await getDoc(doc(db, 'cards', cardId));
@@ -375,6 +395,9 @@ export async function sendRechargeNotification(cardId: string, rechargeAmountCen
  * to cut message volume in half and prevent 0ms double-message bans.
  */
 export async function sendCardCreationNotification(cardId: string): Promise<NotificationResult> {
+  if (!AUTOMATIC_WHATSAPP_NOTIFICATIONS_ENABLED) {
+    return { success: false, error: 'Notificações automáticas desativadas. Utilize a aba Disparos WhatsApp para enviar o link do cartão.' };
+  }
   const db = getDb();
   try {
     const cardSnap = await getDoc(doc(db, 'cards', cardId));
@@ -431,6 +454,9 @@ export async function sendSaleNotification(_cardId: string, _saleAmountCents: nu
  * Sends transaction reversal notification (Event instance).
  */
 export async function sendReversalNotification(cardId: string, reversalAmountCents: number): Promise<NotificationResult> {
+  if (!AUTOMATIC_WHATSAPP_NOTIFICATIONS_ENABLED) {
+    return { success: true };
+  }
   const db = getDb();
   try {
     const cardSnap = await getDoc(doc(db, 'cards', cardId));
