@@ -27,6 +27,8 @@ import {
   ChevronUp,
   Filter,
   Users,
+  Send,
+  Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -54,6 +56,7 @@ export default function DisparosPage() {
   const [messageTemplate, setMessageTemplate] = useState(DEFAULT_MESSAGE_TEMPLATE);
   const [showTemplateEditor, setShowTemplateEditor] = useState(false);
   const [sentMap, setSentMap] = useState<Record<string, boolean>>({});
+  const [sendingMap, setSendingMap] = useState<Record<string, boolean>>({});
 
   // Carrega marcações de enviados do localStorage
   useEffect(() => {
@@ -185,6 +188,15 @@ export default function DisparosPage() {
   const pendingCount = totalInCategory - sentCount;
   const progressPercent = totalInCategory > 0 ? Math.round((sentCount / totalInCategory) * 100) : 0;
 
+  // Monta o texto personalizado para um cartão
+  const buildCardMessageText = (card: CardType) => {
+    const cardUrl = `https://festanovoamanhecer.com.br/c/${encodeURIComponent(card.qr_code_id)}`;
+    return messageTemplate
+      .replace(/{nome}/g, card.nome_cliente || 'Cliente')
+      .replace(/{link}/g, cardUrl)
+      .replace(/{saldo}/g, formatCurrency(card.saldo_centavos));
+  };
+
   // Gerador de link wa.me
   const generateWaLink = (card: CardType) => {
     const rawPhone = card.telefone_cliente || '';
@@ -196,11 +208,7 @@ export default function DisparosPage() {
       finalPhone = cleanDigits;
     }
 
-    const cardUrl = `https://festanovoamanhecer.com.br/c/${encodeURIComponent(card.qr_code_id)}`;
-    const text = messageTemplate
-      .replace(/{nome}/g, card.nome_cliente || 'Cliente')
-      .replace(/{link}/g, cardUrl)
-      .replace(/{saldo}/g, formatCurrency(card.saldo_centavos));
+    const text = buildCardMessageText(card);
 
     return `https://wa.me/${finalPhone}?text=${encodeURIComponent(text)}`;
   };
@@ -218,6 +226,50 @@ export default function DisparosPage() {
     const url = generateWaLink(card);
     markAsSent(card.id, true);
     window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  const handleSendViaApi = async (card: CardType) => {
+    if (!card.telefone_cliente) return;
+    if (sendingMap[card.id]) return;
+
+    setSendingMap((prev) => ({ ...prev, [card.id]: true }));
+    try {
+      const text = buildCardMessageText(card);
+      const res = await fetch('/api/whatsapp/send-manual', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: card.telefone_cliente,
+          text,
+          tenantId: card.tenant_id || currentTenant?.id || 'igreja-batista-da-manha',
+          eventId: card.event_id || currentEvent?.id || 'DoKmbiQ8pd3M71yTC9iA',
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        toast({
+          variant: 'destructive',
+          title: 'Erro ao enviar via API',
+          description: data.error || 'Não foi possível enviar a mensagem para este número.',
+        });
+        return;
+      }
+
+      markAsSent(card.id, true);
+      toast({
+        title: 'Enviado via API WhatsApp! ✅',
+        description: `Mensagem entregue para ${card.nome_cliente || card.telefone_cliente} (Instância: ${data.instanceUsed}).`,
+      });
+    } catch (err) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro de conexão',
+        description: err instanceof Error ? err.message : 'Falha ao comunicar com o servidor.',
+      });
+    } finally {
+      setSendingMap((prev) => ({ ...prev, [card.id]: false }));
+    }
   };
 
   return (
@@ -451,7 +503,7 @@ export default function DisparosPage() {
                   </div>
 
                   {/* Ações Rápidas */}
-                  <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                  <div className="flex flex-wrap items-center gap-2 shrink-0 self-end sm:self-center">
                     <Button
                       variant="outline"
                       size="sm"
@@ -475,19 +527,45 @@ export default function DisparosPage() {
                       {isSent ? 'Desmarcar' : 'Check'}
                     </Button>
 
+                    {/* Botão 1: Envio via API (1 a 1 com 3s de simulação de escrita) */}
                     <Button
                       size="sm"
+                      disabled={!hasPhone || !!sendingMap[card.id]}
+                      onClick={() => handleSendViaApi(card)}
+                      className={cn(
+                        'h-9 px-3.5 text-xs font-bold gap-1.5 rounded-xl shadow-xs transition-colors cursor-pointer',
+                        sendingMap[card.id]
+                          ? 'bg-amber-600 text-white'
+                          : isSent
+                          ? 'bg-purple-700 hover:bg-purple-800 text-white'
+                          : 'bg-purple-600 hover:bg-purple-700 text-white'
+                      )}
+                    >
+                      {sendingMap[card.id] ? (
+                        <>
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          <span>✍️ Digitando (3s)...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Send className="h-3.5 w-3.5" />
+                          <span>{isSent ? 'Reenviar API' : 'Enviar via API'}</span>
+                        </>
+                      )}
+                    </Button>
+
+                    {/* Botão 2: Envio Manual wa.me */}
+                    <Button
+                      size="sm"
+                      variant="outline"
                       disabled={!hasPhone}
                       onClick={() => handleOpenWhatsapp(card)}
                       className={cn(
-                        'h-9 px-3.5 text-xs font-bold gap-1.5 rounded-xl shadow-xs transition-colors',
-                        isSent
-                          ? 'bg-emerald-700 hover:bg-emerald-800 text-white'
-                          : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                        'h-9 px-3 text-xs font-bold gap-1.5 rounded-xl border-emerald-600 text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/40 cursor-pointer'
                       )}
                     >
-                      <MessageCircle className="h-4 w-4" />
-                      <span>{isSent ? 'Reenviar' : 'Abrir WhatsApp'}</span>
+                      <MessageCircle className="h-3.5 w-3.5" />
+                      <span>wa.me</span>
                       <ExternalLink className="h-3 w-3 opacity-70" />
                     </Button>
                   </div>
