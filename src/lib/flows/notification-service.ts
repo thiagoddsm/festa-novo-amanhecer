@@ -201,7 +201,13 @@ export async function sendOrderReadyNotification(orderId: string): Promise<Notif
   }
 }
 
-type WppCandidate = { instance: string; token?: string };
+type WppCandidate = {
+  instance: string;
+  token?: string;
+  slot: number;
+  tenantId?: string;
+  eventId?: string;
+};
 
 /**
  * Resolves the event names and the ordered list of Caixa WhatsApp instances:
@@ -226,14 +232,28 @@ async function resolveEventWhatsapp(
           const eData = eSnap.data() as TenantEvent;
           eventName = eData.name || '';
           if (eData.whatsapp?.instanceName) {
-            candidates.push({ instance: eData.whatsapp.instanceName, token: eData.whatsapp.token });
+            candidates.push({
+              instance: eData.whatsapp.instanceName,
+              token: eData.whatsapp.token,
+              slot: 0,
+              tenantId,
+              eventId,
+            });
           }
           const backups = eData.whatsapp_backups || {};
           Object.keys(backups)
             .sort((x, y) => Number(x) - Number(y))
             .forEach((k) => {
               const cfg = backups[k];
-              if (cfg?.instanceName) candidates.push({ instance: cfg.instanceName, token: cfg.token });
+              if (cfg?.instanceName) {
+                candidates.push({
+                  instance: cfg.instanceName,
+                  token: cfg.token,
+                  slot: Number(k),
+                  tenantId,
+                  eventId,
+                });
+              }
             });
         }
       }
@@ -267,12 +287,42 @@ async function sendWithEventFailover(
         const state = await getEvolutionConnectionState(c.instance, c.token);
         if (state.state !== 'open') {
           lastError = `Instância ${c.instance} desconectada.`;
+          // Auto-mark disconnected in Firestore immediately
+          if (c.tenantId && c.eventId) {
+            const prefix = c.slot === 0 ? 'whatsapp' : `whatsapp_backups.${c.slot}`;
+            const db = getDb();
+            updateDoc(doc(db, 'tenants', c.tenantId, 'events', c.eventId), {
+              [`${prefix}.status`]: 'DISCONNECTED',
+              [`${prefix}.phoneNumber`]: null,
+              [`${prefix}.updatedAt`]: Timestamp.now(),
+            }).catch(() => {});
+          }
           continue;
         }
         const res = await send(c.instance, c.token);
         if (res.success) return { success: true, instanceUsed: c.instance };
         lastError = res.error;
         console.warn(`[NotificationService] Instance ${c.instance} failed, trying next backup:`, res.error);
+
+        // If error indicates session dropped/connection closed, auto-mark disconnected
+        if (
+          res.error &&
+          (res.error.toLowerCase().includes('close') ||
+            res.error.toLowerCase().includes('session') ||
+            res.error.toLowerCase().includes('disconnect') ||
+            res.error.toLowerCase().includes('not connected') ||
+            res.error.toLowerCase().includes('connection closed'))
+        ) {
+          if (c.tenantId && c.eventId) {
+            const prefix = c.slot === 0 ? 'whatsapp' : `whatsapp_backups.${c.slot}`;
+            const db = getDb();
+            updateDoc(doc(db, 'tenants', c.tenantId, 'events', c.eventId), {
+              [`${prefix}.status`]: 'DISCONNECTED',
+              [`${prefix}.phoneNumber`]: null,
+              [`${prefix}.updatedAt`]: Timestamp.now(),
+            }).catch(() => {});
+          }
+        }
       } catch (e) {
         lastError = e instanceof Error ? e.message : 'Erro desconhecido.';
       }

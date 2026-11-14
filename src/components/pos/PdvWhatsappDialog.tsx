@@ -117,6 +117,21 @@ export default function PdvWhatsappDialog({
     }
   }, [open, stopPolling]);
 
+  // Auto-verify live connection status from Evolution API when dialog opens
+  useEffect(() => {
+    if (!open || !pdv.id) return;
+    const targetInst = pdv.whatsapp?.instanceName || defaultSuggestedInstance;
+    checkPdvWhatsappStatus(pdv.id, targetInst, pdv.whatsapp?.token).then((res) => {
+      if (res.status === 'CONNECTED') {
+        setStatus('CONNECTED');
+        setPhoneNumber(res.phoneNumber);
+      } else {
+        setStatus('DISCONNECTED');
+        setPhoneNumber(undefined);
+      }
+    }).catch((err) => console.warn('[PdvWhatsappDialog] Error verifying live status on open:', err));
+  }, [open, pdv.id, pdv.whatsapp?.instanceName, pdv.whatsapp?.token, defaultSuggestedInstance]);
+
   // Check connection state via polling
   const startStatusPolling = useCallback(
     (targetInstance: string, targetToken?: string) => {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import CreateCardForm from '@/components/cashier/CreateCardForm';
 import RechargeForm from '@/components/cashier/RechargeForm';
 import CheckBalanceForm from '@/components/cashier/CheckBalanceForm';
@@ -24,21 +24,51 @@ export default function CashierPage() {
   const [whatsappDialogOpen, setWhatsappDialogOpen] = useState(false);
   const [activeCashierTab, setActiveCashierTab] = useState<'novo' | 'recarga' | 'saldo' | 'transferir'>('novo');
 
-  // Auto-sync status from Evolution API on mount
+  // Auto-sync status from Evolution API for Principal and all Backups on mount and periodically (every 45s)
   useEffect(() => {
     if (!currentTenant?.id || !currentEvent?.id) return;
 
-    const targetInstance =
-      currentEvent.whatsapp?.instanceName ||
-      getPdvInstanceName(currentTenant.name, currentEvent.name, 'caixa');
+    const syncAll = () => {
+      // 1. Principal
+      const principalInst =
+        currentEvent.whatsapp?.instanceName ||
+        getPdvInstanceName(currentTenant.name, currentEvent.name, 'caixa');
 
-    checkEventWhatsappStatus(
-      currentTenant.id,
-      currentEvent.id,
-      targetInstance,
-      currentEvent.whatsapp?.token
-    ).catch((err) => console.warn('[Cashier] Auto-sync WhatsApp status error:', err));
-  }, [currentTenant?.id, currentTenant?.name, currentEvent?.id, currentEvent?.name, currentEvent?.whatsapp?.instanceName, currentEvent?.whatsapp?.token]);
+      checkEventWhatsappStatus(
+        currentTenant.id,
+        currentEvent.id,
+        principalInst,
+        currentEvent.whatsapp?.token,
+        0
+      ).catch(() => {});
+
+      // 2. Backups
+      const backups = currentEvent.whatsapp_backups || {};
+      Object.entries(backups).forEach(([k, cfg]: [string, any]) => {
+        if (cfg?.instanceName) {
+          checkEventWhatsappStatus(
+            currentTenant.id,
+            currentEvent.id,
+            cfg.instanceName,
+            cfg.token,
+            Number(k)
+          ).catch(() => {});
+        }
+      });
+    };
+
+    syncAll();
+    const interval = setInterval(syncAll, 45000);
+    return () => clearInterval(interval);
+  }, [
+    currentTenant?.id,
+    currentTenant?.name,
+    currentEvent?.id,
+    currentEvent?.name,
+    currentEvent?.whatsapp?.instanceName,
+    currentEvent?.whatsapp?.token,
+    currentEvent?.whatsapp_backups,
+  ]);
 
   // Real-time listener for current event's WhatsApp state in Firestore
   useEffect(() => {
@@ -57,8 +87,23 @@ export default function CashierPage() {
     return () => unsubscribe();
   }, [firestore, currentTenant?.id, currentEvent?.id, currentEvent]);
 
-  const whatsappStatus = liveEvent?.whatsapp?.status || 'DISCONNECTED';
-  const phoneNumber = liveEvent?.whatsapp?.phoneNumber;
+  // Check if any slot is actively connected (Principal or any Backup)
+  const connectedSlotInfo = useMemo(() => {
+    if (liveEvent?.whatsapp?.status === 'CONNECTED') {
+      return { connected: true, label: 'Principal', phoneNumber: liveEvent.whatsapp.phoneNumber };
+    }
+    const backups = liveEvent?.whatsapp_backups || {};
+    for (const [k, b] of Object.entries(backups) as [string, any][]) {
+      if (b?.status === 'CONNECTED') {
+        return { connected: true, label: `Backup ${k}`, phoneNumber: b.phoneNumber };
+      }
+    }
+    return { connected: false, label: null, phoneNumber: null };
+  }, [liveEvent]);
+
+  const isWhatsappConnected = connectedSlotInfo.connected;
+  const connectedLabel = connectedSlotInfo.label;
+  const phoneNumber = connectedSlotInfo.phoneNumber;
 
   return (
     <div className="flex flex-col gap-4 sm:gap-6 min-w-0 w-full max-w-full">
@@ -77,7 +122,7 @@ export default function CashierPage() {
 
         {currentTenant && liveEvent && (
           <div className="w-full sm:w-auto flex items-center gap-2">
-            {whatsappStatus === 'CONNECTED' ? (
+            {isWhatsappConnected ? (
               <button
                 type="button"
                 onClick={() => setWhatsappDialogOpen(true)}
@@ -89,7 +134,7 @@ export default function CashierPage() {
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-green-600"></span>
                 </span>
                 <MessageSquare className="h-3.5 w-3.5 text-green-700 shrink-0" />
-                <span className="truncate">WhatsApp Conectado</span>
+                <span className="truncate">WhatsApp Conectado {connectedLabel ? `(${connectedLabel})` : ''}</span>
                 {phoneNumber && <span className="font-mono font-normal opacity-90 hidden xs:inline">({phoneNumber})</span>}
               </button>
             ) : (

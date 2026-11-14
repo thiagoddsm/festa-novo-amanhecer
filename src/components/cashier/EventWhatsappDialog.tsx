@@ -138,6 +138,45 @@ export default function EventWhatsappDialog({
     }
   }, [open, stopPolling]);
 
+  // Auto-verify live connection status of all configured slots when dialog opens or slot changes
+  useEffect(() => {
+    if (!open || !tenantId || !event?.id) return;
+
+    // Check currently active slot immediately
+    const checkActiveSlot = async () => {
+      const activeConf = slot === 0 ? event.whatsapp : event.whatsapp_backups?.[String(slot)];
+      if (activeConf?.instanceName) {
+        try {
+          const res = await checkEventWhatsappStatus(tenantId, event.id, activeConf.instanceName, activeConf.token, slot);
+          if (res.status === 'CONNECTED') {
+            setStatus('CONNECTED');
+            setPhoneNumber(res.phoneNumber);
+          } else {
+            setStatus('DISCONNECTED');
+            setPhoneNumber(undefined);
+          }
+        } catch (e) {
+          console.warn('[EventWhatsappDialog] Error verifying active slot status:', e);
+        }
+      }
+    };
+
+    checkActiveSlot();
+
+    // Verify all other slots in background so all tab pills reflect actual live state
+    [0, 1, 2].forEach(async (s) => {
+      if (s === slot) return;
+      const conf = s === 0 ? event.whatsapp : event.whatsapp_backups?.[String(s)];
+      if (conf?.instanceName && conf?.status === 'CONNECTED') {
+        try {
+          await checkEventWhatsappStatus(tenantId, event.id, conf.instanceName, conf.token, s);
+        } catch (e) {
+          console.warn(`[EventWhatsappDialog] Error verifying slot ${s} status:`, e);
+        }
+      }
+    });
+  }, [open, slot, tenantId, event?.id]);
+
   // Check connection state via polling
   const startStatusPolling = useCallback(
     (targetInstance: string, targetToken?: string) => {
