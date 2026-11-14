@@ -12,6 +12,7 @@ import { DataTable } from '@/components/ui/data-table';
 import { type ColumnDef } from '@tanstack/react-table';
 import RechargeDialog from '@/components/cards/RechargeDialog';
 import ReprintQrButton from '@/components/cards/ReprintQrButton';
+import ResendQrWhatsappButton from '@/components/cards/ResendQrWhatsappButton';
 import { deleteCards } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth-context';
@@ -85,6 +86,7 @@ const columns: ColumnDef<CardType>[] = [
               <div className="flex gap-2">
                 <RechargeDialog card={card} />
                 <ReprintQrButton card={card} />
+                <ResendQrWhatsappButton card={card} />
                 <EditCardDialog card={card} />
               </div>
             )
