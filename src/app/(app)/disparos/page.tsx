@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useFirestore } from '@/firebase';
 import { collection, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 import type { Card as CardType } from '@/lib/definitions';
@@ -29,6 +29,8 @@ import {
   Users,
   Send,
   Loader2,
+  Play,
+  Square,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -57,6 +59,15 @@ export default function DisparosPage() {
   const [showTemplateEditor, setShowTemplateEditor] = useState(false);
   const [sentMap, setSentMap] = useState<Record<string, boolean>>({});
   const [sendingMap, setSendingMap] = useState<Record<string, boolean>>({});
+  const [failedMap, setFailedMap] = useState<Record<string, string>>({});
+
+  // Estados do Disparo em Massa Automático (a cada 5s)
+  const [bulkStartNumber, setBulkStartNumber] = useState<number>(33);
+  const [isBulkRunning, setIsBulkRunning] = useState<boolean>(false);
+  const [bulkStatusText, setBulkStatusText] = useState<string>('');
+  const [bulkSentCount, setBulkSentCount] = useState<number>(0);
+  const [bulkFailCount, setBulkFailCount] = useState<number>(0);
+  const bulkStopRef = useRef<boolean>(false);
 
   // Carrega marcações de enviados do localStorage
   useEffect(() => {
@@ -233,9 +244,9 @@ export default function DisparosPage() {
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
-  const handleSendViaApi = async (card: CardType) => {
-    if (!card.telefone_cliente) return;
-    if (sendingMap[card.id]) return;
+  const handleSendViaApi = async (card: CardType, silentToast = false): Promise<boolean> => {
+    if (!card.telefone_cliente) return false;
+    if (sendingMap[card.id]) return false;
 
     setSendingMap((prev) => ({ ...prev, [card.id]: true }));
     try {
@@ -253,28 +264,124 @@ export default function DisparosPage() {
 
       const data = await res.json();
       if (!res.ok || !data.success) {
-        toast({
-          variant: 'destructive',
-          title: 'Erro ao enviar via API',
-          description: data.error || 'Não foi possível enviar a mensagem para este número.',
-        });
-        return;
+        const errMsg = data.error || 'Não foi possível enviar a mensagem para este número.';
+        setFailedMap((prev) => ({ ...prev, [card.id]: errMsg }));
+        if (!silentToast) {
+          toast({
+            variant: 'destructive',
+            title: 'Erro ao enviar via API',
+            description: errMsg,
+          });
+        }
+        return false;
       }
 
+      setFailedMap((prev) => {
+        const copy = { ...prev };
+        delete copy[card.id];
+        return copy;
+      });
       markAsSent(card.id, true);
-      toast({
-        title: 'Enviado via API WhatsApp! ✅',
-        description: `Mensagem entregue para ${card.nome_cliente || card.telefone_cliente} (Instância: ${data.instanceUsed}).`,
-      });
+      if (!silentToast) {
+        toast({
+          title: 'Enviado via API WhatsApp! ✅',
+          description: `Mensagem entregue para ${card.nome_cliente || card.telefone_cliente} (Instância: ${data.instanceUsed}).`,
+        });
+      }
+      return true;
     } catch (err) {
-      toast({
-        variant: 'destructive',
-        title: 'Erro de conexão',
-        description: err instanceof Error ? err.message : 'Falha ao comunicar com o servidor.',
-      });
+      const errMsg = err instanceof Error ? err.message : 'Falha ao comunicar com o servidor.';
+      setFailedMap((prev) => ({ ...prev, [card.id]: errMsg }));
+      if (!silentToast) {
+        toast({
+          variant: 'destructive',
+          title: 'Erro de conexão',
+          description: errMsg,
+        });
+      }
+      return false;
     } finally {
       setSendingMap((prev) => ({ ...prev, [card.id]: false }));
     }
+  };
+
+  // Disparo em Massa Automático (1 envio a cada 5 segundos de intervalo)
+  const startBulkDispatch = async () => {
+    if (isBulkRunning) return;
+
+    const startIdx = Math.max(0, (Number(bulkStartNumber) || 1) - 1);
+    const queue = filteredList.slice(startIdx).filter((c) => {
+      const isAlreadySent = !!sentMap[c.id] || !!(c as any).disparo_enviado;
+      const hasValidPhone = !!c.telefone_cliente && c.telefone_cliente.replace(/\D/g, '').length >= 10;
+      return !isAlreadySent && hasValidPhone;
+    });
+
+    if (queue.length === 0) {
+      toast({
+        title: 'Nenhum cliente pendente neste intervalo',
+        description: `Todos os clientes com telefone a partir do #${startIdx + 1} já foram marcados como enviados.`,
+      });
+      return;
+    }
+
+    setIsBulkRunning(true);
+    bulkStopRef.current = false;
+    setBulkSentCount(0);
+    setBulkFailCount(0);
+
+    for (let i = 0; i < queue.length; i++) {
+      if (bulkStopRef.current) break;
+
+      const card = queue[i];
+      const originalNumber = filteredList.findIndex((item) => item.id === card.id) + 1;
+
+      setBulkStatusText(
+        `✍️ Enviando (${i + 1}/${queue.length}): #${originalNumber} ${card.nome_cliente || card.telefone_cliente}...`
+      );
+
+      // Rola suavemente até o card em disparo
+      const rowEl = document.getElementById(`disparo-card-${card.id}`);
+      if (rowEl) {
+        rowEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+
+      const ok = await handleSendViaApi(card, true);
+      if (ok) {
+        setBulkSentCount((prev) => prev + 1);
+      } else {
+        setBulkFailCount((prev) => prev + 1);
+      }
+
+      // Se ainda houver próximo na fila e não tiver sido pausado, aguarda 5 segundos (com contagem regressiva)
+      if (i < queue.length - 1 && !bulkStopRef.current) {
+        for (let sec = 5; sec >= 1; sec--) {
+          if (bulkStopRef.current) break;
+          setBulkStatusText(
+            `⏳ Aguardando ${sec}s para o próximo envio (${i + 1}/${queue.length} concluídos)...`
+          );
+          await new Promise((r) => setTimeout(r, 1000));
+        }
+      }
+    }
+
+    const wasStopped = bulkStopRef.current;
+    setIsBulkRunning(false);
+    setBulkStatusText(
+      wasStopped
+        ? '⏹️ Disparo em massa pausado pelo usuário.'
+        : '🎉 Disparo em massa finalizado com sucesso!'
+    );
+    toast({
+      title: wasStopped ? 'Disparo Pausado' : 'Disparo em Massa Concluído! 🎉',
+      description: wasStopped
+        ? 'Você pode retomar quando quiser clicando novamente no botão.'
+        : 'Todos os clientes pendentes da fila foram processados.',
+    });
+  };
+
+  const stopBulkDispatch = () => {
+    bulkStopRef.current = true;
+    setBulkStatusText('Parando após concluir o envio atual...');
   };
 
   return (
@@ -389,6 +496,65 @@ export default function DisparosPage() {
 
           <Progress value={progressPercent} className="h-2.5 rounded-full" />
 
+          {/* Painel de Disparo em Massa Automático (a cada 5 segundos) */}
+          <div className="p-3.5 sm:p-4 rounded-2xl bg-purple-50 dark:bg-purple-950/30 border-2 border-purple-300 dark:border-purple-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="space-y-1">
+              <p className="text-sm font-black text-purple-950 dark:text-purple-200 flex items-center gap-2">
+                <Send className="h-4 w-4 text-purple-700 dark:text-purple-400" />
+                <span>Disparo em Massa via API (Intervalo de 5s + 3s Digitando)</span>
+              </p>
+              <p className="text-xs text-purple-800 dark:text-purple-300 font-medium">
+                {bulkStatusText ||
+                  'Envia automaticamente de 1 em 1 apenas para os clientes pendentes a partir do número escolhido.'}
+              </p>
+              {(bulkSentCount > 0 || bulkFailCount > 0) && (
+                <p className="text-xs font-bold text-emerald-700 dark:text-emerald-400">
+                  Neste lote: {bulkSentCount} enviados com sucesso
+                  {bulkFailCount > 0 ? ` • ${bulkFailCount} falhas/sem WhatsApp` : ''}
+                </p>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <div className="flex items-center gap-1.5 bg-white dark:bg-background px-2.5 py-1 rounded-xl border border-purple-300">
+                <label htmlFor="bulk-start-num" className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                  Começar do #:
+                </label>
+                <input
+                  id="bulk-start-num"
+                  type="number"
+                  min={1}
+                  max={Math.max(1, filteredList.length)}
+                  disabled={isBulkRunning}
+                  value={bulkStartNumber}
+                  onChange={(e) => setBulkStartNumber(Math.max(1, Number(e.target.value) || 1))}
+                  className="w-14 h-7 text-center font-black text-sm bg-transparent focus:outline-none"
+                />
+              </div>
+
+              {!isBulkRunning ? (
+                <Button
+                  type="button"
+                  onClick={startBulkDispatch}
+                  className="h-10 px-4 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-black text-xs sm:text-sm gap-2 shadow-sm cursor-pointer"
+                >
+                  <Play className="h-4 w-4 fill-current" />
+                  <span>Disparar em Massa (a cada 5s)</span>
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  variant="destructive"
+                  onClick={stopBulkDispatch}
+                  className="h-10 px-4 rounded-xl font-black text-xs sm:text-sm gap-2 shadow-sm cursor-pointer"
+                >
+                  <Square className="h-4 w-4 fill-current" />
+                  <span>Pausar Disparo</span>
+                </Button>
+              )}
+            </div>
+          </div>
+
           {/* Filtros e Busca */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2">
             <div className="relative flex-1">
@@ -457,9 +623,12 @@ export default function DisparosPage() {
             return (
               <Card
                 key={card.id}
+                id={`disparo-card-${card.id}`}
                 className={cn(
                   'transition-all duration-150 border-border/80 shadow-2xs hover:shadow-xs',
-                  isSent
+                  sendingMap[card.id]
+                    ? 'ring-2 ring-purple-600 bg-purple-50/40 dark:bg-purple-950/20'
+                    : isSent
                     ? 'bg-emerald-50/30 dark:bg-emerald-950/15 border-emerald-300 dark:border-emerald-800/60'
                     : 'bg-card'
                 )}
@@ -477,6 +646,10 @@ export default function DisparosPage() {
                       {isSent ? (
                         <Badge className="bg-emerald-100 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300 border-emerald-300 text-[10px] h-5 px-1.5 gap-1 font-semibold">
                           <CheckCircle2 className="h-3 w-3" /> Enviado
+                        </Badge>
+                      ) : failedMap[card.id] ? (
+                        <Badge variant="destructive" className="text-[10px] h-5 px-1.5 font-semibold">
+                          Falha: {failedMap[card.id].slice(0, 35)}
                         </Badge>
                       ) : (
                         <Badge variant="outline" className="text-amber-700 bg-amber-50 border-amber-300 text-[10px] h-5 px-1.5 font-medium">

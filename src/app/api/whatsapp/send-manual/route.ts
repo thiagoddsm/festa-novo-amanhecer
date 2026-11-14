@@ -66,11 +66,19 @@ async function resolveCandidateInstances(
     console.warn('[API /api/whatsapp/send-manual] Aviso ao buscar instâncias do evento:', err);
   }
 
+  if (candidates.length === 0) {
+    candidates.push(
+      { instance: 'fp_igreja_batista_da_manha_festa_novo_amanhecer_2026_caixa' },
+      { instance: 'fp_igreja_batista_da_manha_festa_novo_amanhecer_2026_caixa_backup1' },
+      { instance: 'fp_igreja_batista_da_manha_festa_novo_amanhecer_2026_caixa_backup2' }
+    );
+  }
+
   return candidates;
 }
 
 /**
- * Envia presença "composing" (Digitando...) + mensagem de texto com delay de 3000ms (3 segundos)
+ * Envia mensagem via Evolution API v2 com simulação de escrita de 3 segundos (delay: 3000)
  */
 async function sendWith3sTypingSimulation(
   instanceName: string,
@@ -79,28 +87,8 @@ async function sendWith3sTypingSimulation(
   customToken?: string
 ): Promise<{ success: boolean; error?: string }> {
   const apiKey = customToken || EVOLUTION_API_KEY;
-  const startTime = Date.now();
 
   try {
-    // 1. Dispara presença "composing" (Digitando...) na Evolution API (não bloqueante se o endpoint variar)
-    await fetch(`${EVOLUTION_API_URL}/chat/sendPresence/${instanceName}`, {
-      method: 'POST',
-      headers: {
-        apikey: apiKey,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        number: formattedNumber,
-        options: {
-          delay: 3000,
-          presence: 'composing',
-        },
-        presence: 'composing',
-        delay: 3000,
-      }),
-    }).catch(() => {});
-
-    // 2. Envia a mensagem passando delay: 3000 (simulação nativa de escrita de 3 segundos no Baileys)
     let res = await fetch(`${EVOLUTION_API_URL}/message/sendText/${instanceName}`, {
       method: 'POST',
       headers: {
@@ -111,19 +99,10 @@ async function sendWith3sTypingSimulation(
         number: formattedNumber,
         text,
         delay: 3000,
-        options: {
-          delay: 3000,
-          presence: 'composing',
-        },
       }),
     });
 
     if (res.status === 400) {
-      // Caso a versão da Evolution não aceite options junto com delay, garante os 3s de escrita antes do envio
-      const elapsed = Date.now() - startTime;
-      if (elapsed < 3000) {
-        await new Promise((r) => setTimeout(r, 3000 - elapsed));
-      }
       res = await fetch(`${EVOLUTION_API_URL}/message/sendText/${instanceName}`, {
         method: 'POST',
         headers: {
@@ -135,18 +114,15 @@ async function sendWith3sTypingSimulation(
           text,
         }),
       });
-    } else {
-      // Se a API respondeu rápido sem segurar os 3000ms no HTTP, aguardamos o restante para completar os 3s reais
-      const elapsed = Date.now() - startTime;
-      if (elapsed < 3000) {
-        await new Promise((r) => setTimeout(r, 3000 - elapsed));
-      }
     }
 
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       const errMsg = data?.response?.message || data?.message || `Erro HTTP ${res.status}`;
-      return { success: false, error: Array.isArray(errMsg) ? errMsg.join(', ') : String(errMsg) };
+      return {
+        success: false,
+        error: Array.isArray(errMsg) ? JSON.stringify(errMsg) : String(errMsg),
+      };
     }
 
     return { success: true };
@@ -189,7 +165,8 @@ export async function POST(request: Request) {
     }
 
     const candidates = await resolveCandidateInstances(tenantId, eventId);
-    let lastError = 'Nenhuma instância conectada disponível.';
+    let lastError = 'Nenhuma instância do Caixa conectada disponível.';
+    let anyOpenInstance = false;
 
     if (candidates.length > 0) {
       const startIdx = roundRobinCounter++ % candidates.length;
@@ -201,9 +178,9 @@ export async function POST(request: Request) {
       for (const candidate of rotated) {
         const state = await getEvolutionConnectionState(candidate.instance, candidate.token);
         if (state.state !== 'open') {
-          lastError = `Instância ${candidate.instance} desconectada.`;
           continue;
         }
+        anyOpenInstance = true;
 
         const sendRes = await sendWith3sTypingSimulation(
           candidate.instance,
@@ -218,15 +195,22 @@ export async function POST(request: Request) {
             instanceUsed: candidate.instance,
           });
         }
-        lastError = sendRes.error || 'Falha ao enviar pela instância.';
+        lastError = sendRes.error || 'Falha ao enviar para este número.';
       }
     }
 
+    if (!anyOpenInstance) {
+      return NextResponse.json(
+        {
+          error:
+            'Nenhuma das 3 instâncias do Caixa está conectada no momento. Conecte pelo menos 1 WhatsApp na tela do Caixa antes de disparar.',
+        },
+        { status: 400 }
+      );
+    }
+
     return NextResponse.json(
-      {
-        error:
-          'Nenhuma das 3 instâncias do Caixa está conectada no momento. Conecte pelo menos 1 WhatsApp na tela do Caixa antes de disparar.',
-      },
+      { error: lastError || 'Não foi possível enviar para este número.' },
       { status: 400 }
     );
   } catch (error: unknown) {
