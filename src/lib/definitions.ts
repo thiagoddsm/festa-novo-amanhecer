@@ -183,6 +183,8 @@ export type RecipeItem = {
   ingredient_nome: string;
   quantidade: number;
   unidade?: string;
+  /** Se false, o insumo pode ser dispensado/omitido na venda caso seu estoque acabe. Default: true (obrigatório) */
+  obrigatorio?: boolean;
 };
 
 // ---------------------------------------------------------------------------
@@ -289,4 +291,33 @@ export type Order = {
     total_time_seconds?: number;
     total_time_formatted?: string;
   }>;
+};
+
+// ---------------------------------------------------------------------------
+// Online Recharge via Asaas (Firestore: /online_recharges/{asaasPaymentId})
+// ---------------------------------------------------------------------------
+
+export type OnlineRecharge = {
+  id: string; // = asaasPaymentId (ex: pay_123456)
+  cartao_id: string;
+  qr_code_id: string;
+  nome_cliente: string;
+  cpf_pagador: string;
+  metodo: 'PIX' | 'CARD';
+  /** Valor líquido em centavos que entra de saldo no cartão (ex: 5000 = R$ 50,00) */
+  valor_recarga_centavos: number;
+  /** Taxa de conveniência online de 5% em centavos (ex: 250 = R$ 2,50) */
+  taxa_centavos: number;
+  /** Valor total cobrado na API do Asaas em centavos (ex: 5250 = R$ 52,50) */
+  valor_total_cobrado_centavos: number;
+  status: 'PENDING' | 'CREDITED' | 'CANCELLED';
+  asaas_status?: string;
+  pix_payload?: string | null;
+  pix_qr_base64?: string | null;
+  invoice_url?: string | null;
+  tenant_id?: string | null;
+  event_id?: string | null;
+  created_at: Timestamp;
+  updated_at?: Timestamp;
+  credited_at?: Timestamp | null;
 };

@@ -23,6 +23,7 @@ import {
   calculateCustomerWaitEstimate,
 } from '@/lib/queue-estimator';
 import QrScannerDialog from '@/components/common/QrScannerDialog';
+import OnlineRechargeDialog from '@/components/public/OnlineRechargeDialog';
 import { Button } from '@/components/ui/button';
 import {
   Wallet,
@@ -47,6 +48,7 @@ import {
   Loader2,
   Lock,
   ShieldCheck,
+  Sparkles,
 } from 'lucide-react';
 
 // Evento Oficial: Festa Novo Amanhecer 2026 - Igreja Batista da Manhã
@@ -115,6 +117,7 @@ export default function CustomerWalletApp({
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [showQrModal, setShowQrModal] = useState<boolean>(false);
   const [isScannerOpen, setIsScannerOpen] = useState<boolean>(false);
+  const [isOnlineRechargeOpen, setIsOnlineRechargeOpen] = useState<boolean>(false);
 
   // Active Card & Security Mode state
   const [activeQrCodeId, setActiveQrCodeId] = useState<string>('');
@@ -322,6 +325,49 @@ export default function CustomerWalletApp({
     );
 
     return () => unsubscribe();
+  }, [firestore, card?.id]);
+
+  // 5b. Auto-check any pending online recharges for this card on load & when returning from banking app
+  useEffect(() => {
+    if (!firestore || !card?.id) return;
+
+    const checkPendingOnlineRecharges = async () => {
+      try {
+        const rechargesRef = collection(firestore, 'online_recharges');
+        const qPending = query(
+          rechargesRef,
+          where('cartao_id', '==', card.id),
+          where('status', '==', 'PENDING')
+        );
+        const snap = await getDocs(qPending);
+        if (snap.empty) return;
+
+        for (const docSnap of snap.docs) {
+          const paymentId = docSnap.id;
+          await fetch(`/api/asaas/recharge/status?id=${encodeURIComponent(paymentId)}`, {
+            cache: 'no-store',
+          }).catch(() => {});
+        }
+      } catch (err) {
+        console.warn('Erro ao verificar recargas online pendentes:', err);
+      }
+    };
+
+    checkPendingOnlineRecharges();
+
+    const handleVisibilityOrFocus = () => {
+      if (document.visibilityState === 'visible') {
+        checkPendingOnlineRecharges();
+      }
+    };
+
+    window.addEventListener('focus', handleVisibilityOrFocus);
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
+
+    return () => {
+      window.removeEventListener('focus', handleVisibilityOrFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+    };
   }, [firestore, card?.id]);
 
   // Compute the set of transaction IDs belonging to this customer (compatible with Day 1 orders)
@@ -1000,6 +1046,27 @@ export default function CustomerWalletApp({
                 </p>
               </div>
 
+              {/* ONLINE RECHARGE CTA BUTTON (ASAAS PIX OR CARD 1X) */}
+              <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border-2 border-emerald-500 space-y-2.5 text-center shadow-xs">
+                <div className="flex items-center justify-center gap-1.5 text-xs font-black uppercase tracking-wide text-emerald-900">
+                  <Sparkles className="h-4 w-4 text-emerald-700 shrink-0" />
+                  <span>Evite Filas no Caixa • PIX ou Cartão 1x</span>
+                </div>
+                <Button
+                  type="button"
+                  onClick={() => setIsOnlineRechargeOpen(true)}
+                  className={`w-full rounded-2xl bg-emerald-700 hover:bg-emerald-800 text-white font-black shadow-md flex items-center justify-center gap-2.5 cursor-pointer ${
+                    largeFont ? 'h-16 text-xl' : 'h-14 text-lg'
+                  }`}
+                >
+                  <PlusCircle className="h-6 w-6 shrink-0" />
+                  <span>Recarregue Online o seu Cartão</span>
+                </Button>
+                <p className="text-[11px] font-bold text-emerald-900">
+                  Pague pelo celular via PIX ou Cartão (1x) e o saldo entra na hora (+5% taxa online)
+                </p>
+              </div>
+
               {/* QR CODE SECTION: ONLY DISPLAYED IF VERIFIED BY SCANNING THE PHYSICAL PAPER QR */}
               {authMode === 'QR_VERIFIED' ? (
                 <div className="space-y-3">
@@ -1137,7 +1204,11 @@ export default function CustomerWalletApp({
                     let badgeColors = '';
 
                     if (tx.tipo === 'RECARGA') {
-                      title = 'Recarga no Caixa';
+                      title =
+                        tx.usuario_responsavel &&
+                        tx.usuario_responsavel.toLowerCase().includes('recarga online')
+                          ? tx.usuario_responsavel
+                          : 'Recarga no Caixa';
                       IconComponent = PlusCircle;
                       badgeColors = 'bg-emerald-100 text-emerald-900 border-emerald-400';
                     } else if (tx.tipo === 'VENDA') {
@@ -1263,6 +1334,17 @@ export default function CustomerWalletApp({
           handleSelectCard(scannedCode, 'QR_VERIFIED');
         }}
       />
+
+      {/* Online Recharge Dialog (Asaas PIX or Card 1x) */}
+      {card && (
+        <OnlineRechargeDialog
+          open={isOnlineRechargeOpen}
+          onOpenChange={setIsOnlineRechargeOpen}
+          card={card}
+          largeFont={largeFont}
+          soundEnabled={soundEnabled}
+        />
+      )}
     </div>
   );
 }

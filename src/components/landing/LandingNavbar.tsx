@@ -106,6 +106,25 @@ export default function LandingNavbar() {
         </div>
       </div>
 
+      {/* Always-visible Mobile Quick Action Buttons (No need to open menu!) */}
+      <div className="sm:hidden px-3 pb-2.5 pt-1 bg-white/95 border-t border-slate-100 flex flex-col gap-1.5">
+        <Link
+          href="/meu-cartao"
+          className="w-full flex items-center justify-center gap-2 rounded-xl bg-purple-700 active:bg-purple-800 py-2.5 px-3 text-xs font-black text-white shadow-sm"
+        >
+          <Wallet className="h-4 w-4 shrink-0" />
+          <span>Meu Cartão: Ver Saldo, Compras e Pedidos</span>
+        </Link>
+        <Link
+          href="/igreja-batista-da-manha/pedidos"
+          className="w-full flex items-center justify-center gap-2 rounded-xl bg-emerald-600 active:bg-emerald-700 py-2 px-3 text-xs font-extrabold text-white shadow-sm"
+        >
+          <span className="h-2 w-2 rounded-full bg-emerald-200 animate-ping shrink-0" />
+          <BellRing className="h-3.5 w-3.5 shrink-0" />
+          <span>Painel Geral de Filas das Barracas</span>
+        </Link>
+      </div>
+
       {/* Mobile dropdown */}
       {mobileMenuOpen && (
         <div className="md:hidden border-b border-slate-100 bg-white/98 px-4 pt-2 pb-4 shadow-lg backdrop-blur-md">
