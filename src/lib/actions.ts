@@ -236,14 +236,15 @@ export async function processSale(
 
                 if (data.stock_control_type === 'INGREDIENTS' && data.receita && data.receita.length > 0) {
                     const obs = it.observation || '';
-                    const removedMatch = obs.match(/SEM: \[(.*?)\]/);
-                    const removedList = removedMatch
-                        ? removedMatch[1].split(',').map(s => s.trim().toLowerCase())
+                    const removedMatch = obs.match(/SEM: \[(.*?)\]/i) || obs.match(/SEM:\s*(.*?)(?:\||$)/i);
+                    const removedList = removedMatch && removedMatch[1]
+                        ? removedMatch[1].split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
                         : [];
 
                     for (const recipeItem of data.receita) {
                         // Check if ingredient was removed by customer observation
-                        const isRemoved = removedList.some(r => r && recipeItem.ingredient_nome.toLowerCase().includes(r));
+                        const ingNameLower = recipeItem.ingredient_nome.toLowerCase();
+                        const isRemoved = removedList.some(r => r && (ingNameLower.includes(r) || r.includes(ingNameLower)));
                         if (isRemoved) continue;
 
                         const qtyNeededForThis = recipeItem.quantidade * it.quantity;
@@ -488,13 +489,14 @@ export async function reverseTransaction(transactionId: string, responsibleUser:
 
                     if (data.stock_control_type === 'INGREDIENTS' && data.receita && data.receita.length > 0) {
                         const obs = it.observation || '';
-                        const removedMatch = obs.match(/SEM: \[(.*?)\]/);
-                        const removedList = removedMatch
-                            ? removedMatch[1].split(',').map(s => s.trim().toLowerCase())
+                        const removedMatch = obs.match(/SEM: \[(.*?)\]/i) || obs.match(/SEM:\s*(.*?)(?:\||$)/i);
+                        const removedList = removedMatch && removedMatch[1]
+                            ? removedMatch[1].split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
                             : [];
 
                         for (const recipeItem of data.receita) {
-                            const isRemoved = removedList.some(r => r && recipeItem.ingredient_nome.toLowerCase().includes(r));
+                            const ingNameLower = recipeItem.ingredient_nome.toLowerCase();
+                            const isRemoved = removedList.some(r => r && (ingNameLower.includes(r) || r.includes(ingNameLower)));
                             if (isRemoved) continue;
 
                             const ingRef = clientDoc(db, 'pdvs', originalTx.pdv_id, 'ingredients', recipeItem.ingredient_id);

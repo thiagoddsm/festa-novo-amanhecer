@@ -353,8 +353,13 @@ const OrderCard = ({ order, equipePreparo }: { order: Order; equipePreparo: stri
                             </span>
                         </div>
                         {item.observation && (
-                            <p className="text-[11px] text-blue-700 bg-blue-50 dark:bg-blue-950/40 px-2 py-0.5 rounded mt-1 font-medium">
-                                Obs: {item.observation}
+                            <p className={cn(
+                                "text-[11px] px-2 py-0.5 rounded mt-1 font-semibold",
+                                item.observation.toUpperCase().includes('SEM') || item.observation.toUpperCase().includes('NÃO')
+                                  ? "text-rose-700 bg-rose-50 border border-rose-200 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800"
+                                  : "text-blue-700 bg-blue-50 dark:bg-blue-950/40"
+                            )}>
+                                {item.observation.toUpperCase().includes('SEM') ? '⚠️ ' : 'Obs: '}{item.observation}
                             </p>
                         )}
                     </li>

@@ -181,6 +181,210 @@ function ObservationDialog({ item, onSave }: { item: CartItem; onSave: (observat
     )
 }
 
+type MissingIngredientInfo = {
+  ingredient_id: string;
+  ingredient_nome: string;
+  unidade: string;
+  quantidade_atual: number;
+  quantidade_receita: number;
+  obrigatorio: boolean;
+};
+
+type ItemStockDetails = {
+  fullStock: number;
+  hardStock: number;
+  isHardOutOfStock: boolean;
+  missingOptionals: MissingIngredientInfo[];
+  missingMandatory: MissingIngredientInfo[];
+  missingAll: MissingIngredientInfo[];
+  availableIngredients: {
+    ingredient_nome: string;
+    unidade: string;
+    quantidade_atual: number;
+    portions: number;
+  }[];
+};
+
+function MissingIngredientsDialog({
+  item,
+  isOpen,
+  onClose,
+  ingredients,
+  onConfirmAdd,
+}: {
+  item: MenuItem | null;
+  isOpen: boolean;
+  onClose: () => void;
+  ingredients: PdvIngredient[];
+  onConfirmAdd: (item: MenuItem, observation: string) => void;
+}) {
+  const [selectedToRemove, setSelectedToRemove] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (item && item.receita) {
+      const depleted = item.receita
+        .filter(r => {
+          const ing = ingredients.find(i => i.id === r.ingredient_id);
+          const stock = typeof ing?.quantidade_atual === 'number' ? ing.quantidade_atual : 0;
+          return Math.floor(stock / (r.quantidade || 1)) === 0;
+        })
+        .map(r => r.ingredient_nome);
+      setSelectedToRemove(depleted);
+    } else {
+      setSelectedToRemove([]);
+    }
+  }, [item, ingredients, isOpen]);
+
+  if (!item) return null;
+
+  const recipe = item.receita || [];
+  const missing = recipe.filter(r => {
+    const ing = ingredients.find(i => i.id === r.ingredient_id);
+    const stock = typeof ing?.quantidade_atual === 'number' ? ing.quantidade_atual : 0;
+    return Math.floor(stock / (r.quantidade || 1)) === 0;
+  });
+
+  const available = recipe.filter(r => {
+    const ing = ingredients.find(i => i.id === r.ingredient_id);
+    const stock = typeof ing?.quantidade_atual === 'number' ? ing.quantidade_atual : 0;
+    return Math.floor(stock / (r.quantidade || 1)) > 0;
+  });
+
+  const hasMandatoryMissing = missing.some(r => r.obrigatorio !== false);
+
+  const handleToggle = (name: string) => {
+    setSelectedToRemove(prev =>
+      prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name]
+    );
+  };
+
+  const handleConfirm = () => {
+    if (selectedToRemove.length === 0) {
+      onClose();
+      return;
+    }
+    const obs = `SEM: [${selectedToRemove.join(', ')}]`;
+    onConfirmAdd(item, obs);
+    onClose();
+  };
+
+  return (
+    <AlertDialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <AlertDialogContent className="max-w-md">
+        <AlertDialogHeader>
+          <div className="flex items-center gap-2">
+            <div className="h-9 w-9 rounded-full bg-amber-100 dark:bg-amber-950/70 flex items-center justify-center text-amber-600 dark:text-amber-400 shrink-0">
+              <AlertTriangle className="h-5 w-5" />
+            </div>
+            <div>
+              <AlertDialogTitle className="text-base font-bold">
+                Insumos em Falta — {item.nome}
+              </AlertDialogTitle>
+              <AlertDialogDescription className="text-xs">
+                {hasMandatoryMissing
+                  ? 'Atenção: há insumos principais com estoque zerado.'
+                  : 'Este item possui insumos esgotados, mas pode ser vendido sem eles.'}
+              </AlertDialogDescription>
+            </div>
+          </div>
+        </AlertDialogHeader>
+
+        <div className="space-y-3 py-2 text-xs">
+          {/* Missing list */}
+          <div className="space-y-1.5">
+            <span className="font-semibold text-foreground flex items-center justify-between">
+              <span>Insumos Esgotados (marque para retirar):</span>
+              <span className="text-[10px] text-muted-foreground font-normal">Estoque atual</span>
+            </span>
+            <div className="space-y-1">
+              {missing.map(r => {
+                const ing = ingredients.find(i => i.id === r.ingredient_id);
+                const isChecked = selectedToRemove.includes(r.ingredient_nome);
+                const isMandatory = r.obrigatorio !== false;
+                return (
+                  <div
+                    key={r.ingredient_id}
+                    onClick={() => handleToggle(r.ingredient_nome)}
+                    className={cn(
+                      "flex items-center justify-between p-2.5 rounded-lg border cursor-pointer transition-colors",
+                      isChecked
+                        ? "bg-rose-50/70 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800"
+                        : "bg-muted/30 border-border"
+                    )}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        checked={isChecked}
+                        onCheckedChange={() => handleToggle(r.ingredient_nome)}
+                      />
+                      <div>
+                        <p className={cn("font-bold", isChecked && "text-rose-700 dark:text-rose-300")}>
+                          {r.ingredient_nome}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {isMandatory ? 'Insumo Principal' : 'Insumo Opcional / Dispensável'}
+                        </p>
+                      </div>
+                    </div>
+                    <Badge variant="destructive" className="text-[10px] h-5 px-1.5 font-bold">
+                      {ing?.quantidade_atual ?? 0} {ing?.unidade || 'un'}
+                    </Badge>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Available ingredients summary */}
+          {available.length > 0 && (
+            <div className="space-y-1 pt-1 border-t border-border/60">
+              <span className="font-semibold text-muted-foreground text-[11px]">
+                Insumos disponíveis em estoque para preparo:
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {available.map(r => {
+                  const ing = ingredients.find(i => i.id === r.ingredient_id);
+                  const portions = Math.floor((ing?.quantidade_atual || 0) / (r.quantidade || 1));
+                  return (
+                    <span
+                      key={r.ingredient_id}
+                      className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
+                    >
+                      <CheckCircle2 className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                      {r.ingredient_nome}: {ing?.quantidade_atual} {ing?.unidade || 'un'} ({portions}x)
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {hasMandatoryMissing && (
+            <p className="text-[11px] text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/50 p-2 rounded-md border border-amber-200 dark:border-amber-800 font-medium">
+              ⚠️ Certifique-se com o cliente e com a equipe da cozinha de que este item pode ser servido sem o insumo principal selecionado.
+            </p>
+          )}
+        </div>
+
+        <AlertDialogFooter className="gap-2 sm:gap-0">
+          <AlertDialogCancel onClick={onClose} className="h-9 text-xs">
+            Cancelar
+          </AlertDialogCancel>
+          <AlertDialogAction
+            onClick={handleConfirm}
+            disabled={selectedToRemove.length === 0}
+            className="h-9 text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white"
+          >
+            {selectedToRemove.length > 0
+              ? `Adicionar SEM ${selectedToRemove.slice(0, 2).join(' e ')}${selectedToRemove.length > 2 ? '...' : ''}`
+              : 'Selecione os insumos'}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
 export default function SaleTerminal({
   pdv,
   onGoBack,
@@ -223,6 +427,7 @@ export default function SaleTerminal({
   const [isWhatsappDialogOpen, setIsWhatsappDialogOpen] = useState(false);
   const [isIngredientsOpen, setIsIngredientsOpen] = useState(false);
   const [ingredients, setIngredients] = useState<PdvIngredient[]>([]);
+  const [missingDialogItem, setMissingDialogItem] = useState<MenuItem | null>(null);
   const [showPrepSelector, setShowPrepSelector] = useState<boolean>(!!pdv.solicitar_responsavel_preparo);
   const [responsavelPreparo, setResponsavelPreparo] = useState<string>('');
   const [newPrepName, setNewPrepName] = useState<string>('');
@@ -358,32 +563,116 @@ export default function SaleTerminal({
     return () => unsubscribe();
   }, [firestore, pdv.id]);
 
-  // Helper to compute available stock taking into account ingredients / recipe
-  const getItemAvailableStock = (item: MenuItem): number => {
+  // Helper to compute comprehensive stock taking into account ingredients, mandatory vs optional
+  const getItemStockDetails = (item: MenuItem): ItemStockDetails => {
     if (!item.stock_control_type || item.stock_control_type === 'NONE') {
-      return Infinity;
+      return {
+        fullStock: Infinity,
+        hardStock: Infinity,
+        isHardOutOfStock: false,
+        missingOptionals: [],
+        missingMandatory: [],
+        missingAll: [],
+        availableIngredients: [],
+      };
     }
     if (item.stock_control_type === 'PRODUCT') {
-      return typeof item.estoque_atual === 'number' ? Math.max(0, item.estoque_atual) : 0;
+      const stock = typeof item.estoque_atual === 'number' ? Math.max(0, item.estoque_atual) : 0;
+      return {
+        fullStock: stock,
+        hardStock: stock,
+        isHardOutOfStock: stock <= 0,
+        missingOptionals: [],
+        missingMandatory: [],
+        missingAll: [],
+        availableIngredients: [],
+      };
     }
     if (item.stock_control_type === 'INGREDIENTS') {
-      if (!item.receita || item.receita.length === 0) return Infinity;
-      let minPossible = Infinity;
+      if (!item.receita || item.receita.length === 0) {
+        return {
+          fullStock: Infinity,
+          hardStock: Infinity,
+          isHardOutOfStock: false,
+          missingOptionals: [],
+          missingMandatory: [],
+          missingAll: [],
+          availableIngredients: [],
+        };
+      }
+      let minFull = Infinity;
+      let minHard = Infinity;
+      let hasMandatory = false;
+
+      const missingOptionals: MissingIngredientInfo[] = [];
+      const missingMandatory: MissingIngredientInfo[] = [];
+      const missingAll: MissingIngredientInfo[] = [];
+      const availableIngredients: ItemStockDetails['availableIngredients'] = [];
+
       for (const recipeItem of item.receita) {
         const ing = ingredients.find(i => i.id === recipeItem.ingredient_id);
-        if (!ing) {
-          minPossible = 0;
-          break;
-        }
-        const ingStock = typeof ing.quantidade_atual === 'number' ? ing.quantidade_atual : 0;
+        const ingStock = typeof ing?.quantidade_atual === 'number' ? ing.quantidade_atual : 0;
+        const unit = ing?.unidade || recipeItem.unidade || 'un';
         const portions = Math.floor(ingStock / (recipeItem.quantidade || 1));
-        if (portions < minPossible) {
-          minPossible = portions;
+        const isReq = recipeItem.obrigatorio !== false;
+
+        if (isReq) {
+          hasMandatory = true;
+          if (portions < minHard) minHard = portions;
+        }
+        if (portions < minFull) minFull = portions;
+
+        if (portions === 0) {
+          const missingInfo: MissingIngredientInfo = {
+            ingredient_id: recipeItem.ingredient_id,
+            ingredient_nome: recipeItem.ingredient_nome,
+            unidade: unit,
+            quantidade_atual: ingStock,
+            quantidade_receita: recipeItem.quantidade,
+            obrigatorio: isReq,
+          };
+          missingAll.push(missingInfo);
+          if (isReq) {
+            missingMandatory.push(missingInfo);
+          } else {
+            missingOptionals.push(missingInfo);
+          }
+        } else {
+          availableIngredients.push({
+            ingredient_nome: recipeItem.ingredient_nome,
+            unidade: unit,
+            quantidade_atual: ingStock,
+            portions,
+          });
         }
       }
-      return Math.max(0, minPossible);
+
+      const calculatedHardStock = hasMandatory ? Math.max(0, minHard) : (minFull === 0 ? Infinity : Math.max(0, minFull));
+      const calculatedFullStock = Math.max(0, minFull);
+
+      return {
+        fullStock: calculatedFullStock,
+        hardStock: calculatedHardStock,
+        isHardOutOfStock: calculatedHardStock <= 0,
+        missingOptionals,
+        missingMandatory,
+        missingAll,
+        availableIngredients,
+      };
     }
-    return Infinity;
+    return {
+      fullStock: Infinity,
+      hardStock: Infinity,
+      isHardOutOfStock: false,
+      missingOptionals: [],
+      missingMandatory: [],
+      missingAll: [],
+      availableIngredients: [],
+    };
+  };
+
+  const getItemAvailableStock = (item: MenuItem): number => {
+    return getItemStockDetails(item).fullStock;
   };
 
   useEffect(() => {
@@ -416,10 +705,13 @@ export default function SaleTerminal({
     return () => clearTimeout(timer);
   }, [state]);
 
-  const addToCart = (item: MenuItem) => {
-    const maxAvailable = getItemAvailableStock(item);
+  const addToCart = (item: MenuItem, observation?: string) => {
+    const stockDetails = getItemStockDetails(item);
+    const isExclusionSale = !!(observation && observation.includes('SEM:'));
+    const maxAvailable = isExclusionSale ? stockDetails.hardStock : stockDetails.fullStock;
+
     const currentInCart = cart
-      .filter(ci => ci.id === item.id)
+      .filter(ci => ci.id === item.id && (ci.observation || '') === (observation || ''))
       .reduce((sum, ci) => sum + ci.quantity, 0);
 
     if (currentInCart >= maxAvailable) {
@@ -428,13 +720,15 @@ export default function SaleTerminal({
         title: 'Estoque insuficiente!',
         description: maxAvailable === 0
           ? `"${item.nome}" está esgotado.`
-          : `Apenas ${maxAvailable} unidade(s) de "${item.nome}" disponíveis no estoque.`,
+          : `Apenas ${maxAvailable} unidade(s) disponíveis no estoque.`,
       });
       return;
     }
 
     setCart(currentCart => {
-      const existingItemIndex = currentCart.findIndex(cartItem => cartItem.id === item.id && !cartItem.observation);
+      const existingItemIndex = currentCart.findIndex(
+        cartItem => cartItem.id === item.id && (cartItem.observation || '') === (observation || '')
+      );
       if (existingItemIndex > -1) {
         return currentCart.map((cartItem, idx) =>
           idx === existingItemIndex
@@ -450,10 +744,33 @@ export default function SaleTerminal({
           price: item.preco_centavos,
           quantity: 1,
           ingredientes: item.ingredientes,
+          observation: observation || undefined,
           requer_preparo: item.requer_preparo !== false,
         },
       ];
     });
+  };
+
+  const handleItemCardClick = (item: MenuItem) => {
+    const stockDetails = getItemStockDetails(item);
+
+    // Se o item usa receita e tem algum insumo zerado, abre o diálogo de insumos em falta para avançar SEM
+    if (item.stock_control_type === 'INGREDIENTS' && stockDetails.missingAll.length > 0) {
+      setMissingDialogItem(item);
+      return;
+    }
+
+    // Se for produto sem receita e sem estoque
+    if (stockDetails.fullStock <= 0) {
+      toast({
+        variant: 'destructive',
+        title: 'Produto Esgotado',
+        description: `"${item.nome}" está sem estoque no momento.`,
+      });
+      return;
+    }
+
+    addToCart(item);
   };
 
   const removeFromCart = (uniqueId: string) => {
@@ -747,42 +1064,52 @@ export default function SaleTerminal({
                       </div>
                     )}
                     {menuItems && menuItems.map(item => {
-                      const available = getItemAvailableStock(item);
-                      const isOutOfStock = available <= 0;
-                      const isLowStock = available > 0 && available <= (item.estoque_minimo || 5) && available !== Infinity;
+                      const stockDetails = getItemStockDetails(item);
+                      const isCompletelyOutOfStock = stockDetails.isHardOutOfStock;
+                      const isMissingOptional = !isCompletelyOutOfStock && stockDetails.missingOptionals.length > 0;
+                      const isLowStock = !isCompletelyOutOfStock && !isMissingOptional && stockDetails.fullStock > 0 && stockDetails.fullStock <= (item.estoque_minimo || 5) && stockDetails.fullStock !== Infinity;
+                      const isNormalAvailable = !isCompletelyOutOfStock && !isMissingOptional && stockDetails.fullStock !== Infinity;
+
+                      const isButtonDisabled = item.stock_control_type === 'PRODUCT' && stockDetails.fullStock <= 0;
 
                       return (
                         <Button 
                           key={item.id} 
                           variant="outline" 
-                          disabled={isOutOfStock}
+                          disabled={isButtonDisabled}
                           className={cn(
-                            "min-h-[88px] sm:h-24 flex-col justify-between items-stretch p-2 sm:p-3 text-left transition-all duration-200 group relative overflow-hidden rounded-xl border-border/80 shadow-xs whitespace-normal break-words",
-                            isOutOfStock 
-                              ? "opacity-60 cursor-not-allowed bg-muted/50 hover:bg-muted/50" 
-                              : "hover:border-primary/50 hover:bg-primary/5"
+                            "min-h-[88px] sm:h-24 flex-col justify-between items-stretch p-2 sm:p-3 text-left transition-all duration-200 group relative overflow-hidden rounded-xl border-border/80 shadow-xs whitespace-normal break-words cursor-pointer",
+                            isCompletelyOutOfStock 
+                              ? "opacity-75 bg-muted/30 hover:bg-muted/50 border-destructive/30" 
+                              : isMissingOptional
+                                ? "border-amber-400/80 bg-amber-50/40 dark:bg-amber-950/20 hover:bg-amber-50/70 dark:hover:bg-amber-950/40"
+                                : "hover:border-primary/50 hover:bg-primary/5"
                           )}
-                          onClick={() => addToCart(item)}
+                          onClick={() => handleItemCardClick(item)}
                         >
                           <div className="flex items-start justify-between gap-1 w-full">
                             <span className={cn(
                               "text-xs sm:text-sm font-semibold line-clamp-2 leading-tight transition-colors",
-                              isOutOfStock ? "text-muted-foreground line-through" : "text-foreground group-hover:text-primary"
+                              isCompletelyOutOfStock ? "text-muted-foreground" : "text-foreground group-hover:text-primary"
                             )}>
                               {item.nome}
                             </span>
 
-                            {isOutOfStock ? (
+                            {isCompletelyOutOfStock ? (
                               <Badge variant="destructive" className="text-[9px] px-1 py-0 h-4 font-bold shrink-0">
                                 Esgotado
                               </Badge>
+                            ) : isMissingOptional ? (
+                              <Badge className="bg-amber-500/15 hover:bg-amber-500/25 text-amber-700 dark:text-amber-400 border border-amber-300 dark:border-amber-700 text-[9px] px-1 py-0 h-4 font-semibold shrink-0 gap-0.5">
+                                <AlertTriangle className="h-2.5 w-2.5 text-amber-600" /> Sem {stockDetails.missingOptionals[0]?.ingredient_nome.split(' ')[0]} ({stockDetails.hardStock})
+                              </Badge>
                             ) : isLowStock ? (
                               <Badge className="bg-amber-500 hover:bg-amber-600 text-white text-[9px] px-1 py-0 h-4 font-semibold shrink-0 gap-0.5">
-                                <AlertTriangle className="h-2.5 w-2.5" /> {available}
+                                <AlertTriangle className="h-2.5 w-2.5" /> {stockDetails.fullStock}
                               </Badge>
-                            ) : available !== Infinity ? (
+                            ) : isNormalAvailable ? (
                               <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 text-emerald-700 bg-emerald-50 border-emerald-300 font-medium shrink-0">
-                                Disp: {available}
+                                Disp: {stockDetails.fullStock}
                               </Badge>
                             ) : null}
                           </div>
@@ -790,7 +1117,7 @@ export default function SaleTerminal({
                           <div className="flex items-center justify-between mt-auto pt-1 gap-1 w-full">
                             <span className={cn(
                               "text-xs sm:text-base font-bold truncate",
-                              isOutOfStock ? "text-muted-foreground" : "text-primary"
+                              isCompletelyOutOfStock ? "text-muted-foreground" : "text-primary"
                             )}>
                               {formatCurrency(item.preco_centavos)}
                             </span>
@@ -806,11 +1133,13 @@ export default function SaleTerminal({
                               )}
                               <span className={cn(
                                 "text-[10px] font-bold px-1.5 py-0.5 rounded transition-colors shrink-0",
-                                isOutOfStock 
-                                  ? "bg-muted text-muted-foreground/30" 
-                                  : "bg-muted text-muted-foreground group-hover:bg-primary group-hover:text-primary-foreground"
+                                isCompletelyOutOfStock 
+                                  ? "bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300" 
+                                  : isMissingOptional
+                                    ? "bg-amber-200 text-amber-900 dark:bg-amber-900 dark:text-amber-200"
+                                    : "bg-muted text-muted-foreground group-hover:bg-primary group-hover:text-primary-foreground"
                               )}>
-                                {isOutOfStock ? "✕" : "+"}
+                                {isCompletelyOutOfStock ? "!" : isMissingOptional ? "⚠️" : "+"}
                               </span>
                             </div>
                           </div>
@@ -844,7 +1173,17 @@ export default function SaleTerminal({
                                             <div>
                                                 <div className="font-semibold flex items-center gap-2">{item.name} <Badge variant="secondary">{item.quantity}x</Badge></div>
                                                 <p className="text-sm text-muted-foreground">{formatCurrency(item.price)}</p>
-                                                {item.observation && <p className="text-xs text-blue-500 pl-1 max-w-xs truncate" title={item.observation}>OBS: {item.observation}</p>}
+                                                {item.observation && (
+                                                    <div className={cn(
+                                                        "text-xs mt-0.5 font-semibold inline-flex items-center gap-1 px-1.5 py-0.5 rounded max-w-xs truncate",
+                                                        item.observation.includes('SEM')
+                                                          ? "bg-rose-100 text-rose-800 border border-rose-200 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800"
+                                                          : "bg-blue-50 text-blue-700 dark:bg-blue-950/40"
+                                                    )} title={item.observation}>
+                                                        {item.observation.includes('SEM') && <AlertTriangle className="h-3 w-3 shrink-0" />}
+                                                        <span className="truncate">{item.observation.startsWith('SEM:') || item.observation.startsWith('OBS:') ? '' : 'OBS: '}{item.observation}</span>
+                                                    </div>
+                                                )}
                                             </div>
                                             <div className="flex items-center gap-1">
                                                     <ObservationDialog item={item} onSave={(obs) => updateItemObservation(uniqueId, obs)} />
@@ -1282,6 +1621,15 @@ export default function SaleTerminal({
             Fechar
           </Button>
         </div>
+      )}
+      {missingDialogItem && (
+        <MissingIngredientsDialog
+          item={missingDialogItem}
+          isOpen={!!missingDialogItem}
+          onClose={() => setMissingDialogItem(null)}
+          ingredients={ingredients}
+          onConfirmAdd={(item, obs) => addToCart(item, obs)}
+        />
       )}
     </>
   );

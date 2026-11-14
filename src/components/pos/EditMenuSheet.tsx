@@ -45,6 +45,7 @@ import {
   PdvIngredient,
   RecipeItem,
 } from '@/lib/definitions';
+import { cn } from '@/lib/utils';
 import { formatCurrency } from '@/lib/utils';
 import { addMenuItem, updateMenuItem, deleteMenuItem, toggleMenuItemPrep } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
@@ -306,6 +307,27 @@ export default function EditMenuSheet({
     }
   };
 
+  const toggleIngredientRequired = (isEditing: boolean, ingredientId: string) => {
+    if (isEditing && editingItem) {
+      setEditingItem({
+        ...editingItem,
+        receita: editingItem.receita.map((r) =>
+          r.ingredient_id === ingredientId
+            ? { ...r, obrigatorio: r.obrigatorio === false ? true : false }
+            : r
+        ),
+      });
+    } else {
+      setNewRecipe(
+        newRecipe.map((r) =>
+          r.ingredient_id === ingredientId
+            ? { ...r, obrigatorio: r.obrigatorio === false ? true : false }
+            : r
+        )
+      );
+    }
+  };
+
   return (
     <>
       <Sheet open={isOpen} onOpenChange={onOpenChange}>
@@ -484,15 +506,30 @@ export default function EditMenuSheet({
                                           </span>
                                         )}
                                       </div>
-                                      <Button
-                                        type="button"
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-6 w-6 text-destructive hover:bg-destructive/10"
-                                        onClick={() => removeIngredientFromRecipe(true, r.ingredient_id)}
-                                      >
-                                        <X className="h-3.5 w-3.5" />
-                                      </Button>
+                                      <div className="flex items-center gap-1.5 shrink-0">
+                                        <button
+                                          type="button"
+                                          onClick={() => toggleIngredientRequired(true, r.ingredient_id)}
+                                          title={r.obrigatorio === false ? "Insumo Opcional: pode ser vendido sem este item se faltar estoque" : "Insumo Obrigatório: produto fica esgotado se faltar"}
+                                          className={cn(
+                                            "text-[10px] font-semibold px-2 py-0.5 rounded-full border transition-all cursor-pointer",
+                                            r.obrigatorio === false
+                                              ? "bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-700"
+                                              : "bg-emerald-100 text-emerald-800 border-emerald-300 hover:bg-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-700"
+                                          )}
+                                        >
+                                          {r.obrigatorio === false ? "Opcional" : "Obrigatório"}
+                                        </button>
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-6 w-6 text-destructive hover:bg-destructive/10"
+                                          onClick={() => removeIngredientFromRecipe(true, r.ingredient_id)}
+                                        >
+                                          <X className="h-3.5 w-3.5" />
+                                        </Button>
+                                      </div>
                                     </div>
                                   );
                                 })}
@@ -674,7 +711,7 @@ export default function EditMenuSheet({
                           <p className="text-xs text-muted-foreground">
                             Receita: {item.receita.map((r) => {
                               const u = r.unidade || ingredients.find((i) => i.id === r.ingredient_id)?.unidade || 'un';
-                              return `${r.quantidade} ${u} de ${r.ingredient_nome}`;
+                              return `${r.quantidade} ${u} de ${r.ingredient_nome}${r.obrigatorio === false ? ' (Opcional)' : ''}`;
                             }).join(' • ')}
                           </p>
                         )}
@@ -876,15 +913,30 @@ export default function EditMenuSheet({
                                   </span>
                                 )}
                               </div>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                className="h-6 w-6 text-destructive hover:bg-destructive/10"
-                                onClick={() => removeIngredientFromRecipe(false, r.ingredient_id)}
-                              >
-                                <X className="h-3.5 w-3.5" />
-                              </Button>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => toggleIngredientRequired(false, r.ingredient_id)}
+                                  title={r.obrigatorio === false ? "Insumo Opcional: pode ser vendido sem este item se faltar estoque" : "Insumo Obrigatório: produto fica esgotado se faltar"}
+                                  className={cn(
+                                    "text-[10px] font-semibold px-2 py-0.5 rounded-full border transition-all cursor-pointer",
+                                    r.obrigatorio === false
+                                      ? "bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-700"
+                                      : "bg-emerald-100 text-emerald-800 border-emerald-300 hover:bg-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-700"
+                                  )}
+                                >
+                                  {r.obrigatorio === false ? "Opcional" : "Obrigatório"}
+                                </button>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6 text-destructive hover:bg-destructive/10"
+                                  onClick={() => removeIngredientFromRecipe(false, r.ingredient_id)}
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
                             </div>
                           );
                         })}
