@@ -86,6 +86,8 @@ export type Card = {
   updated_at: Timestamp;
   nome_cliente?: string;
   telefone_cliente?: string;
+  cpf_cliente?: string;
+  criado_online?: boolean;
   tenant_id?: string;
   event_id?: string;
 };
@@ -299,10 +301,13 @@ export type Order = {
 
 export type OnlineRecharge = {
   id: string; // = asaasPaymentId (ex: pay_123456)
+  tipo_operacao?: 'RECHARGE' | 'CREATE_CARD';
   cartao_id: string;
   qr_code_id: string;
   nome_cliente: string;
-  cpf_pagador: string;
+  telefone_cliente?: string;
+  cpf_cliente?: string;
+  cpf_pagador?: string;
   metodo: 'PIX' | 'CARD';
   /** Valor líquido em centavos que entra de saldo no cartão (ex: 5000 = R$ 50,00) */
   valor_recarga_centavos: number;

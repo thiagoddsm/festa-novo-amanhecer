@@ -24,6 +24,9 @@ import {
 } from '@/lib/queue-estimator';
 import QrScannerDialog from '@/components/common/QrScannerDialog';
 import OnlineRechargeDialog from '@/components/public/OnlineRechargeDialog';
+import CreateOnlineCardDialog, {
+  STORAGE_PENDING_CREATE_CARD_KEY,
+} from '@/components/public/CreateOnlineCardDialog';
 import { Button } from '@/components/ui/button';
 import {
   Wallet,
@@ -118,6 +121,9 @@ export default function CustomerWalletApp({
   const [showQrModal, setShowQrModal] = useState<boolean>(false);
   const [isScannerOpen, setIsScannerOpen] = useState<boolean>(false);
   const [isOnlineRechargeOpen, setIsOnlineRechargeOpen] = useState<boolean>(false);
+  const [isCreateOnlineCardOpen, setIsCreateOnlineCardOpen] = useState<boolean>(false);
+  const [cpfUnlockInput, setCpfUnlockInput] = useState<string>('');
+  const [cpfUnlockError, setCpfUnlockError] = useState<string | null>(null);
 
   // Active Card & Security Mode state
   const [activeQrCodeId, setActiveQrCodeId] = useState<string>('');
@@ -164,6 +170,10 @@ export default function CustomerWalletApp({
         localStorage.setItem(STORAGE_AUTH_MODE_KEY, 'QR_VERIFIED');
         setAuthMode('QR_VERIFIED');
         setActiveQrCodeId(clean);
+        if (localStorage.getItem('festapay_auto_open_qr_modal') === 'true') {
+          localStorage.removeItem('festapay_auto_open_qr_modal');
+          setShowQrModal(true);
+        }
         return;
       }
     }
@@ -172,12 +182,83 @@ export default function CustomerWalletApp({
     const savedMode = localStorage.getItem(STORAGE_AUTH_MODE_KEY) as CustomerAuthMode | null;
 
     if (savedQr && savedQr.trim()) {
-      setAuthMode(savedMode === 'QR_VERIFIED' ? 'QR_VERIFIED' : 'PHONE_ONLY');
+      const resolvedMode = savedMode === 'QR_VERIFIED' ? 'QR_VERIFIED' : 'PHONE_ONLY';
+      setAuthMode(resolvedMode);
       setActiveQrCodeId(extractCardQrCode(savedQr));
+      if (
+        resolvedMode === 'QR_VERIFIED' &&
+        localStorage.getItem('festapay_auto_open_qr_modal') === 'true'
+      ) {
+        localStorage.removeItem('festapay_auto_open_qr_modal');
+        setShowQrModal(true);
+      }
     } else {
       setIsLoadingCard(false);
     }
   }, [initialCode]);
+
+  // 1b. Auto-recover pending online card creation if user returns from banking app
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const checkPendingCardCreation = async () => {
+      try {
+        const raw = localStorage.getItem(STORAGE_PENDING_CREATE_CARD_KEY);
+        if (!raw) return;
+        const parsed = JSON.parse(raw) as {
+          paymentId?: string;
+          qrCodeId?: string;
+          createdAt?: number;
+        };
+        if (!parsed?.paymentId) return;
+
+        // Expire after 2 hours
+        if (parsed.createdAt && Date.now() - parsed.createdAt > 2 * 60 * 60 * 1000) {
+          localStorage.removeItem(STORAGE_PENDING_CREATE_CARD_KEY);
+          return;
+        }
+
+        const res = await fetch(
+          `/api/asaas/recharge/status?id=${encodeURIComponent(parsed.paymentId)}`,
+          { cache: 'no-store' }
+        );
+        const data = await res.json();
+        if (res.ok && data.credited) {
+          const targetQr = extractCardQrCode(data.qrCodeId || parsed.qrCodeId);
+          if (targetQr) {
+            localStorage.removeItem(STORAGE_PENDING_CREATE_CARD_KEY);
+            localStorage.setItem(STORAGE_CARD_KEY, targetQr);
+            localStorage.setItem(STORAGE_AUTH_MODE_KEY, 'QR_VERIFIED');
+            setAuthMode('QR_VERIFIED');
+            setActiveQrCodeId(targetQr);
+            setShowQrModal(true);
+            setIsCreateOnlineCardOpen(false);
+            if (soundEnabled) {
+              soundPlayer.playReadyChime();
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Erro ao recuperar criação de cartão pendente:', err);
+      }
+    };
+
+    checkPendingCardCreation();
+
+    const handleVisibilityOrFocus = () => {
+      if (document.visibilityState === 'visible') {
+        checkPendingCardCreation();
+      }
+    };
+
+    window.addEventListener('focus', handleVisibilityOrFocus);
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
+
+    return () => {
+      window.removeEventListener('focus', handleVisibilityOrFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+    };
+  }, [soundEnabled]);
 
   const toggleLargeFont = () => {
     const next = !largeFont;
@@ -729,6 +810,37 @@ export default function CustomerWalletApp({
                 </div>
               )}
 
+              {/* OPTION 0: CREATE NEW DIGITAL CARD ONLINE (NO QUEUE AT CASHIER!) */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-purple-700 via-purple-800 to-indigo-900 text-white border-2 border-purple-950 space-y-3 shadow-lg">
+                <div className="flex items-center gap-2 font-black text-amber-300">
+                  <Sparkles className="h-6 w-6 shrink-0" />
+                  <span className={largeFont ? 'text-xl' : 'text-lg'}>
+                    Ainda não tem cartão da festa?
+                  </span>
+                </div>
+                <p className={`text-purple-100 font-medium leading-snug ${largeFont ? 'text-base' : 'text-sm'}`}>
+                  Crie seu <strong>Cartão Digital</strong> agora mesmo pelo celular com <strong>PIX ou Cartão (1x)</strong> e compre direto nas barracas sem pegar fila no caixa!
+                </p>
+                <Button
+                  type="button"
+                  onClick={() => setIsCreateOnlineCardOpen(true)}
+                  className={`w-full rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black shadow-md flex items-center justify-center gap-2.5 cursor-pointer ${
+                    largeFont ? 'h-16 text-xl' : 'h-14 text-lg'
+                  }`}
+                >
+                  <PlusCircle className="h-7 w-7 shrink-0" />
+                  <span>Criar Meu Cartão Online Agora</span>
+                </Button>
+              </div>
+
+              <div className="relative flex items-center justify-center py-1">
+                <div className="border-t-2 border-slate-200 w-full" />
+                <span className="bg-white px-4 text-xs font-black uppercase text-slate-500 tracking-wider">
+                  JÁ TEM CARTÃO?
+                </span>
+                <div className="border-t-2 border-slate-200 w-full" />
+              </div>
+
               {/* OPTION 1: SCAN PAPER QR CODE (UNLOCKS EVERYTHING INCLUDING DIGITAL QR) */}
               <div className="p-4 sm:p-5 rounded-2xl bg-emerald-50 border-2 border-emerald-500 space-y-3">
                 <div className="flex items-center gap-2 text-emerald-950 font-black">
@@ -1072,7 +1184,11 @@ export default function CustomerWalletApp({
                 <div className="space-y-3">
                   <div className="flex items-center justify-center gap-1.5 text-xs font-bold text-emerald-800">
                     <ShieldCheck className="h-4 w-4 text-emerald-600 shrink-0" />
-                    <span>Cartão verificado pela leitura do QR Code físico</span>
+                    <span>
+                      {card.criado_online
+                        ? 'Cartão Digital Oficial • Pronto para comprar nas barracas'
+                        : 'Cartão verificado pela leitura do QR Code físico'}
+                    </span>
                   </div>
 
                   <Button
@@ -1123,7 +1239,7 @@ export default function CustomerWalletApp({
                   )}
                 </div>
               ) : (
-                /* PHONE_ONLY MODE: QR CODE IS PROTECTED UNTIL PHYSICAL PAPER IS SCANNED */
+                /* PHONE_ONLY MODE: QR CODE IS PROTECTED UNTIL PHYSICAL PAPER IS SCANNED OR CPF CONFIRMED */
                 <div className="p-4 rounded-2xl bg-slate-50 border-2 border-slate-300 space-y-3 text-center">
                   <div className="flex items-center justify-center gap-2 text-slate-800 font-black">
                     <Lock className="h-5 w-5 text-purple-700 shrink-0" />
@@ -1132,7 +1248,7 @@ export default function CustomerWalletApp({
                     </span>
                   </div>
                   <p className="text-xs sm:text-sm text-slate-600 font-medium leading-relaxed">
-                    Como você entrou apenas pelo número de telefone, o QR Code para compras fica oculto para sua proteção. Para liberar o QR Code no celular, leia uma vez o QR Code do seu papel:
+                    Como você entrou apenas pelo número de telefone, o QR Code para compras fica oculto para sua proteção. Para liberar o QR Code no celular:
                   </p>
                   <Button
                     type="button"
@@ -1143,6 +1259,50 @@ export default function CustomerWalletApp({
                     <Camera className="h-5 w-5 shrink-0" />
                     <span>Ler QR Code do Papel para Liberar</span>
                   </Button>
+
+                  {card.cpf_cliente && (
+                    <div className="pt-2 border-t border-slate-200 space-y-2 text-left">
+                      <p className="text-xs font-bold text-slate-700 text-center">
+                        Criou seu cartão online (sem papel)? Confirme seu CPF para liberar o QR Code:
+                      </p>
+                      <div className="flex gap-2">
+                        <input
+                          type="tel"
+                          inputMode="numeric"
+                          value={cpfUnlockInput}
+                          onChange={(e) => {
+                            setCpfUnlockInput(e.target.value);
+                            setCpfUnlockError(null);
+                          }}
+                          placeholder="Digite seu CPF"
+                          className="flex-1 h-11 px-3 rounded-xl bg-white border-2 border-slate-300 font-bold text-sm text-slate-900"
+                        />
+                        <Button
+                          type="button"
+                          onClick={() => {
+                            const typed = cpfUnlockInput.replace(/\D/g, '');
+                            const saved = (card.cpf_cliente || '').replace(/\D/g, '');
+                            if (typed && saved && typed === saved) {
+                              handleSelectCard(card.qr_code_id, 'QR_VERIFIED');
+                              setShowQrModal(true);
+                              setCpfUnlockInput('');
+                              setCpfUnlockError(null);
+                            } else {
+                              setCpfUnlockError('CPF não confere com o titular deste cartão.');
+                            }
+                          }}
+                          className="h-11 px-4 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-black text-xs shrink-0 cursor-pointer"
+                        >
+                          Liberar QR Code
+                        </Button>
+                      </div>
+                      {cpfUnlockError && (
+                        <p className="text-xs font-bold text-red-600 text-center">
+                          {cpfUnlockError}
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </section>
@@ -1206,7 +1366,7 @@ export default function CustomerWalletApp({
                     if (tx.tipo === 'RECARGA') {
                       title =
                         tx.usuario_responsavel &&
-                        tx.usuario_responsavel.toLowerCase().includes('recarga online')
+                        tx.usuario_responsavel.toLowerCase().includes('online')
                           ? tx.usuario_responsavel
                           : 'Recarga no Caixa';
                       IconComponent = PlusCircle;
@@ -1345,6 +1505,17 @@ export default function CustomerWalletApp({
           soundEnabled={soundEnabled}
         />
       )}
+
+      {/* Online Card Creation Dialog (Asaas PIX or Card 1x -> Redirects directly to /c/[qr_code_id]) */}
+      <CreateOnlineCardDialog
+        open={isCreateOnlineCardOpen}
+        onOpenChange={setIsCreateOnlineCardOpen}
+        largeFont={largeFont}
+        soundEnabled={soundEnabled}
+        onOpenExistingCard={(existingQrCodeId) => {
+          handleSelectCard(existingQrCodeId, 'PHONE_ONLY');
+        }}
+      />
     </div>
   );
 }

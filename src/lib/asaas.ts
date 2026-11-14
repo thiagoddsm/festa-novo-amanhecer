@@ -10,7 +10,6 @@ import {
 } from 'firebase/firestore';
 import { firebaseConfig } from '@/firebase/config';
 import type { Card, OnlineRecharge } from './definitions';
-import { sendRechargeNotification } from './flows/notification-service';
 
 export interface AsaasCustomer {
   id: string;
@@ -209,11 +208,12 @@ function getWebDb() {
 }
 
 /**
- * Confirma de forma ATÔMICA e IDEMPOTENTE o crédito de saldo no cartão FestaPay
- * quando o pagamento no Asaas atinge status RECEIVED ou CONFIRMED.
+ * Confirma de forma ATÔMICA e IDEMPOTENTE a criação de cartão online ou o crédito de recarga online
+ * no FestaPay quando o pagamento no Asaas atinge status RECEIVED ou CONFIRMED.
  *
- * - Credita APENAS `valor_recarga_centavos` (líquido sem a taxa de 5%).
+ * - Credita APENAS `valor_recarga_centavos` (líquido sem a taxa do Asaas).
  * - Garante que o mesmo `paymentId` NUNCA seja creditado duas vezes.
+ * - ZERO disparos de WhatsApp (o cliente é redirecionado direto para /c/{qr_code_id} na tela).
  */
 export async function confirmAndCreditOnlineRecharge(
   paymentId: string,
@@ -226,6 +226,8 @@ export async function confirmAndCreditOnlineRecharge(
   valorRecargaCentavos?: number;
   novoSaldoCentavos?: number;
   cardId?: string;
+  qrCodeId?: string;
+  operationType?: 'RECHARGE' | 'CREATE_CARD';
 }> {
   const db = getWebDb();
   const rechargeRef = doc(db, 'online_recharges', paymentId);
@@ -233,10 +235,13 @@ export async function confirmAndCreditOnlineRecharge(
   // 1. Check current Firestore state first
   const initialSnap = await getDoc(rechargeRef);
   if (!initialSnap.exists()) {
-    throw new Error('Registro de recarga online não encontrado.');
+    throw new Error('Registro de pagamento online não encontrado.');
   }
 
   const initialData = initialSnap.data() as OnlineRecharge;
+  const opType: 'RECHARGE' | 'CREATE_CARD' =
+    initialData.tipo_operacao === 'CREATE_CARD' ? 'CREATE_CARD' : 'RECHARGE';
+
   if (initialData.status === 'CREDITED') {
     const cardSnap = await getDoc(doc(db, 'cards', initialData.cartao_id));
     const currentBalance = cardSnap.exists() ? (cardSnap.data() as Card).saldo_centavos : undefined;
@@ -248,6 +253,8 @@ export async function confirmAndCreditOnlineRecharge(
       valorRecargaCentavos: initialData.valor_recarga_centavos,
       novoSaldoCentavos: currentBalance,
       cardId: initialData.cartao_id,
+      qrCodeId: initialData.qr_code_id,
+      operationType: opType,
     };
   }
 
@@ -258,7 +265,10 @@ export async function confirmAndCreditOnlineRecharge(
     liveStatus = payment.status;
   }
 
-  const isPaid = liveStatus === 'RECEIVED' || liveStatus === 'CONFIRMED' || liveStatus === 'RECEIVED_IN_CASH';
+  const isPaid =
+    liveStatus === 'RECEIVED' ||
+    liveStatus === 'CONFIRMED' ||
+    liveStatus === 'RECEIVED_IN_CASH';
 
   if (!isPaid) {
     return {
@@ -268,38 +278,81 @@ export async function confirmAndCreditOnlineRecharge(
       asaasStatus: liveStatus || 'PENDING',
       valorRecargaCentavos: initialData.valor_recarga_centavos,
       cardId: initialData.cartao_id,
+      qrCodeId: initialData.qr_code_id,
+      operationType: opType,
     };
   }
 
-  // 3. ATOMIC TRANSACTION: PENDING -> CREDITED + Card Balance Update + Transaction Creation
+  // 3. ATOMIC TRANSACTION: PENDING -> CREDITED + Card Creation/Balance Update + Transaction Creation
   let didCreditNow = false;
   let finalBalanceCents = 0;
 
   await runTransaction(db, async (t) => {
     const rSnap = await t.get(rechargeRef);
     if (!rSnap.exists()) {
-      throw new Error('Registro de recarga online não encontrado.');
+      throw new Error('Registro de pagamento online não encontrado.');
     }
     const rData = rSnap.data() as OnlineRecharge;
 
     const cardRef = doc(db, 'cards', rData.cartao_id);
     const cSnap = await t.get(cardRef);
-    if (!cSnap.exists()) {
-      throw new Error('Cartão não encontrado para creditar a recarga.');
-    }
-    const cData = cSnap.data() as Card;
 
     if (rData.status === 'CREDITED') {
-      finalBalanceCents = cData.saldo_centavos;
+      finalBalanceCents = cSnap.exists()
+        ? (cSnap.data() as Card).saldo_centavos
+        : rData.valor_recarga_centavos;
       return;
     }
 
     const now = Timestamp.now();
-    const novoSaldo = (cData.saldo_centavos || 0) + rData.valor_recarga_centavos;
-    finalBalanceCents = novoSaldo;
-    didCreditNow = true;
+    const isCreateCardOp = rData.tipo_operacao === 'CREATE_CARD';
 
-    // 3.1 Mark online_recharge as CREDITED
+    if (!cSnap.exists()) {
+      if (!isCreateCardOp) {
+        throw new Error('Cartão não encontrado para creditar a recarga.');
+      }
+
+      // 3.1a CREATE NEW DIGITAL CARD ATOMICALLY ON PAYMENT CONFIRMATION
+      const novoSaldo = rData.valor_recarga_centavos;
+      finalBalanceCents = novoSaldo;
+      didCreditNow = true;
+
+      t.set(cardRef, {
+        qr_code_id: rData.qr_code_id,
+        saldo_centavos: novoSaldo,
+        nome_cliente: rData.nome_cliente || 'Cliente',
+        telefone_cliente: rData.telefone_cliente || '',
+        cpf_cliente: rData.cpf_cliente || rData.cpf_pagador || '',
+        criado_online: true,
+        status: 'ATIVO',
+        created_at: now,
+        updated_at: now,
+        tenant_id: rData.tenant_id ?? 'igreja-batista-da-manha',
+        event_id: rData.event_id ?? 'DoKmbiQ8pd3M71yTC9iA',
+      });
+    } else {
+      // 3.1b INCREMENT EXISTING CARD BALANCE
+      const cData = cSnap.data() as Card;
+      const novoSaldo = (cData.saldo_centavos || 0) + rData.valor_recarga_centavos;
+      finalBalanceCents = novoSaldo;
+      didCreditNow = true;
+
+      const cardUpdatePayload: {
+        saldo_centavos: number;
+        updated_at: Timestamp;
+        cpf_cliente?: string;
+      } = {
+        saldo_centavos: novoSaldo,
+        updated_at: now,
+      };
+      if (!cData.cpf_cliente && (rData.cpf_cliente || rData.cpf_pagador)) {
+        cardUpdatePayload.cpf_cliente = rData.cpf_cliente || rData.cpf_pagador;
+      }
+
+      t.update(cardRef, cardUpdatePayload);
+    }
+
+    // 3.2 Mark online_recharge as CREDITED
     t.update(rechargeRef, {
       status: 'CREDITED',
       asaas_status: liveStatus,
@@ -307,32 +360,24 @@ export async function confirmAndCreditOnlineRecharge(
       updated_at: now,
     });
 
-    // 3.2 Increment Card Balance by net amount (without the 5% fee)
-    t.update(cardRef, {
-      saldo_centavos: novoSaldo,
-      updated_at: now,
-    });
-
     // 3.3 Create Transaction record in /transactions
     const txRef = doc(collection(db, 'transactions'));
+    const methodLabel = rData.metodo === 'PIX' ? 'PIX' : 'Cartão 1x';
+    const respLabel = isCreateCardOp
+      ? `Novo Cartão Online (${methodLabel})`
+      : `Recarga Online (${methodLabel})`;
+
     t.set(txRef, {
       cartao_id: rData.cartao_id,
       pdv_id: 'caixa_central',
       tipo: 'RECARGA',
       valor_centavos: rData.valor_recarga_centavos,
       created_at: now,
-      usuario_responsavel: `Recarga Online (${rData.metodo === 'PIX' ? 'PIX' : 'Cartão 1x'})`,
-      tenant_id: rData.tenant_id ?? cData.tenant_id ?? null,
-      event_id: rData.event_id ?? cData.event_id ?? null,
+      usuario_responsavel: respLabel,
+      tenant_id: rData.tenant_id ?? 'igreja-batista-da-manha',
+      event_id: rData.event_id ?? 'DoKmbiQ8pd3M71yTC9iA',
     });
   });
-
-  // Fire-and-forget WhatsApp notification if connected
-  if (didCreditNow) {
-    sendRechargeNotification(initialData.cartao_id, initialData.valor_recarga_centavos).catch(
-      (err) => console.warn('[Asaas Recharge] Aviso ao enviar notificação WhatsApp:', err)
-    );
-  }
 
   return {
     credited: true,
@@ -342,5 +387,7 @@ export async function confirmAndCreditOnlineRecharge(
     valorRecargaCentavos: initialData.valor_recarga_centavos,
     novoSaldoCentavos: finalBalanceCents,
     cardId: initialData.cartao_id,
+    qrCodeId: initialData.qr_code_id,
+    operationType: opType,
   };
 }

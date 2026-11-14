@@ -38,7 +38,7 @@ async function isFestaPayPayment(payment: AsaasWebhookPayment): Promise<boolean>
 
   if (
     typeof payment.description === 'string' &&
-    payment.description.includes('Recarga FestaPay')
+    payment.description.includes('FestaPay')
   ) {
     return true;
   }
