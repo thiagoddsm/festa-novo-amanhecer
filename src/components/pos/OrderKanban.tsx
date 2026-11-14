@@ -9,11 +9,9 @@ import { updateOrderStatus, updateOrderPreparer } from '@/lib/actions';
 import CancelOrderButton from './CancelOrderButton';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '../ui/skeleton';
-import { ScrollArea } from '../ui/scroll-area';
 import { Loader2, ArrowRightCircle, MessageSquare, Check, AlertCircle, Clock, UserCheck, X } from 'lucide-react';
 import { DndProvider, useDrag, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
-import { TouchBackend } from 'react-dnd-touch-backend';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import { Button } from '../ui/button';
@@ -42,17 +40,18 @@ const KanbanColumn = ({ title, variant, orders, status, isPending, equipePreparo
     isPending: boolean;
     equipePreparo: string[];
 }) => {
+    const isMobileDevice = useIsMobile();
     const [{ isOver }, drop] = useDrop(() => ({
         accept: ItemTypes.ORDER,
         drop: () => ({ status }),
         collect: monitor => ({
             isOver: !!monitor.isOver(),
         }),
-    }));
+    }), [status]);
 
     return (
         <Card
-            ref={(node) => { drop(node); }}
+            ref={(node) => { if (!isMobileDevice) drop(node); }}
             className={cn(
                 "flex-1 flex flex-col min-w-[280px] sm:min-w-[300px] transition-colors shadow-xs",
                 isOver ? 'bg-accent' : ''
@@ -64,8 +63,8 @@ const KanbanColumn = ({ title, variant, orders, status, isPending, equipePreparo
                     <Badge variant={variant} className="text-xs px-2">{orders.length}</Badge>
                 </CardTitle>
             </CardHeader>
-            <ScrollArea className="flex-grow bg-muted/40 p-2 max-h-[60vh] sm:max-h-[68vh]">
-                <div className="space-y-2.5 p-1 h-full relative">
+            <div className="flex-grow bg-muted/40 p-2 sm:max-h-[68vh] sm:overflow-y-auto">
+                <div className="space-y-2.5 p-1 relative">
                     {isPending && (
                         <div className="absolute inset-0 bg-background/50 backdrop-blur-xs flex items-center justify-center z-10">
                             <Loader2 className="animate-spin text-primary" />
@@ -80,7 +79,7 @@ const KanbanColumn = ({ title, variant, orders, status, isPending, equipePreparo
                         </div>
                     )}
                 </div>
-            </ScrollArea>
+            </div>
         </Card>
     );
 };
@@ -208,7 +207,6 @@ const OrderCard = ({ order, equipePreparo }: { order: Order; equipePreparo: stri
     const [{ isDragging }, drag] = useDrag(() => ({
         type: ItemTypes.ORDER,
         item: { id: order.id, status: order.status },
-        // On phones the cards have explicit buttons; dragging would hijack touch scroll
         canDrag: () => !isMobileDevice,
         end: (item, monitor) => {
             const dropResult = monitor.getDropResult<{ status: OrderStatus }>();
@@ -219,7 +217,7 @@ const OrderCard = ({ order, equipePreparo }: { order: Order; equipePreparo: stri
         collect: monitor => ({
             isDragging: !!monitor.isDragging(),
         }),
-    }));
+    }), [isMobileDevice, order.id, order.status]);
     
     const isEmPreparo = order.status === 'PENDENTE' || order.status === 'EM_PREPARO';
     const isPronto = order.status === 'PRONTO';
@@ -227,9 +225,9 @@ const OrderCard = ({ order, equipePreparo }: { order: Order; equipePreparo: stri
 
     return (
     <Card
-        ref={(node) => { drag(node); }}
+        ref={(node) => { if (!isMobileDevice) drag(node); }}
         className={cn(
-            "cursor-grab bg-card active:cursor-grabbing border shadow-xs hover:shadow-md transition-shadow touch-pan-y",
+            "bg-card sm:cursor-grab sm:active:cursor-grabbing border shadow-xs hover:shadow-md transition-shadow",
             isDragging ? 'opacity-50' : 'opacity-100',
             isPending ? 'opacity-60 pointer-events-none' : ''
         )}
@@ -713,11 +711,8 @@ function KanbanBoard({ pdvId }: { pdvId: string }) {
 }
 
 export default function OrderKanban({ pdvId }: { pdvId: string }) {
-    const isMobile = useIsMobile();
-    const backend = isMobile ? TouchBackend : HTML5Backend;
-
     return (
-        <DndProvider backend={backend} options={isMobile ? { enableMouseEvents: false, enableTouchEvents: false } : { enableMouseEvents: true }}>
+        <DndProvider backend={HTML5Backend}>
             <KanbanBoard pdvId={pdvId} />
         </DndProvider>
     );
