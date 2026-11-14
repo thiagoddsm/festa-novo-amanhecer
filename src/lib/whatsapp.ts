@@ -232,6 +232,28 @@ export async function logoutEvolutionInstance(instanceName: string, customApiKey
 }
 
 /**
+ * Per-instance in-memory queue + human jitter delay to prevent 0ms burst bans on WhatsApp (Baileys).
+ */
+const instanceQueueMap = new Map<string, Promise<unknown>>();
+
+function randomHumanDelayMs(min = 1400, max = 2600): number {
+  return Math.floor(min + Math.random() * (max - min));
+}
+
+function enqueueInstanceTask<T>(instanceName: string, task: () => Promise<T>): Promise<T> {
+  const prev = instanceQueueMap.get(instanceName) ?? Promise.resolve();
+  const next = prev
+    .catch(() => {})
+    .then(async () => {
+      const waitMs = randomHumanDelayMs(1200, 2400);
+      await new Promise((r) => setTimeout(r, waitMs));
+      return task();
+    });
+  instanceQueueMap.set(instanceName, next);
+  return next;
+}
+
+/**
  * Sends a text message via Evolution API to a specific instance.
  */
 export async function sendEvolutionTextMessage(
@@ -243,43 +265,61 @@ export async function sendEvolutionTextMessage(
   const apiKey = customApiKey || EVOLUTION_API_KEY;
   const formattedNumber = formatWhatsAppNumber(to);
 
-  try {
-    const res = await fetch(`${EVOLUTION_API_URL}/message/sendText/${instanceName}`, {
-      method: 'POST',
-      headers: {
-        'apikey': apiKey,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        number: formattedNumber,
-        text,
-      }),
-    });
+  return enqueueInstanceTask(instanceName, async () => {
+    try {
+      const typingDelay = randomHumanDelayMs(1200, 2200);
+      let res = await fetch(`${EVOLUTION_API_URL}/message/sendText/${instanceName}`, {
+        method: 'POST',
+        headers: {
+          'apikey': apiKey,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          number: formattedNumber,
+          text,
+          delay: typingDelay,
+        }),
+      });
 
-    const data = await res.json();
+      if (res.status === 400) {
+        res = await fetch(`${EVOLUTION_API_URL}/message/sendText/${instanceName}`, {
+          method: 'POST',
+          headers: {
+            'apikey': apiKey,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            number: formattedNumber,
+            text,
+          }),
+        });
+      }
 
-    if (!res.ok) {
-      const errMsg = data.response?.message || data.message || `Erro HTTP ${res.status}`;
+      const data = await res.json();
+
+      if (!res.ok) {
+        const errMsg = data.response?.message || data.message || `Erro HTTP ${res.status}`;
+        return {
+          success: false,
+          instanceUsed: instanceName,
+          error: errMsg,
+        };
+      }
+
+      return {
+        success: true,
+        messageId: data.key?.id || data.messageId || undefined,
+        instanceUsed: instanceName,
+      };
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : 'Erro desconhecido ao enviar mensagem.';
       return {
         success: false,
         instanceUsed: instanceName,
         error: errMsg,
       };
     }
-
-    return {
-      success: true,
-      messageId: data.key?.id || data.messageId || undefined,
-      instanceUsed: instanceName,
-    };
-  } catch (error) {
-    const errMsg = error instanceof Error ? error.message : 'Erro desconhecido ao enviar mensagem.';
-    return {
-      success: false,
-      instanceUsed: instanceName,
-      error: errMsg,
-    };
-  }
+  });
 }
 
 /**
@@ -295,45 +335,65 @@ export async function sendEvolutionMediaMessage(
   const apiKey = customApiKey || EVOLUTION_API_KEY;
   const formattedNumber = formatWhatsAppNumber(to);
 
-  try {
-    const res = await fetch(`${EVOLUTION_API_URL}/message/sendMedia/${instanceName}`, {
-      method: 'POST',
-      headers: {
-        'apikey': apiKey,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        number: formattedNumber,
-        media: mediaUrl,
-        mediatype: 'image',
-        caption,
-      }),
-    });
+  return enqueueInstanceTask(instanceName, async () => {
+    try {
+      const typingDelay = randomHumanDelayMs(1300, 2400);
+      let res = await fetch(`${EVOLUTION_API_URL}/message/sendMedia/${instanceName}`, {
+        method: 'POST',
+        headers: {
+          'apikey': apiKey,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          number: formattedNumber,
+          media: mediaUrl,
+          mediatype: 'image',
+          caption,
+          delay: typingDelay,
+        }),
+      });
 
-    const data = await res.json();
+      if (res.status === 400) {
+        res = await fetch(`${EVOLUTION_API_URL}/message/sendMedia/${instanceName}`, {
+          method: 'POST',
+          headers: {
+            'apikey': apiKey,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            number: formattedNumber,
+            media: mediaUrl,
+            mediatype: 'image',
+            caption,
+          }),
+        });
+      }
 
-    if (!res.ok) {
-      const errMsg = data.response?.message || data.message || `Erro HTTP ${res.status}`;
+      const data = await res.json();
+
+      if (!res.ok) {
+        const errMsg = data.response?.message || data.message || `Erro HTTP ${res.status}`;
+        return {
+          success: false,
+          instanceUsed: instanceName,
+          error: errMsg,
+        };
+      }
+
+      return {
+        success: true,
+        messageId: data.key?.id || data.messageId || undefined,
+        instanceUsed: instanceName,
+      };
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : 'Erro desconhecido ao enviar imagem.';
       return {
         success: false,
         instanceUsed: instanceName,
         error: errMsg,
       };
     }
-
-    return {
-      success: true,
-      messageId: data.key?.id || data.messageId || undefined,
-      instanceUsed: instanceName,
-    };
-  } catch (error) {
-    const errMsg = error instanceof Error ? error.message : 'Erro desconhecido ao enviar imagem.';
-    return {
-      success: false,
-      instanceUsed: instanceName,
-      error: errMsg,
-    };
-  }
+  });
 }
 
 /**

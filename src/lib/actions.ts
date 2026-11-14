@@ -391,8 +391,7 @@ export async function processSale(
             };
         });
 
-        // Trigger notification flow (non-blocking)
-        notifySale(saleResult.cardId, valor_venda_centavos, pdv_nome).catch(console.error);
+        // Nota: comprovante por venda individual na barraca desativado para proteger o WhatsApp do Caixa contra bloqueio por volume.
 
         return {
             status: 'success',
