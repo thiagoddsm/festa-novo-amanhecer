@@ -19,7 +19,7 @@ const ROLE_ALLOWED_PATHS: Record<string, string[] | null> = {
     ADMIN: null, // legacy support for Super Admin
     ADMIN_ORGANIZACAO: ['/dashboard', '/cards', '/disparos', '/transactions', '/cashier', '/admin/users', '/admin/tenants', '/admin/pdvs', '/pos', '/pos/kds', '/pos/painel', '/manual'],
     ADMIN_EVENTO: ['/dashboard', '/cards', '/disparos', '/transactions', '/cashier', '/admin/pdvs', '/pos', '/pos/kds', '/pos/painel', '/manual'],
-    CAIXA: ['/dashboard', '/cashier', '/cards', '/transactions', '/manual'],
+    CAIXA: ['/dashboard', '/cashier', '/cards', '/disparos', '/transactions', '/manual'],
     PDV: ['/pos', '/pos/kds', '/pos/painel', '/manual'],
     VISITANTE: [], // blocked — shown a waiting card
 };
