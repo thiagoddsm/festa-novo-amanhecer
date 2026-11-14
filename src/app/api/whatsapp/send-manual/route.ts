@@ -6,7 +6,6 @@ import type { TenantEvent } from '@/lib/definitions';
 import {
   formatWhatsAppNumber,
   getEvolutionConnectionState,
-  DEFAULT_FALLBACK_INSTANCE,
 } from '@/lib/whatsapp';
 
 export const dynamic = 'force-dynamic';
@@ -223,26 +222,12 @@ export async function POST(request: Request) {
       }
     }
 
-    // Fallback para a instância padrão (IBM)
-    const fallbackState = await getEvolutionConnectionState(DEFAULT_FALLBACK_INSTANCE);
-    if (fallbackState.state === 'open') {
-      const fallbackRes = await sendWith3sTypingSimulation(
-        DEFAULT_FALLBACK_INSTANCE,
-        formattedNumber,
-        text
-      );
-      if (fallbackRes.success) {
-        return NextResponse.json({
-          success: true,
-          instanceUsed: DEFAULT_FALLBACK_INSTANCE,
-        });
-      }
-      lastError = fallbackRes.error || lastError;
-    }
-
     return NextResponse.json(
-      { error: lastError || 'Não foi possível enviar a mensagem via API.' },
-      { status: 500 }
+      {
+        error:
+          'Nenhuma das 3 instâncias do Caixa está conectada no momento. Conecte pelo menos 1 WhatsApp na tela do Caixa antes de disparar.',
+      },
+      { status: 400 }
     );
   } catch (error: unknown) {
     console.error('[API /api/whatsapp/send-manual] Erro:', error);
