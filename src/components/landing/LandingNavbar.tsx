@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { Logo } from '@/components/layout/Logo';
 import { Button } from '@/components/ui/button';
-import { Shield, Menu, X, UserCheck, BellRing, Wallet } from 'lucide-react';
+import { Shield, Menu, X, UserCheck, BellRing, Wallet, CreditCard } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth-context';
 
 export default function LandingNavbar() {
@@ -19,16 +19,21 @@ export default function LandingNavbar() {
   ];
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-slate-100 bg-white/90 backdrop-blur-md transition-all">
+    <header className="sticky top-0 z-50 w-full border-b border-slate-100 bg-white/95 backdrop-blur-md transition-all">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
-        {/* Brand / Logo */}
-        <Link href="/" className="flex items-center gap-2 group">
-          <Logo className="text-purple-600 scale-90" />
+        {/* Brand / Logo matching the new design */}
+        <Link href="/" className="flex items-center gap-2.5 group">
+          <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-purple-600 to-indigo-600 flex items-center justify-center text-white shadow-sm shrink-0">
+            <CreditCard className="h-5 w-5" />
+          </div>
           <div className="flex flex-col">
-            <span className="text-xs font-bold text-slate-900 tracking-tight leading-none group-hover:text-purple-600 transition-colors">
+            <span className="text-base font-black text-purple-900 tracking-tight leading-none group-hover:text-purple-700 transition-colors">
+              FestaPay
+            </span>
+            <span className="text-[11px] font-bold text-slate-900 leading-tight mt-0.5">
               Festa Novo Amanhecer
             </span>
-            <span className="text-[10px] text-purple-600 font-semibold tracking-wide">
+            <span className="text-[10px] text-purple-600 font-semibold leading-tight">
               Igreja Batista da Manhã • 2026
             </span>
           </div>
@@ -104,25 +109,6 @@ export default function LandingNavbar() {
             {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </Button>
         </div>
-      </div>
-
-      {/* Always-visible Mobile Quick Action Buttons (No need to open menu!) */}
-      <div className="sm:hidden px-3 pb-2.5 pt-1 bg-white/95 border-t border-slate-100 flex flex-col gap-1.5">
-        <Link
-          href="/meu-cartao"
-          className="w-full flex items-center justify-center gap-2 rounded-xl bg-purple-700 active:bg-purple-800 py-2.5 px-3 text-xs font-black text-white shadow-sm"
-        >
-          <Wallet className="h-4 w-4 shrink-0" />
-          <span>Meu Cartão: Ver Saldo, Compras e Pedidos</span>
-        </Link>
-        <Link
-          href="/igreja-batista-da-manha/pedidos"
-          className="w-full flex items-center justify-center gap-2 rounded-xl bg-emerald-600 active:bg-emerald-700 py-2 px-3 text-xs font-extrabold text-white shadow-sm"
-        >
-          <span className="h-2 w-2 rounded-full bg-emerald-200 animate-ping shrink-0" />
-          <BellRing className="h-3.5 w-3.5 shrink-0" />
-          <span>Painel Geral de Filas das Barracas</span>
-        </Link>
       </div>
 
       {/* Mobile dropdown */}
