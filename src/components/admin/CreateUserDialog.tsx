@@ -16,9 +16,8 @@ import {
   DialogClose,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, UserPlus, Store } from 'lucide-react';
+import { Loader2, UserPlus, Store, Check } from 'lucide-react';
 import {
   Form,
   FormControl,
@@ -308,32 +307,39 @@ export default function CreateUserDialog() {
                       {filteredPdvs.map((pdv) => {
                         const isChecked = selectedPdvIds.includes(pdv.id);
                         return (
-                          <label
+                          <button
                             key={pdv.id}
-                            className={`flex items-center gap-2 p-2 rounded border cursor-pointer text-xs transition-colors ${
+                            type="button"
+                            onClick={() => {
+                              const current = form.getValues('pdvIds') || [];
+                              if (current.includes(pdv.id)) {
+                                form.setValue(
+                                  'pdvIds',
+                                  current.filter((id) => id !== pdv.id),
+                                  { shouldValidate: true }
+                                );
+                              } else {
+                                form.setValue('pdvIds', [...current, pdv.id], { shouldValidate: true });
+                              }
+                            }}
+                            className={`flex items-center gap-2 p-2 rounded border cursor-pointer text-xs text-left transition-colors ${
                               isChecked
                                 ? 'bg-orange-50 border-orange-400 font-semibold text-orange-950'
                                 : 'bg-background border-border hover:bg-muted/40'
                             }`}
                           >
-                            <Checkbox
-                              checked={isChecked}
-                              onCheckedChange={(checked) => {
-                                const current = form.getValues('pdvIds') || [];
-                                if (checked) {
-                                  form.setValue('pdvIds', [...current, pdv.id], { shouldValidate: true });
-                                } else {
-                                  form.setValue(
-                                    'pdvIds',
-                                    current.filter((id) => id !== pdv.id),
-                                    { shouldValidate: true }
-                                  );
-                                }
-                              }}
-                            />
+                            <div
+                              className={`h-4 w-4 rounded border flex items-center justify-center shrink-0 transition-colors ${
+                                isChecked
+                                  ? 'bg-orange-600 border-orange-600 text-white'
+                                  : 'border-orange-300 bg-background'
+                              }`}
+                            >
+                              {isChecked && <Check className="h-3 w-3 stroke-[3]" />}
+                            </div>
                             <Store className="h-3.5 w-3.5 text-orange-600 shrink-0" />
                             <span className="truncate">{pdv.nome}</span>
-                          </label>
+                          </button>
                         );
                       })}
                     </div>

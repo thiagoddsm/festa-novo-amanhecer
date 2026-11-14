@@ -5,8 +5,9 @@ import {
   sendCardCreationNotification,
   sendSaleNotification,
   sendReversalNotification,
-  AUTOMATIC_WHATSAPP_NOTIFICATIONS_ENABLED,
 } from './notification-service';
+
+const AUTOMATIC_WHATSAPP_NOTIFICATIONS_ENABLED = false;
 import {
   sendEvolutionTextMessage,
   sendEvolutionMediaMessage,

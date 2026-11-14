@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -19,7 +19,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { useFirestore } from '@/firebase';
 import { doc, updateDoc, deleteField } from 'firebase/firestore';
@@ -36,6 +35,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import type { UserProfile, Pdv, Tenant, TenantEvent, UserRole, TenantRole } from '@/lib/definitions';
+import { sortTenantEvents, normalizeTenantId } from '@/lib/tenant-event-utils';
 
 interface EditUserAccessDialogProps {
   user: UserProfile;
@@ -59,6 +59,7 @@ export default function EditUserAccessDialog({
 
   const [open, setOpen] = useState(initialOpen);
   const [isSaving, setIsSaving] = useState(false);
+  const wasOpenRef = useRef(false);
 
   // User form states
   const [selectedTenantId, setSelectedTenantId] = useState<string>('');
@@ -68,17 +69,22 @@ export default function EditUserAccessDialog({
   const [eventsMode, setEventsMode] = useState<'ALL' | 'SPECIFIC'>('ALL');
   const [specificEventIds, setSpecificEventIds] = useState<string[]>([]);
 
-  // Initialize or reset state when dialog opens
+  // Initialize state ONLY when dialog transitions from closed -> open
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      wasOpenRef.current = false;
+      return;
+    }
+    if (wasOpenRef.current) return;
+    wasOpenRef.current = true;
 
-    // 1. Detect Tenant
-    const userTenantIds = Object.keys(user.tenants || {}).filter(
-      (tid) => tenants.some((t) => t.id === tid)
-    );
+    // 1. Detect Tenant (com normalização de typos legados como 'igreja-batista-da-manh-')
+    const userTenantIds = Object.keys(user.tenants || {})
+      .map((tid) => normalizeTenantId(tid))
+      .filter((tid) => tenants.some((t) => t.id === tid));
     const primaryTenantId =
       userTenantIds[0] ||
-      user.requestedTenantId ||
+      normalizeTenantId(user.requestedTenantId) ||
       tenants[0]?.id ||
       '';
     setSelectedTenantId(primaryTenantId);
@@ -102,10 +108,13 @@ export default function EditUserAccessDialog({
         : [];
     const currentPdv = allPdvs.find((p) => p.id === initialPdvIds[0]);
 
-    const tenantEvents = eventsByTenant[primaryTenantId] || [];
+    // Ordena os eventos da organização para garantir que a Festa 2026 venha em primeiro lugar!
+    const tenantEvents = sortTenantEvents(eventsByTenant[primaryTenantId] || []);
     const eventFromPdv = currentPdv?.event_id;
     const eventFromRequest = user.requestedEventId;
-    const eventFromUserTenants = user.tenants?.[primaryTenantId]?.allowedEventIds?.[0];
+    const eventFromUserTenants =
+      user.tenants?.[primaryTenantId]?.allowedEventIds?.[0] ||
+      user.tenants?.['igreja-batista-da-manh-']?.allowedEventIds?.[0];
 
     const detectedEventId =
       eventFromPdv ||
@@ -118,7 +127,7 @@ export default function EditUserAccessDialog({
     setSelectedPdvIds(initialPdvIds);
 
     // 4. Allowed Events Mode for Admins / Cashiers
-    const allowed = user.tenants?.[primaryTenantId]?.allowedEventIds;
+    const allowed = user.tenants?.[primaryTenantId]?.allowedEventIds || user.tenants?.['igreja-batista-da-manh-']?.allowedEventIds;
     if (allowed && allowed.length > 0) {
       setEventsMode('SPECIFIC');
       setSpecificEventIds(allowed);
@@ -128,9 +137,9 @@ export default function EditUserAccessDialog({
     }
   }, [open, user, tenants, eventsByTenant, allPdvs]);
 
-  // Available events for the selected tenant
+  // Available events for the selected tenant (ordenados com o ano mais recente/ativo primeiro)
   const availableEvents = useMemo(() => {
-    return eventsByTenant[selectedTenantId] || [];
+    return sortTenantEvents(eventsByTenant[selectedTenantId] || []);
   }, [eventsByTenant, selectedTenantId]);
 
   // PDVs filtered by the selected event (for PDV role)
@@ -138,8 +147,8 @@ export default function EditUserAccessDialog({
     if (!selectedTenantId) return [];
     return allPdvs
       .filter((p) => {
-        const matchesTenant = p.tenant_id === selectedTenantId;
-        const matchesEvent = !selectedEventId || p.event_id === selectedEventId;
+        const matchesTenant = !p.tenant_id || normalizeTenantId(p.tenant_id) === selectedTenantId;
+        const matchesEvent = !selectedEventId || !p.event_id || p.event_id === selectedEventId;
         const isNotCaixa = p.nome !== 'Caixa Central';
         return matchesTenant && matchesEvent && isNotCaixa;
       })
@@ -158,6 +167,21 @@ export default function EditUserAccessDialog({
     setIsSaving(true);
 
     try {
+      // Validação de modo de eventos específicos
+      if (
+        (selectedRole === 'CAIXA' || selectedRole === 'ADMIN_ORGANIZACAO' || selectedRole === 'ADMIN_EVENTO') &&
+        eventsMode === 'SPECIFIC' &&
+        specificEventIds.length === 0
+      ) {
+        toast({
+          variant: 'destructive',
+          title: 'Atenção',
+          description: 'Selecione pelo menos um evento específico ou clique em "Todos os Eventos".',
+        });
+        setIsSaving(false);
+        return;
+      }
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const updatePayload: Record<string, any> = {
         role: selectedRole,
@@ -183,29 +207,40 @@ export default function EditUserAccessDialog({
 
       // Handle Tenant linking & event permissions
       if (selectedTenantId) {
-        let tenantRole: TenantRole = 'OPERADOR';
-        if (selectedRole === 'SUPERADMIN' || selectedRole === 'ADMIN_ORGANIZACAO') {
-          tenantRole = 'ADMIN';
-        } else if (selectedRole === 'CAIXA') {
-          tenantRole = 'CAIXA';
-        } else if (selectedRole === 'PDV') {
-          tenantRole = 'PDV';
-        }
-
-        let allowedEventIds: string[] = [];
-        if (selectedRole === 'PDV') {
-          // PDV is restricted to its event
-          allowedEventIds = selectedEventId ? [selectedEventId] : [];
-        } else if (eventsMode === 'SPECIFIC' && specificEventIds.length > 0) {
-          allowedEventIds = specificEventIds;
+        if (selectedRole === 'VISITANTE') {
+          // Se for visitante, remove acesso para manter bloqueado
+          updatePayload[`tenants.${selectedTenantId}`] = deleteField();
         } else {
-          allowedEventIds = []; // empty array means all events in FestaPay context
+          let tenantRole: TenantRole = 'OPERADOR';
+          if (selectedRole === 'SUPERADMIN' || selectedRole === 'ADMIN_ORGANIZACAO') {
+            tenantRole = 'ADMIN';
+          } else if (selectedRole === 'CAIXA') {
+            tenantRole = 'CAIXA';
+          } else if (selectedRole === 'PDV') {
+            tenantRole = 'PDV';
+          }
+
+          let allowedEventIds: string[] = [];
+          if (selectedRole === 'PDV') {
+            // PDV is restricted to its event
+            allowedEventIds = selectedEventId ? [selectedEventId] : [];
+          } else if (eventsMode === 'SPECIFIC' && specificEventIds.length > 0) {
+            allowedEventIds = specificEventIds;
+          } else {
+            allowedEventIds = []; // empty array means all events in FestaPay context
+          }
+
+          updatePayload[`tenants.${selectedTenantId}`] = {
+            role: tenantRole,
+            allowedEventIds,
+          };
+          updatePayload.tenant_id = selectedTenantId;
         }
 
-        updatePayload[`tenants.${selectedTenantId}`] = {
-          role: tenantRole,
-          allowedEventIds,
-        };
+        // Limpa chave com typo legado se existir
+        if (user.tenants && 'igreja-batista-da-manh-' in user.tenants) {
+          updatePayload['tenants.igreja-batista-da-manh-'] = deleteField();
+        }
       }
 
       // Clear pending approval request fields
@@ -479,29 +514,34 @@ export default function EditUserAccessDialog({
                     {availablePdvs.map((pdv) => {
                       const isChecked = selectedPdvIds.includes(pdv.id);
                       return (
-                        <label
+                        <button
                           key={pdv.id}
-                          className={`flex items-center gap-2.5 p-2.5 rounded-lg border cursor-pointer text-xs transition-all ${
+                          type="button"
+                          onClick={() => {
+                            setSelectedPdvIds((prev) =>
+                              prev.includes(pdv.id)
+                                ? prev.filter((id) => id !== pdv.id)
+                                : [...prev, pdv.id]
+                            );
+                          }}
+                          className={`flex items-center gap-2.5 p-2.5 rounded-lg border cursor-pointer text-xs text-left transition-all ${
                             isChecked
                               ? 'bg-orange-100/90 dark:bg-orange-950/50 border-orange-500 font-bold text-orange-950 dark:text-orange-200 shadow-2xs'
                               : 'bg-background border-orange-200/80 text-foreground hover:bg-orange-50/50'
                           }`}
                         >
-                          <Checkbox
-                            checked={isChecked}
-                            onCheckedChange={(checked) => {
-                              if (checked) {
-                                setSelectedPdvIds((prev) =>
-                                  prev.includes(pdv.id) ? prev : [...prev, pdv.id]
-                                );
-                              } else {
-                                setSelectedPdvIds((prev) => prev.filter((id) => id !== pdv.id));
-                              }
-                            }}
-                          />
+                          <div
+                            className={`h-4 w-4 rounded border flex items-center justify-center shrink-0 transition-colors ${
+                              isChecked
+                                ? 'bg-orange-600 border-orange-600 text-white'
+                                : 'border-orange-300 bg-background'
+                            }`}
+                          >
+                            {isChecked && <Check className="h-3 w-3 stroke-[3]" />}
+                          </div>
                           <Store className="h-3.5 w-3.5 text-orange-600 shrink-0" />
                           <span className="truncate">{pdv.nome}</span>
-                        </label>
+                        </button>
                       );
                     })}
                   </div>
@@ -556,26 +596,33 @@ export default function EditUserAccessDialog({
                     {availableEvents.map((ev) => {
                       const isChecked = specificEventIds.includes(ev.id);
                       return (
-                        <label
+                        <button
                           key={ev.id}
-                          className={`flex items-center gap-2 p-2 rounded border cursor-pointer text-xs transition-colors ${
+                          type="button"
+                          onClick={() => {
+                            setSpecificEventIds((prev) =>
+                              prev.includes(ev.id)
+                                ? prev.filter((id) => id !== ev.id)
+                                : [...prev, ev.id]
+                            );
+                          }}
+                          className={`flex items-center gap-2 p-2 rounded border cursor-pointer text-xs text-left transition-colors ${
                             isChecked
                               ? 'bg-primary/5 border-primary font-semibold text-foreground'
                               : 'bg-card border-border text-muted-foreground hover:bg-muted/40'
                           }`}
                         >
-                          <Checkbox
-                            checked={isChecked}
-                            onCheckedChange={(checked) => {
-                              if (checked) {
-                                setSpecificEventIds((prev) => [...prev, ev.id]);
-                              } else {
-                                setSpecificEventIds((prev) => prev.filter((id) => id !== ev.id));
-                              }
-                            }}
-                          />
+                          <div
+                            className={`h-4 w-4 rounded border flex items-center justify-center shrink-0 transition-colors ${
+                              isChecked
+                                ? 'bg-primary border-primary text-primary-foreground'
+                                : 'border-muted-foreground/40 bg-background'
+                            }`}
+                          >
+                            {isChecked && <Check className="h-3 w-3 stroke-[3]" />}
+                          </div>
                           <span className="truncate">{ev.name}</span>
-                        </label>
+                        </button>
                       );
                     })}
                   </div>

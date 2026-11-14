@@ -32,6 +32,7 @@ import {
   UserX,
 } from 'lucide-react';
 import type { UserProfile, Pdv, Tenant, TenantEvent, UserRole } from '@/lib/definitions';
+import { sortTenantEvents, normalizeTenantId } from '@/lib/tenant-event-utils';
 import { type ColumnDef } from '@tanstack/react-table';
 import CreateUserDialog from '@/components/admin/CreateUserDialog';
 import EditUserAccessDialog from '@/components/admin/EditUserAccessDialog';
@@ -116,11 +117,33 @@ function useAdminUsersData() {
     });
 
     const unsub2 = onSnapshot(collection(firestore, 'tenants'), (snap) => {
-      setTenants(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Tenant)));
+      const next = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Tenant));
+      setTenants((prev) => {
+        if (prev && prev.length === next.length && prev.every((p, i) => p.id === next[i].id && p.name === next[i].name)) {
+          return prev;
+        }
+        return next;
+      });
     });
 
     const unsub3 = onSnapshot(collection(firestore, 'pdvs'), (snap) => {
-      setPdvs(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Pdv)));
+      const next = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Pdv));
+      setPdvs((prev) => {
+        if (
+          prev &&
+          prev.length === next.length &&
+          prev.every(
+            (p, i) =>
+              p.id === next[i].id &&
+              p.nome === next[i].nome &&
+              p.tenant_id === next[i].tenant_id &&
+              p.event_id === next[i].event_id
+          )
+        ) {
+          return prev;
+        }
+        return next;
+      });
     });
 
     return () => {
@@ -136,8 +159,15 @@ function useAdminUsersData() {
     if (!firestore || !tenantIdsKey) return;
     const unsubs = tenantIdsKey.split('|').map((tid) =>
       onSnapshot(collection(firestore, 'tenants', tid, 'events'), (snap) => {
-        const evs = snap.docs.map((d) => ({ id: d.id, ...d.data() } as TenantEvent));
-        setEventsByTenant((prev) => ({ ...prev, [tid]: evs }));
+        const rawEvents = snap.docs.map((d) => ({ id: d.id, ...d.data() } as TenantEvent));
+        const evs = sortTenantEvents(rawEvents);
+        setEventsByTenant((prev) => {
+          const cur = prev[tid];
+          if (cur && cur.length === evs.length && cur.every((e, i) => e.id === evs[i].id && e.name === evs[i].name)) {
+            return prev;
+          }
+          return { ...prev, [tid]: evs };
+        });
       }),
     );
     return () => unsubs.forEach((u) => u());
@@ -207,11 +237,11 @@ export default function UsersPage() {
         cell: ({ row }) => {
           const user = row.original;
 
-          // Find tenant
-          const userTenantIds = Object.keys(user.tenants || {}).filter(
-            (tid) => stableTenants.some((t) => t.id === tid)
-          );
-          const primaryTenantId = userTenantIds[0] || user.requestedTenantId;
+          // Find tenant com normalização de IDs legados
+          const userTenantIds = Object.keys(user.tenants || {})
+            .map((tid) => normalizeTenantId(tid))
+            .filter((tid) => stableTenants.some((t) => t.id === tid));
+          const primaryTenantId = userTenantIds[0] || normalizeTenantId(user.requestedTenantId) || (stableTenants.length === 1 && user.role !== 'VISITANTE' ? stableTenants[0].id : undefined);
           const tenant = stableTenants.find((t) => t.id === primaryTenantId);
 
           // Find assigned PDVs
@@ -228,9 +258,11 @@ export default function UsersPage() {
 
           // Find event
           const tenantEvents = primaryTenantId ? eventsByTenant[primaryTenantId] || [] : [];
+          const allowedEvents = user.tenants?.[primaryTenantId || '']?.allowedEventIds;
+          const isAllEvents = (user.role === 'CAIXA' || user.role === 'ADMIN_ORGANIZACAO' || user.role === 'SUPERADMIN') && (!allowedEvents || allowedEvents.length === 0);
           const eventId =
             assignedPdv?.event_id ||
-            user.tenants?.[primaryTenantId || '']?.allowedEventIds?.[0] ||
+            allowedEvents?.[0] ||
             user.requestedEventId;
           const event = tenantEvents.find((e) => e.id === eventId);
 
@@ -251,12 +283,17 @@ export default function UsersPage() {
                 </div>
               )}
 
-              {event && (
+              {event ? (
                 <div className="flex items-center gap-1.5 text-muted-foreground">
                   <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                   <span>{event.name}</span>
                 </div>
-              )}
+              ) : isAllEvents ? (
+                <div className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400 font-medium">
+                  <Calendar className="h-3.5 w-3.5 shrink-0" />
+                  <span>Todos os Eventos (Global)</span>
+                </div>
+              ) : null}
 
               {user.role === 'PDV' && (
                 <div className="flex items-center flex-wrap gap-1.5 pt-0.5">

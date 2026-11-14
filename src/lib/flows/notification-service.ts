@@ -29,7 +29,7 @@ function getDb() {
  * Quando `false`, nenhuma mensagem automática (criação de cartão, recarga, pedido pronto ou estorno) é enviada.
  * O envio via WhatsApp fica restrito e ativo EXCLUSIVAMENTE dentro da aba "Disparos WhatsApp" (/disparos).
  */
-export const AUTOMATIC_WHATSAPP_NOTIFICATIONS_ENABLED = false;
+const AUTOMATIC_WHATSAPP_NOTIFICATIONS_ENABLED = false;
 
 export type NotificationResult = {
   success: boolean;

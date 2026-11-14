@@ -12,6 +12,7 @@ import { useFirestore } from '@/firebase';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { useAuth } from './use-auth-context';
 import type { Tenant, TenantEvent } from '@/lib/definitions';
+import { sortTenantEvents, normalizeTenantId } from '@/lib/tenant-event-utils';
 
 type TenantContextType = {
   currentTenant: Tenant | null;
@@ -56,10 +57,20 @@ export function TenantProvider({ children }: { children: ReactNode }) {
         (doc) => ({ id: doc.id, ...doc.data() } as Tenant),
       );
 
-      // SuperAdmin sees all tenants; others see only linked tenants
+      // SuperAdmin sees all tenants; others see linked tenants (com fallback resiliente para legados)
+      const userTenants = user?.tenants || {};
       const visibleTenants = isSuperAdmin
         ? allTenants
-        : allTenants.filter((t) => user?.tenants && user.tenants[t.id]);
+        : allTenants.filter((t) => {
+            const normalizedTid = normalizeTenantId(t.id);
+            if (userTenants[t.id] || userTenants[normalizedTid] || (t.id === 'igreja-batista-da-manha' && userTenants['igreja-batista-da-manh-'])) {
+              return true;
+            }
+            // Fallback se o usuário possui tenant_id legado ou se só existe 1 tenant e usuário está aprovado
+            if ((user as any)?.tenant_id === t.id) return true;
+            if (allTenants.length === 1 && user?.role && user.role !== 'VISITANTE') return true;
+            return false;
+          });
 
       setTenantsList(visibleTenants);
       setIsLoadingTenants(false);
@@ -94,9 +105,12 @@ export function TenantProvider({ children }: { children: ReactNode }) {
 
     const eventsRef = collection(firestore, 'tenants', currentTenantId, 'events');
     const unsubscribe = onSnapshot(eventsRef, (snapshot) => {
-      const loadedEvents = snapshot.docs.map(
+      const rawEvents = snapshot.docs.map(
         (doc) => ({ id: doc.id, ...doc.data() } as TenantEvent),
       );
+
+      // Ordena eventos com Festa 2026 / ano mais recente e ativo em primeiro lugar!
+      const loadedEvents = sortTenantEvents(rawEvents);
 
       // Filter events by allowedEventIds if not admin
       const visibleEvents = isSuperAdmin || isTenantAdmin || !allowedEventIds || allowedEventIds.length === 0
@@ -106,7 +120,16 @@ export function TenantProvider({ children }: { children: ReactNode }) {
       setEventsList(visibleEvents);
 
       // Auto-select or restore saved event
-      const savedEventId = typeof window !== 'undefined' ? localStorage.getItem('festapay_event_id') : null;
+      let savedEventId = typeof window !== 'undefined' ? localStorage.getItem('festapay_event_id') : null;
+      
+      // Se o evento salvo for o antigo 2025 ('ApXdWaOvlSMc0ZCVotl4') e o evento 2026 ('DoKmbiQ8pd3M71yTC9iA') estiver visível, migra automaticamente para 2026
+      if (savedEventId === 'ApXdWaOvlSMc0ZCVotl4' && visibleEvents.some((e) => e.id === 'DoKmbiQ8pd3M71yTC9iA')) {
+        savedEventId = 'DoKmbiQ8pd3M71yTC9iA';
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('festapay_event_id', 'DoKmbiQ8pd3M71yTC9iA');
+        }
+      }
+
       const matchedEvent = visibleEvents.find((e) => e.id === savedEventId) || visibleEvents[0] || null;
 
       setCurrentEventState((prev) => {
