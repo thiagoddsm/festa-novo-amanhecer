@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, ShoppingCart, WalletCards, Users, List, UserCog, BookUser, Building2, Store, Globe, ChefHat, Tv } from "lucide-react";
+import { LayoutDashboard, ShoppingCart, WalletCards, Users, List, UserCog, BookUser, Building2, Store, Globe, ChefHat, Tv, MessageCircle } from "lucide-react";
 import { SidebarHeader, SidebarMenu, SidebarMenuItem, SidebarMenuButton, useSidebar } from "@/components/ui/sidebar";
 import { useAuth } from "@/hooks/use-auth-context";
 import { Logo } from "./Logo";
@@ -12,6 +12,7 @@ const ADMIN_ROLES = ['SUPERADMIN', 'ADMIN_ORGANIZACAO', 'ADMIN_EVENTO', 'CAIXA']
 const allNavItems = [
     { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', roles: ADMIN_ROLES },
     { href: '/cards', icon: Users, label: 'Cartões', roles: ADMIN_ROLES },
+    { href: '/disparos', icon: MessageCircle, label: 'Disparos WhatsApp', roles: ADMIN_ROLES },
     { href: '/transactions', icon: List, label: 'Transações', roles: ADMIN_ROLES },
     { href: '/cashier', icon: WalletCards, label: 'Caixa', roles: ADMIN_ROLES },
     { href: '/pos', icon: ShoppingCart, label: 'PDV', roles: ['SUPERADMIN', 'ADMIN_ORGANIZACAO', 'PDV'] },

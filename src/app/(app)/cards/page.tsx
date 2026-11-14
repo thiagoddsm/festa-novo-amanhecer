@@ -1,13 +1,15 @@
 'use client';
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { useFirestore } from '@/firebase';
 import { collection, onSnapshot } from 'firebase/firestore';
 import type { Card as CardType } from '@/lib/definitions';
 import { formatCurrency } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Users } from 'lucide-react';
+import { Users, MessageCircle } from 'lucide-react';
 import { DataTable } from '@/components/ui/data-table';
 import { type ColumnDef } from '@tanstack/react-table';
 import RechargeDialog from '@/components/cards/RechargeDialog';
@@ -133,13 +135,23 @@ export default function CardsPage() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-            <Users />
-            Gerenciar Cartões
-        </CardTitle>
-        <CardDescription>
-            Visualize, pesquise e filtre todos os cartões cadastrados no sistema.
-        </CardDescription>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+                <Users />
+                Gerenciar Cartões
+            </CardTitle>
+            <CardDescription>
+                Visualize, pesquise e filtre todos os cartões cadastrados no sistema.
+            </CardDescription>
+          </div>
+          <Button asChild size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold gap-1.5 self-start sm:self-auto shadow-xs">
+            <Link href="/disparos">
+              <MessageCircle className="h-4 w-4" />
+              Disparos WhatsApp (wa.me)
+            </Link>
+          </Button>
+        </div>
       </CardHeader>
       <CardContent>
         {isPageLoading ? (
