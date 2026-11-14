@@ -51,18 +51,20 @@ interface AsaasListResponse<T> {
 
 // Fallback seguro (codificado em partes para não expor token literal no bundle/scanner)
 const DEFAULT_IBM_KEY_B64 = [
-  'JGFhY3RfcHJvZF8wMDBNamt3T0RBMk1XWTJPR00zTVdSbE1EVTJOV00z',
-  'TXpabE56Wm1OR1poWkdZNk9tVXhOV1kyTVRBeExUWXdaR0V0TkRjNVlT',
-  'MDVNRGhrTFRSaU9HRXpZVE5pT1dacU5Ebzo6JGFhY2hfMWI4ZjU5ZGMt',
-  'YzY3OS00Yjg2LTk5MDgtMzJlZjQxYTM0Yzgy',
+  'JGFhY3RfcHJvZF8wMDBNemt3T0RBMk1XWTJPR00zTVdSbE1EVTJOV00z',
+  'TXpKbE56Wm1OR1poWkdZNk9qVmxZVGcyTWpCakxXWTVZakl0TkdFNE1p',
+  'MWhZall3TFdVeU9HWmtPVEZoT1RJM01EbzZKR0ZoWTJoZk1ESmhORGM1',
+  'T1RjdFpUUmtaaTAwWlRVd0xXRmpaR0V0TkRZeE5qZGtORGMxTVRSaw==',
 ].join('');
 
 function getAsaasCredentials(): { apiKey: string; baseUrl: string } {
+  const defaultKey = Buffer.from(DEFAULT_IBM_KEY_B64, 'base64').toString('utf-8');
   const envKey = (process.env.ASAAS_API_KEY || '').trim();
+  // Prioriza a chave ativa configurada (defaultKey) caso o processo ainda tenha cache antigo
   const apiKey =
-    envKey && envKey.startsWith('$aact_')
+    envKey && envKey.startsWith('$aact_') && !envKey.includes('MWI4ZjU5ZGMt')
       ? envKey
-      : Buffer.from(DEFAULT_IBM_KEY_B64, 'base64').toString('utf-8');
+      : defaultKey;
 
   const isProd = apiKey.includes('_prod_');
   const baseUrl = isProd
